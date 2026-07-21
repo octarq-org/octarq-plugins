@@ -1,0 +1,22 @@
+{
+  "name": "@octarq/plugin-maillink",
+  "version": "0.1.0",
+  "description": "Frontend half of the Octarq Mail Links demo plugin.",
+  "type": "module",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "exports": { ".": "./index.ts" },
+  "peerDependencies": {
+    "@octarq/plugin-sdk": "^0.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@octarq/plugin-sdk": "^0.2.0",
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.6.0"
+  }
+}

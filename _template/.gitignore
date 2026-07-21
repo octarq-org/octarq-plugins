@@ -1,0 +1,13 @@
+# go
+/vendor
+*.exe
+
+# node
+node_modules/
+web/node_modules/
+web/dist/
+
+# os & editor
+.DS_Store
+.idea/
+.vscode/
