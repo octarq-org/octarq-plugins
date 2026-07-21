@@ -1,0 +1,46 @@
+name: Publish plugins
+
+# Publishes the plugin UI packages (@octarq/plugin-<name>) to public npm so the
+# frontend half composes by name via `make plugin-build`. The packages are
+# consumed as source (main: ./index.ts), so there is no build step.
+#
+# Manual only. First publish of a version succeeds; re-publishing the same
+# version fails by design (bump the version to release again).
+#
+# Prerequisite: an `NPM_TOKEN` repo secret with publish rights to the public
+# `@octarq` npm scope.
+on:
+  workflow_dispatch:
+    inputs:
+      plugin:
+        description: Which plugin to publish
+        type: choice
+        default: all
+        options: [all, telegram, webhook, maillink]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: https://registry.npmjs.org
+          scope: "@octarq"
+      - name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          PLUGIN: ${{ inputs.plugin }}
+        run: |
+          set -e
+          targets="telegram webhook maillink"
+          if [ "$PLUGIN" != "all" ]; then targets="$PLUGIN"; fi
+          for p in $targets; do
+            echo "::group::publish @octarq/plugin-$p"
+            ( cd "$p/web" && npm publish --access public )
+            echo "::endgroup::"
+          done
