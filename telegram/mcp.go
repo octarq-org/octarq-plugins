@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/octarq-org/octarq/plugin"
+	"github.com/octarq-org/octarq/server/plugin"
 )
 
 // sendInput is the argument schema for the send_telegram MCP tool.
