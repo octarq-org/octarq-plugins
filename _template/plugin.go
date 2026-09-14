@@ -19,7 +19,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/octarq-org/octarq/plugin"
+	"github.com/octarq-org/octarq/server/plugin"
 )
 
 // Plugin is the exported unit a host wires up with app.Use(myplugin.Plugin{}).
