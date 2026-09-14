@@ -16,7 +16,7 @@ on:
         description: Which plugin to publish
         type: choice
         default: all
-        options: [all, telegram, webhook, maillink]
+        options: [all, telegram, webhook, maillink, twofa]
 
 permissions:
   contents: read
@@ -37,7 +37,7 @@ jobs:
           PLUGIN: ${{ inputs.plugin }}
         run: |
           set -e
-          targets="telegram webhook maillink"
+          targets="telegram webhook maillink twofa"
           if [ "$PLUGIN" != "all" ]; then targets="$PLUGIN"; fi
           for p in $targets; do
             echo "::group::publish @octarq/plugin-$p"
