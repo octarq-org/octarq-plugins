@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        plugin: [telegram, webhook, maillink, _template]
+        plugin: [telegram, webhook, maillink, twofa, _template]
     defaults:
       run:
         working-directory: ${{ matrix.plugin }}
@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        plugin: [telegram, webhook, maillink, _template]
+        plugin: [telegram, webhook, maillink, twofa, _template]
     defaults:
       run:
         working-directory: ${{ matrix.plugin }}/web
