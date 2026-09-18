@@ -1,6 +1,6 @@
 {
   "name": "@octarq/plugin-webhook",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Frontend half of the Octarq Webhook connector plugin.",
   "type": "module",
   "main": "./index.ts",
