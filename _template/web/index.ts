@@ -12,12 +12,8 @@ export const myPlugin: UIPlugin = {
   routes: [
     { path: "/myplugin", Component: lazy(() => import("./Page")) },
   ],
-  menu: [
-    // `category` names the sidebar GROUP the entry joins: it must equal the
-    // group's label (here the "Workspace" group next to Overview). Keep it in
-    // sync with plugin.go Menus().
-    { id: "myplugin", label: "My Plugin", path: "/myplugin", icon: "🧩", category: "Workspace" },
-  ],
+  // No `menu` here: a sidebar entry comes from the Go half's Menus() (see
+  // ../plugin.go). `UIPlugin.menu` was removed from the plugin SDK in 0.8.0.
   i18n: {
     // Keys merge under your `name` namespace, so `pageTitle` is read as
     // t("myplugin.pageTitle") — no collisions with core or other plugins.

@@ -8,9 +8,6 @@ export const telegramPlugin: UIPlugin = {
   routes: [
     { path: "/telegram", Component: lazy(() => import("./Page")) },
   ],
-  menu: [
-    { id: "telegram", label: "Telegram", path: "/telegram", icon: "✈️", category: "Workspace" },
-  ],
   i18n: {
     en: {
       pageTitle: "Telegram",

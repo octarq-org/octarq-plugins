@@ -6,9 +6,6 @@ export const twofaPlugin: UIPlugin = {
   routes: [
     { path: "/twofa", Component: lazy(() => import("./Page")) },
   ],
-  menu: [
-    { id: "twofa", label: "2FA Vault", path: "/twofa", icon: "🔐", category: "Workspace" },
-  ],
   i18n: {
     en: {
       pageTitle: "2FA Vault",

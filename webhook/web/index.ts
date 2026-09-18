@@ -8,9 +8,6 @@ export const webhookPlugin: UIPlugin = {
   routes: [
     { path: "/webhook", Component: lazy(() => import("./Page")) },
   ],
-  menu: [
-    { id: "webhook", label: "Webhook", path: "/webhook", icon: "🪝", category: "Workspace" },
-  ],
   i18n: {
     en: {
       pageTitle: "Webhook",

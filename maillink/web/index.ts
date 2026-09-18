@@ -4,7 +4,6 @@ import type { UIPlugin } from "@octarq/plugin-sdk";
 export const maillinkPlugin: UIPlugin = {
   name: "maillink",
   routes: [{ path: "/maillink", Component: lazy(() => import("./Page")) }],
-  menu: [{ id: "maillink", label: "Mail Links", path: "/maillink", icon: "🔗", category: "Workspace" }],
   i18n: {
     en: {
       pageTitle: "Mail Links",

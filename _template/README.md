@@ -17,8 +17,8 @@ An Octarq plugin is one repo with two mirror halves:
 1. Click **“Use this template”** (or `gh repo create you/octarq-plugin-foo --template octarq-org/octarq-plugin-template`).
 2. Make it yours — rename in four places, all currently `myplugin`:
    - `go.mod` module path → your repo path.
-   - Go package name + `Plugin.Name()` in `plugin.go`.
-   - `name` in `web/index.ts` (**must equal** `Plugin.Name()`) and the route/menu paths.
+   - Go package name, `Plugin.Name()` and the menu `ID`/`Path` in `plugin.go`.
+   - `name` in `web/index.ts` (**must equal** `Plugin.Name()`) and its route path.
    - `name` in `web/package.json`.
 3. Resolve deps:
    ```bash
@@ -70,7 +70,7 @@ A build whose manifest doesn't name your package ships none of your UI bytes.
 ```bash
 go build ./...     # type-check the backend against the Octarq core
 go vet ./...
-cd web && npx tsc --noEmit   # type-check the frontend (needs the SDK installed)
+cd web && pnpm exec tsc --noEmit   # type-check the frontend (needs the SDK installed)
 ```
 
 ## Going further
