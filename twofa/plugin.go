@@ -21,8 +21,9 @@ var docsFS embed.FS
 
 // Plugin is the 2FA Vault plugin struct composed into Octarq via app.Use(&twofa.Plugin{}).
 type Plugin struct {
-	ctx *plugin.Context
-	key []byte
+	ctx  *plugin.Context
+	host plugin.Host
+	key  []byte
 }
 
 func (*Plugin) Name() string { return "twofa" }
@@ -43,6 +44,7 @@ func (*Plugin) Models() []any {
 
 func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 	p.ctx = ctx
+	p.host = plugin.EnsureHost(ctx)
 	p.key = GetVaultKey("")
 
 	// Register cross-plugin machine contract

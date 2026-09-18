@@ -39,6 +39,29 @@ func (m *testMux) Serve(pattern string, w http.ResponseWriter, r *http.Request) 
 	http.NotFound(w, r)
 }
 
+type mockSession struct {
+	orgID  func(r *http.Request) uint
+	userID func(r *http.Request) uint
+}
+
+func (s *mockSession) UserID(r *http.Request) uint                   { return s.userID(r) }
+func (s *mockSession) OrgID(r *http.Request) uint                    { return s.orgID(r) }
+func (s *mockSession) OrgRole(r *http.Request) string                { return "admin" }
+func (s *mockSession) RequireRole(r *http.Request, min string) bool  { return true }
+func (s *mockSession) RequirePerm(r *http.Request, p, m string) bool { return true }
+func (s *mockSession) IsInstanceAdmin(r *http.Request) bool          { return false }
+func (s *mockSession) RevokeUserOrgSessions(u, o uint) int           { return 0 }
+
+type mockHost struct {
+	session *mockSession
+}
+
+func (h *mockHost) Session() plugin.HostSession          { return h.session }
+func (h *mockHost) Crypto() plugin.CryptoVault           { return nil }
+func (h *mockHost) Settings() plugin.SettingsStore       { return nil }
+func (h *mockHost) Events() plugin.EventSpine            { return nil }
+func (h *mockHost) TenantDB(orgID uint) *plugin.TenantDB { return nil }
+
 func setupTestEnv(t *testing.T) (*Plugin, *testMux, *gorm.DB) {
 	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{
 		Logger: logger.Discard,
@@ -60,16 +83,20 @@ func setupTestEnv(t *testing.T) (*Plugin, *testMux, *gorm.DB) {
 
 	pCtx := &plugin.Context{
 		DB: db,
-		OrgID: func(r *http.Request) uint {
-			if orgHeader := r.Header.Get("X-Test-Org"); orgHeader != "" {
-				var org uint
-				_, _ = fmt.Sscanf(orgHeader, "%d", &org)
-				return org
-			}
-			return 1
-		},
-		UserID: func(r *http.Request) uint {
-			return 42
+		Host: &mockHost{
+			session: &mockSession{
+				orgID: func(r *http.Request) uint {
+					if orgHeader := r.Header.Get("X-Test-Org"); orgHeader != "" {
+						var org uint
+						_, _ = fmt.Sscanf(orgHeader, "%d", &org)
+						return org
+					}
+					return 1
+				},
+				userID: func(r *http.Request) uint {
+					return 42
+				},
+			},
 		},
 	}
 

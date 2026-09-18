@@ -49,7 +49,7 @@ func (p *Plugin) mcpGetCode(ctx context.Context, _ *mcp.CallToolRequest, in getC
 
 	orgID := plugin.OrgIDFromContext(ctx)
 	if orgID == 0 {
-		orgID = 1
+		return nil, nil, fmt.Errorf("missing tenant context: unauthorized")
 	}
 
 	code, rem, err := p.GetCode(ctx, orgID, in.AccountName)
@@ -75,7 +75,7 @@ func (p *Plugin) mcpGetCode(ctx context.Context, _ *mcp.CallToolRequest, in getC
 func (p *Plugin) mcpListAccounts(ctx context.Context, _ *mcp.CallToolRequest, in listAccountsInput) (*mcp.CallToolResult, any, error) {
 	orgID := plugin.OrgIDFromContext(ctx)
 	if orgID == 0 {
-		orgID = 1
+		return nil, nil, fmt.Errorf("missing tenant context: unauthorized")
 	}
 
 	if p.ctx == nil || p.ctx.DB == nil {
@@ -127,7 +127,7 @@ func (p *Plugin) mcpVerifyCode(ctx context.Context, _ *mcp.CallToolRequest, in v
 
 	orgID := plugin.OrgIDFromContext(ctx)
 	if orgID == 0 {
-		orgID = 1
+		return nil, nil, fmt.Errorf("missing tenant context: unauthorized")
 	}
 
 	valid, err := p.VerifyCode(ctx, orgID, in.AccountName, in.Code)

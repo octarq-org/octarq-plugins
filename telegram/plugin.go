@@ -20,7 +20,8 @@ import (
 // reference to the Context so the MCP tool (registered outside Mount) can reach
 // the settings store and Notify.
 type Plugin struct {
-	ctx *plugin.Context
+	ctx  *plugin.Context
+	host plugin.Host
 }
 
 // Per-workspace setting keys. The bot token is stored encrypted at rest.
@@ -45,11 +46,12 @@ func (*Plugin) Models() []any { return nil }
 // answers 404 before the handler runs.
 func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 	p.ctx = ctx
+	p.host = plugin.EnsureHost(ctx)
 
 	// Inbound email → Telegram. The handler runs async in its own goroutine, so
 	// it must not block the request path.
-	if ctx.OnEmail != nil {
-		ctx.OnEmail(func(e plugin.EmailEvent) {
+	if p.host != nil && p.host.Events() != nil {
+		p.host.Events().OnEmail(func(e plugin.EmailEvent) {
 			text := "📬 New mail\nTo: " + e.To + "\nFrom: " + e.From + "\nSubject: " + e.Subject
 			_ = p.send(context.Background(), e.OrgID, text)
 		})
@@ -80,12 +82,12 @@ func (p *Plugin) send(ctx context.Context, orgID uint, text string) error {
 
 // creds reads and decrypts the workspace's Telegram credentials.
 func (p *Plugin) creds(orgID uint) (token, chatID string) {
-	if p.ctx == nil || p.ctx.GetWorkspaceSetting == nil {
+	if p.host == nil || p.host.Settings() == nil {
 		return "", ""
 	}
-	chatID = p.ctx.GetWorkspaceSetting(orgID, keyChatID)
-	if enc := p.ctx.GetWorkspaceSetting(orgID, keyBotToken); enc != "" && p.ctx.Decrypt != nil {
-		if b, err := p.ctx.Decrypt(enc); err == nil {
+	chatID = p.host.Settings().GetWorkspaceSetting(orgID, keyChatID)
+	if enc := p.host.Settings().GetWorkspaceSetting(orgID, keyBotToken); enc != "" && p.host.Crypto() != nil {
+		if b, err := p.host.Crypto().Decrypt(enc); err == nil {
 			token = string(b)
 		}
 	}
@@ -115,14 +117,14 @@ func (p *Plugin) putSettings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	if p.ctx.SetWorkspaceSetting == nil {
+	if p.host == nil || p.host.Settings() == nil {
 		http.Error(w, "settings unavailable", http.StatusInternalServerError)
 		return
 	}
-	_ = p.ctx.SetWorkspaceSetting(orgID, keyChatID, in.ChatID)
-	if in.BotToken != "" && p.ctx.Encrypt != nil {
-		if enc, err := p.ctx.Encrypt([]byte(in.BotToken)); err == nil {
-			_ = p.ctx.SetWorkspaceSetting(orgID, keyBotToken, enc)
+	_ = p.host.Settings().SetWorkspaceSetting(orgID, keyChatID, in.ChatID)
+	if in.BotToken != "" && p.host.Crypto() != nil {
+		if enc, err := p.host.Crypto().Encrypt([]byte(in.BotToken)); err == nil {
+			_ = p.host.Settings().SetWorkspaceSetting(orgID, keyBotToken, enc)
 		}
 	}
 	token, chatID := p.creds(orgID)
@@ -139,8 +141,8 @@ func (p *Plugin) testSend(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Plugin) orgID(r *http.Request) uint {
-	if p.ctx != nil && p.ctx.OrgID != nil {
-		return p.ctx.OrgID(r)
+	if p.host != nil && p.host.Session() != nil {
+		return p.host.Session().OrgID(r)
 	}
 	return 0
 }
