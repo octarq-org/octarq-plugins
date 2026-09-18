@@ -120,9 +120,19 @@ func (p *Plugin) list(ctx context.Context, orgID uint, limit int) []MailLink {
 }
 
 // Compile-time assertions.
+// Menus contributes the plugin's sidebar entry. It lives here, not on the
+// frontend half: UIPlugin.menu was removed from the plugin SDK in 0.8.0, and a
+// static frontend menu is ignored even where one is still declared.
+func (*Plugin) Menus() []plugin.MenuItem {
+	return []plugin.MenuItem{
+		{ID: "maillink", Label: "Mail Links", Path: "/maillink", Icon: "🔗", Category: "Workspace"},
+	}
+}
+
 var (
-	_ plugin.Plugin      = (*Plugin)(nil)
-	_ plugin.Validator   = (*Plugin)(nil)
-	_ plugin.Describer   = (*Plugin)(nil)
-	_ plugin.MCPProvider = (*Plugin)(nil)
+	_ plugin.Plugin       = (*Plugin)(nil)
+	_ plugin.Validator    = (*Plugin)(nil)
+	_ plugin.Describer    = (*Plugin)(nil)
+	_ plugin.MCPProvider  = (*Plugin)(nil)
+	_ plugin.MenuProvider = (*Plugin)(nil)
 )
