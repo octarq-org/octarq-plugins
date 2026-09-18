@@ -11,6 +11,7 @@ package maillink
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"regexp"
 
@@ -21,12 +22,14 @@ import (
 // MailLink records a short link auto-created from an inbound email.
 type MailLink struct {
 	gorm.Model
-	OrgID   uint `gorm:"index"`
+	OrgID   uint `gorm:"index;column:org_id"`
 	Slug    string
 	Target  string
 	Subject string
 	From    string
 }
+
+func (MailLink) TenantColumn() string { return "org_id" }
 
 var urlRe = regexp.MustCompile(`https?://[^\s"'<>)\]]+`)
 
@@ -56,10 +59,20 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 	mux.Handle("GET /api/maillink/recent", ctx.Guard(http.HandlerFunc(p.recent)))
 }
 
+func (p *Plugin) Validate(ctx context.Context, host plugin.Host) error {
+	if host == nil {
+		return errors.New("maillink: host SPI is required")
+	}
+	return nil
+}
+
 // onEmail runs async after each inbound email: find the first URL, shorten it
 // via the core links service, and record the result. It degrades to a no-op
 // when links isn't composed into this build.
 func (p *Plugin) onEmail(e plugin.EmailEvent) {
+	if e.OrgID == 0 {
+		return
+	}
 	body := e.Text
 	if body == "" {
 		body = e.HTML
@@ -79,11 +92,7 @@ func (p *Plugin) onEmail(e plugin.EmailEvent) {
 	if p.host != nil {
 		if tdb := p.host.TenantDB(e.OrgID); tdb != nil {
 			_ = tdb.Create(&MailLink{OrgID: e.OrgID, Slug: slug, Target: target, Subject: e.Subject, From: e.From}).Error
-			return
 		}
-	}
-	if p.ctx != nil && p.ctx.DB != nil {
-		_ = p.ctx.DB.Create(&MailLink{OrgID: e.OrgID, Slug: slug, Target: target, Subject: e.Subject, From: e.From}).Error
 	}
 }
 
@@ -92,23 +101,20 @@ func (p *Plugin) recent(w http.ResponseWriter, r *http.Request) {
 	if p.host != nil && p.host.Session() != nil {
 		orgID = p.host.Session().OrgID(r)
 	}
+	if orgID == 0 {
+		http.Error(w, "unauthorized workspace", http.StatusUnauthorized)
+		return
+	}
 	writeJSON(w, p.list(r.Context(), orgID, 50))
 }
 
 func (p *Plugin) list(ctx context.Context, orgID uint, limit int) []MailLink {
 	out := []MailLink{}
-	if orgID == 0 {
+	if orgID == 0 || p.host == nil {
 		return out
 	}
-	if p.host != nil {
-		if tdb := p.host.TenantDB(orgID); tdb != nil {
-			tdb.WithContext(ctx).Order("created_at DESC").Limit(limit).Find(&out)
-			return out
-		}
-	}
-	if p.ctx != nil && p.ctx.DB != nil {
-		p.ctx.DB.WithContext(ctx).Where("org_id = ?", orgID).
-			Order("created_at DESC").Limit(limit).Find(&out)
+	if tdb := p.host.TenantDB(orgID); tdb != nil {
+		_ = tdb.Model(&MailLink{}).WithContext(ctx).Order("created_at DESC").Limit(limit).Find(&out).Error
 	}
 	return out
 }
@@ -116,6 +122,7 @@ func (p *Plugin) list(ctx context.Context, orgID uint, limit int) []MailLink {
 // Compile-time assertions.
 var (
 	_ plugin.Plugin      = (*Plugin)(nil)
+	_ plugin.Validator   = (*Plugin)(nil)
 	_ plugin.Describer   = (*Plugin)(nil)
 	_ plugin.MCPProvider = (*Plugin)(nil)
 )

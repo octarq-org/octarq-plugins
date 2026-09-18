@@ -45,7 +45,9 @@ func (*Plugin) Models() []any {
 func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 	p.ctx = ctx
 	p.host = plugin.EnsureHost(ctx)
-	p.key = GetVaultKey("")
+	if len(p.key) == 0 {
+		p.key = GetVaultKey("")
+	}
 
 	// Register cross-plugin machine contract
 	if ctx != nil && ctx.Provide != nil {
@@ -118,22 +120,66 @@ func (p *Plugin) Metadata() plugin.HealthMeta {
 	}
 }
 
+func (p *Plugin) Validate(ctx context.Context, host plugin.Host) error {
+	if host == nil {
+		return errors.New("twofa: host runtime is required")
+	}
+	if host.Crypto() == nil && len(GetVaultKey("")) == 0 {
+		return errors.New("twofa: encryption unavailable: neither Host.Crypto nor OCTARQ_TWOFA_KEY/OCTARQ_SECRET_KEY is configured")
+	}
+	return nil
+}
+
+func (p *Plugin) encrypt(plaintext string) (string, error) {
+	if p.host != nil && p.host.Crypto() != nil {
+		return p.host.Crypto().Encrypt([]byte(plaintext))
+	}
+	if len(p.key) == 32 {
+		return EncryptSecret(plaintext, p.key)
+	}
+	return "", errors.New("twofa: encryption unavailable: missing key and Host.Crypto")
+}
+
+func (p *Plugin) decrypt(ciphertext string) (string, error) {
+	if p.host != nil && p.host.Crypto() != nil {
+		b, err := p.host.Crypto().Decrypt(ciphertext)
+		if err == nil {
+			return string(b), nil
+		}
+	}
+	if len(p.key) == 32 {
+		return DecryptSecret(ciphertext, p.key)
+	}
+	return "", errors.New("twofa: decryption failed or unavailable")
+}
+
+func (p *Plugin) tenantDB(ctx context.Context, orgID uint) *plugin.TenantDB {
+	if p.host != nil && orgID > 0 {
+		tdb := p.host.TenantDB(orgID)
+		if tdb != nil {
+			return tdb.WithColumn("org_id").WithContext(ctx)
+		}
+	}
+	return nil
+}
+
 // GetCode implements the Provider contract for cross-plugin retrieval.
 func (p *Plugin) GetCode(ctx context.Context, orgID uint, accountName string) (string, int, error) {
-	if p.ctx == nil || p.ctx.DB == nil {
-		return "", 0, errors.New("database not available")
+	tdb := p.tenantDB(ctx, orgID)
+	if tdb == nil {
+		return "", 0, errors.New("database not available or unauthorized org")
 	}
 
 	var acc TwoFAAccount
 	name := strings.TrimSpace(accountName)
-	err := p.ctx.DB.WithContext(ctx).
-		Where("org_id = ? AND (LOWER(name) = LOWER(?) OR LOWER(issuer) = LOWER(?))", orgID, name, name).
+	err := tdb.Model(&acc).
+		Where("LOWER(name) = LOWER(?) OR LOWER(issuer) = LOWER(?)", name, name).
 		First(&acc).Error
 	if err != nil {
 		return "", 0, fmt.Errorf("account %q not found in workspace %d", accountName, orgID)
 	}
 
-	secret, err := DecryptSecret(acc.EncryptedSecret, p.key)
+	secret, err := p.decrypt(acc.EncryptedSecret)
 	if err != nil {
 		return "", 0, fmt.Errorf("failed to decrypt secret: %w", err)
 	}
@@ -149,20 +195,21 @@ func (p *Plugin) GetCode(ctx context.Context, orgID uint, accountName string) (s
 
 // VerifyCode implements the Provider contract for cross-plugin verification.
 func (p *Plugin) VerifyCode(ctx context.Context, orgID uint, accountName string, code string) (bool, error) {
-	if p.ctx == nil || p.ctx.DB == nil {
-		return false, errors.New("database not available")
+	tdb := p.tenantDB(ctx, orgID)
+	if tdb == nil {
+		return false, errors.New("database not available or unauthorized org")
 	}
 
 	var acc TwoFAAccount
 	name := strings.TrimSpace(accountName)
-	err := p.ctx.DB.WithContext(ctx).
-		Where("org_id = ? AND (LOWER(name) = LOWER(?) OR LOWER(issuer) = LOWER(?))", orgID, name, name).
+	err := tdb.Model(&acc).
+		Where("LOWER(name) = LOWER(?) OR LOWER(issuer) = LOWER(?)", name, name).
 		First(&acc).Error
 	if err != nil {
 		return false, fmt.Errorf("account %q not found in workspace %d", accountName, orgID)
 	}
 
-	secret, err := DecryptSecret(acc.EncryptedSecret, p.key)
+	secret, err := p.decrypt(acc.EncryptedSecret)
 	if err != nil {
 		return false, fmt.Errorf("failed to decrypt secret: %w", err)
 	}
@@ -173,6 +220,7 @@ func (p *Plugin) VerifyCode(ctx context.Context, orgID uint, accountName string,
 // Compile-time assertions for contracts
 var (
 	_ plugin.Plugin         = (*Plugin)(nil)
+	_ plugin.Validator      = (*Plugin)(nil)
 	_ plugin.Describer      = (*Plugin)(nil)
 	_ plugin.MenuProvider   = (*Plugin)(nil)
 	_ plugin.HelpDocsFS     = (*Plugin)(nil)

@@ -30,8 +30,7 @@ func GetVaultKey(customKey string) []byte {
 		customKey = os.Getenv("OCTARQ_SECRET_KEY")
 	}
 	if customKey == "" {
-		// Fallback deterministic seed for default installations
-		customKey = "octarq-default-internal-vault-seed"
+		return nil
 	}
 
 	h := sha256.New()

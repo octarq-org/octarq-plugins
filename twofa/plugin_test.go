@@ -40,27 +40,59 @@ func (m *testMux) Serve(pattern string, w http.ResponseWriter, r *http.Request) 
 }
 
 type mockSession struct {
-	orgID  func(r *http.Request) uint
-	userID func(r *http.Request) uint
+	orgID       func(r *http.Request) uint
+	userID      func(r *http.Request) uint
+	requireRole func(r *http.Request, min string) bool
 }
 
-func (s *mockSession) UserID(r *http.Request) uint                   { return s.userID(r) }
-func (s *mockSession) OrgID(r *http.Request) uint                    { return s.orgID(r) }
-func (s *mockSession) OrgRole(r *http.Request) string                { return "admin" }
-func (s *mockSession) RequireRole(r *http.Request, min string) bool  { return true }
+func (s *mockSession) UserID(r *http.Request) uint    { return s.userID(r) }
+func (s *mockSession) OrgID(r *http.Request) uint     { return s.orgID(r) }
+func (s *mockSession) OrgRole(r *http.Request) string { return "admin" }
+func (s *mockSession) RequireRole(r *http.Request, min string) bool {
+	if s.requireRole != nil {
+		return s.requireRole(r, min)
+	}
+	return true
+}
 func (s *mockSession) RequirePerm(r *http.Request, p, m string) bool { return true }
 func (s *mockSession) IsInstanceAdmin(r *http.Request) bool          { return false }
 func (s *mockSession) RevokeUserOrgSessions(u, o uint) int           { return 0 }
 
-type mockHost struct {
-	session *mockSession
+type mockCryptoVault struct {
+	key []byte
 }
 
-func (h *mockHost) Session() plugin.HostSession          { return h.session }
-func (h *mockHost) Crypto() plugin.CryptoVault           { return nil }
-func (h *mockHost) Settings() plugin.SettingsStore       { return nil }
-func (h *mockHost) Events() plugin.EventSpine            { return nil }
-func (h *mockHost) TenantDB(orgID uint) *plugin.TenantDB { return nil }
+func (c *mockCryptoVault) Encrypt(plaintext []byte) (string, error) {
+	return EncryptSecret(string(plaintext), c.key)
+}
+
+func (c *mockCryptoVault) Decrypt(encoded string) ([]byte, error) {
+	s, err := DecryptSecret(encoded, c.key)
+	return []byte(s), err
+}
+
+type mockHost struct {
+	session *mockSession
+	db      *gorm.DB
+	crypto  *mockCryptoVault
+}
+
+func (h *mockHost) Session() plugin.HostSession { return h.session }
+func (h *mockHost) Crypto() plugin.CryptoVault {
+	if h == nil || h.crypto == nil {
+		return nil
+	}
+	return h.crypto
+}
+func (h *mockHost) Settings() plugin.SettingsStore { return nil }
+func (h *mockHost) Events() plugin.EventSpine      { return nil }
+func (h *mockHost) TenantDB(orgID uint) *plugin.TenantDB {
+	if h.db == nil || orgID == 0 {
+		return nil
+	}
+	tdb, _ := plugin.NewTenantDB(h.db, orgID)
+	return tdb
+}
 
 func setupTestEnv(t *testing.T) (*Plugin, *testMux, *gorm.DB) {
 	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{
@@ -70,8 +102,9 @@ func setupTestEnv(t *testing.T) (*Plugin, *testMux, *gorm.DB) {
 		t.Fatalf("Failed to open sqlite db: %v", err)
 	}
 
+	testKey := GetVaultKey("unit-test-vault-key")
 	p := &Plugin{
-		key: GetVaultKey("unit-test-vault-key"),
+		key: testKey,
 	}
 
 	// Auto-migrate models
@@ -84,6 +117,8 @@ func setupTestEnv(t *testing.T) (*Plugin, *testMux, *gorm.DB) {
 	pCtx := &plugin.Context{
 		DB: db,
 		Host: &mockHost{
+			db:     db,
+			crypto: &mockCryptoVault{key: testKey},
 			session: &mockSession{
 				orgID: func(r *http.Request) uint {
 					if orgHeader := r.Header.Get("X-Test-Org"); orgHeader != "" {
@@ -281,5 +316,106 @@ func TestPlugin_ImportExport(t *testing.T) {
 	_ = json.Unmarshal(w.Body.Bytes(), &exportItems)
 	if len(exportItems) != 2 {
 		t.Fatalf("Expected 2 exported items, got %d", len(exportItems))
+	}
+}
+
+func TestPlugin_ValidatorFailClosed(t *testing.T) {
+	p := &Plugin{}
+	// 1. Nil host
+	if err := p.Validate(context.Background(), nil); err == nil {
+		t.Fatal("expected error for nil host")
+	}
+
+	// 2. Host with no Crypto and no env key
+	t.Setenv("OCTARQ_TWOFA_KEY", "")
+	t.Setenv("OCTARQ_SECRET_KEY", "")
+	hNoCrypto := &mockHost{}
+	if err := p.Validate(context.Background(), hNoCrypto); err == nil {
+		t.Fatal("expected error when neither host.Crypto nor env key is configured")
+	}
+
+	// 3. Host with Crypto
+	hWithCrypto := &mockHost{
+		crypto: &mockCryptoVault{key: make([]byte, 32)},
+	}
+	if err := p.Validate(context.Background(), hWithCrypto); err != nil {
+		t.Fatalf("expected valid for host with crypto: %v", err)
+	}
+}
+
+func TestPlugin_AdminRoleGated(t *testing.T) {
+	p, mux, _ := setupTestEnv(t)
+
+	// Create an account first
+	createBody := map[string]any{
+		"name":   "Gated Account",
+		"secret": "JBSWY3DPEHPK3PXP",
+	}
+	bodyBytes, _ := json.Marshal(createBody)
+	req := httptest.NewRequest("POST", "/api/twofa/accounts", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.Serve("POST /api/twofa/accounts", w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("Create account failed: %d", w.Code)
+	}
+	var created AccountSummary
+	_ = json.Unmarshal(w.Body.Bytes(), &created)
+
+	// Now configure mockSession to reject non-admin (when X-Role == "member")
+	mHost := p.host.(*mockHost)
+	mHost.session.requireRole = func(r *http.Request, min string) bool {
+		return r.Header.Get("X-Role") != "member"
+	}
+
+	// 1. Reveal secret with member role -> 403
+	req = httptest.NewRequest("GET", fmt.Sprintf("/api/twofa/accounts/%d?reveal=true", created.ID), nil)
+	req.Header.Set("X-Role", "member")
+	req.SetPathValue("id", fmt.Sprintf("%d", created.ID))
+	w = httptest.NewRecorder()
+	mux.Serve("GET /api/twofa/accounts/{id}", w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("Expected 403 for member reveal secret, got %d", w.Code)
+	}
+
+	// 2. Update account with member role -> 403
+	upBody, _ := json.Marshal(map[string]any{"name": "Hacked"})
+	req = httptest.NewRequest("PUT", fmt.Sprintf("/api/twofa/accounts/%d", created.ID), bytes.NewReader(upBody))
+	req.Header.Set("X-Role", "member")
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", fmt.Sprintf("%d", created.ID))
+	w = httptest.NewRecorder()
+	mux.Serve("PUT /api/twofa/accounts/{id}", w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("Expected 403 for member update account, got %d", w.Code)
+	}
+
+	// 3. Delete account with member role -> 403
+	req = httptest.NewRequest("DELETE", fmt.Sprintf("/api/twofa/accounts/%d", created.ID), nil)
+	req.Header.Set("X-Role", "member")
+	req.SetPathValue("id", fmt.Sprintf("%d", created.ID))
+	w = httptest.NewRecorder()
+	mux.Serve("DELETE /api/twofa/accounts/{id}", w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("Expected 403 for member delete account, got %d", w.Code)
+	}
+
+	// 4. Export accounts with member role -> 403
+	req = httptest.NewRequest("GET", "/api/twofa/export", nil)
+	req.Header.Set("X-Role", "member")
+	w = httptest.NewRecorder()
+	mux.Serve("GET /api/twofa/export", w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("Expected 403 for member export accounts, got %d", w.Code)
+	}
+
+	// 5. Get QR with member role -> 403
+	req = httptest.NewRequest("GET", fmt.Sprintf("/api/twofa/accounts/%d/qr", created.ID), nil)
+	req.Header.Set("X-Role", "member")
+	req.SetPathValue("id", fmt.Sprintf("%d", created.ID))
+	w = httptest.NewRecorder()
+	mux.Serve("GET /api/twofa/accounts/{id}/qr", w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("Expected 403 for member get QR code, got %d", w.Code)
 	}
 }
