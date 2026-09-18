@@ -1,6 +1,6 @@
 {
   "name": "@octarq/plugin-twofa",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Two-factor authentication (TOTP) vault plugin for Octarq",
   "type": "module",
   "main": "./index.ts",
