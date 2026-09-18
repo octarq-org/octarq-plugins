@@ -19,12 +19,16 @@ func (p *Plugin) listAccounts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tdb := p.tenantDB(r.Context(), orgID)
+	if tdb == nil {
+		http.Error(w, "database unavailable", http.StatusInternalServerError)
+		return
+	}
+
 	var accounts []TwoFAAccount
-	if p.ctx != nil && p.ctx.DB != nil {
-		p.ctx.DB.WithContext(r.Context()).
-			Where("org_id = ?", orgID).
-			Order("pinned DESC, name ASC, id ASC").
-			Find(&accounts)
+	if err := tdb.Scoped(&TwoFAAccount{}).Order("pinned DESC, name ASC, id ASC").Find(&accounts).Error; err != nil {
+		http.Error(w, "failed to query accounts", http.StatusInternalServerError)
+		return
 	}
 
 	now := time.Now()
@@ -32,7 +36,7 @@ func (p *Plugin) listAccounts(w http.ResponseWriter, r *http.Request) {
 	for _, acc := range accounts {
 		var currentCode string
 		var rem int
-		if secret, err := DecryptSecret(acc.EncryptedSecret, p.key); err == nil {
+		if secret, err := p.decrypt(acc.EncryptedSecret); err == nil {
 			if code, err := GenerateCode(secret, now, acc.Period, acc.Digits, acc.Algorithm); err == nil {
 				currentCode = code
 				rem = SecondsRemaining(now, acc.Period)
@@ -71,13 +75,26 @@ func (p *Plugin) getAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.URL.Query().Get("reveal") == "true" {
+		if !p.requireRole(r, "admin") {
+			http.Error(w, "forbidden: revealing secret requires admin role", http.StatusForbidden)
+			return
+		}
+	}
+
+	tdb := p.tenantDB(r.Context(), orgID)
+	if tdb == nil {
+		http.Error(w, "database unavailable", http.StatusInternalServerError)
+		return
+	}
+
 	var acc TwoFAAccount
-	if err := p.ctx.DB.WithContext(r.Context()).Where("id = ? AND org_id = ?", id, orgID).First(&acc).Error; err != nil {
+	if err := tdb.First(&acc, "id = ?", id).Error; err != nil {
 		http.Error(w, "account not found", http.StatusNotFound)
 		return
 	}
 
-	secret, err := DecryptSecret(acc.EncryptedSecret, p.key)
+	secret, err := p.decrypt(acc.EncryptedSecret)
 	if err != nil {
 		http.Error(w, "failed to decrypt secret", http.StatusInternalServerError)
 		return
@@ -212,7 +229,13 @@ func (p *Plugin) createAccount(w http.ResponseWriter, r *http.Request) {
 		acc.Period = 30
 	}
 
-	enc, err := EncryptSecret(finalSecret, p.key)
+	tdb := p.tenantDB(r.Context(), orgID)
+	if tdb == nil {
+		http.Error(w, "database unavailable", http.StatusInternalServerError)
+		return
+	}
+
+	enc, err := p.encrypt(finalSecret)
 	if err != nil {
 		http.Error(w, "encryption failed", http.StatusInternalServerError)
 		return
@@ -221,7 +244,7 @@ func (p *Plugin) createAccount(w http.ResponseWriter, r *http.Request) {
 	acc.OrgID = orgID
 	acc.EncryptedSecret = enc
 
-	if err := p.ctx.DB.WithContext(r.Context()).Create(&acc).Error; err != nil {
+	if err := tdb.Create(&acc).Error; err != nil {
 		http.Error(w, "failed to save account", http.StatusInternalServerError)
 		return
 	}
@@ -273,8 +296,19 @@ func (p *Plugin) updateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !p.requireRole(r, "admin") {
+		http.Error(w, "forbidden: updating account requires admin role", http.StatusForbidden)
+		return
+	}
+
+	tdb := p.tenantDB(r.Context(), orgID)
+	if tdb == nil {
+		http.Error(w, "database unavailable", http.StatusInternalServerError)
+		return
+	}
+
 	var acc TwoFAAccount
-	if err := p.ctx.DB.WithContext(r.Context()).Where("id = ? AND org_id = ?", id, orgID).First(&acc).Error; err != nil {
+	if err := tdb.First(&acc, "id = ?", id).Error; err != nil {
 		http.Error(w, "account not found", http.StatusNotFound)
 		return
 	}
@@ -319,7 +353,7 @@ func (p *Plugin) updateAccount(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid base32 secret", http.StatusBadRequest)
 			return
 		}
-		enc, err := EncryptSecret(clean, p.key)
+		enc, err := p.encrypt(clean)
 		if err != nil {
 			http.Error(w, "encryption failed", http.StatusInternalServerError)
 			return
@@ -327,14 +361,14 @@ func (p *Plugin) updateAccount(w http.ResponseWriter, r *http.Request) {
 		acc.EncryptedSecret = enc
 	}
 
-	if err := p.ctx.DB.WithContext(r.Context()).Save(&acc).Error; err != nil {
+	if err := tdb.Save(&acc).Error; err != nil {
 		http.Error(w, "failed to update account", http.StatusInternalServerError)
 		return
 	}
 
 	p.logAudit(r.Context(), orgID, acc.ID, acc.Name, "update_account", p.actor(r), r.RemoteAddr)
 
-	secret, _ := DecryptSecret(acc.EncryptedSecret, p.key)
+	secret, _ := p.decrypt(acc.EncryptedSecret)
 	now := time.Now()
 	currentCode, _ := GenerateCode(secret, now, acc.Period, acc.Digits, acc.Algorithm)
 	rem := SecondsRemaining(now, acc.Period)
@@ -366,13 +400,24 @@ func (p *Plugin) deleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !p.requireRole(r, "admin") {
+		http.Error(w, "forbidden: deleting account requires admin role", http.StatusForbidden)
+		return
+	}
+
+	tdb := p.tenantDB(r.Context(), orgID)
+	if tdb == nil {
+		http.Error(w, "database unavailable", http.StatusInternalServerError)
+		return
+	}
+
 	var acc TwoFAAccount
-	if err := p.ctx.DB.WithContext(r.Context()).Where("id = ? AND org_id = ?", id, orgID).First(&acc).Error; err != nil {
+	if err := tdb.First(&acc, "id = ?", id).Error; err != nil {
 		http.Error(w, "account not found", http.StatusNotFound)
 		return
 	}
 
-	if err := p.ctx.DB.WithContext(r.Context()).Delete(&acc).Error; err != nil {
+	if err := tdb.Delete(&acc).Error; err != nil {
 		http.Error(w, "failed to delete account", http.StatusInternalServerError)
 		return
 	}
@@ -389,14 +434,20 @@ func (p *Plugin) togglePin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tdb := p.tenantDB(r.Context(), orgID)
+	if tdb == nil {
+		http.Error(w, "database unavailable", http.StatusInternalServerError)
+		return
+	}
+
 	var acc TwoFAAccount
-	if err := p.ctx.DB.WithContext(r.Context()).Where("id = ? AND org_id = ?", id, orgID).First(&acc).Error; err != nil {
+	if err := tdb.First(&acc, "id = ?", id).Error; err != nil {
 		http.Error(w, "account not found", http.StatusNotFound)
 		return
 	}
 
 	acc.Pinned = !acc.Pinned
-	_ = p.ctx.DB.WithContext(r.Context()).Save(&acc)
+	_ = tdb.Save(&acc)
 	writeJSON(w, map[string]bool{"pinned": acc.Pinned})
 }
 
@@ -408,13 +459,19 @@ func (p *Plugin) getCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tdb := p.tenantDB(r.Context(), orgID)
+	if tdb == nil {
+		http.Error(w, "database unavailable", http.StatusInternalServerError)
+		return
+	}
+
 	var acc TwoFAAccount
-	if err := p.ctx.DB.WithContext(r.Context()).Where("id = ? AND org_id = ?", id, orgID).First(&acc).Error; err != nil {
+	if err := tdb.First(&acc, "id = ?", id).Error; err != nil {
 		http.Error(w, "account not found", http.StatusNotFound)
 		return
 	}
 
-	secret, err := DecryptSecret(acc.EncryptedSecret, p.key)
+	secret, err := p.decrypt(acc.EncryptedSecret)
 	if err != nil {
 		http.Error(w, "failed to decrypt secret", http.StatusInternalServerError)
 		return
@@ -457,13 +514,19 @@ func (p *Plugin) verifyCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tdb := p.tenantDB(r.Context(), orgID)
+	if tdb == nil {
+		http.Error(w, "database unavailable", http.StatusInternalServerError)
+		return
+	}
+
 	var acc TwoFAAccount
-	if err := p.ctx.DB.WithContext(r.Context()).Where("id = ? AND org_id = ?", id, orgID).First(&acc).Error; err != nil {
+	if err := tdb.First(&acc, "id = ?", id).Error; err != nil {
 		http.Error(w, "account not found", http.StatusNotFound)
 		return
 	}
 
-	secret, err := DecryptSecret(acc.EncryptedSecret, p.key)
+	secret, err := p.decrypt(acc.EncryptedSecret)
 	if err != nil {
 		http.Error(w, "failed to decrypt secret", http.StatusInternalServerError)
 		return
@@ -483,13 +546,24 @@ func (p *Plugin) getQRCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !p.requireRole(r, "admin") {
+		http.Error(w, "forbidden: retrieving QR code requires admin role", http.StatusForbidden)
+		return
+	}
+
+	tdb := p.tenantDB(r.Context(), orgID)
+	if tdb == nil {
+		http.Error(w, "database unavailable", http.StatusInternalServerError)
+		return
+	}
+
 	var acc TwoFAAccount
-	if err := p.ctx.DB.WithContext(r.Context()).Where("id = ? AND org_id = ?", id, orgID).First(&acc).Error; err != nil {
+	if err := tdb.First(&acc, "id = ?", id).Error; err != nil {
 		http.Error(w, "account not found", http.StatusNotFound)
 		return
 	}
 
-	secret, err := DecryptSecret(acc.EncryptedSecret, p.key)
+	secret, err := p.decrypt(acc.EncryptedSecret)
 	if err != nil {
 		http.Error(w, "failed to decrypt secret", http.StatusInternalServerError)
 		return
@@ -533,6 +607,12 @@ func (p *Plugin) importAccounts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tdb := p.tenantDB(r.Context(), orgID)
+	if tdb == nil {
+		http.Error(w, "database unavailable", http.StatusInternalServerError)
+		return
+	}
+
 	var in importIn
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
@@ -553,7 +633,7 @@ func (p *Plugin) importAccounts(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		enc, err := EncryptSecret(s, p.key)
+		enc, err := p.encrypt(s)
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("line %d: encryption error", idx+1))
 			continue
@@ -569,7 +649,7 @@ func (p *Plugin) importAccounts(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		if err := p.ctx.DB.WithContext(r.Context()).Create(acc).Error; err != nil {
+		if err := tdb.Create(acc).Error; err != nil {
 			errs = append(errs, fmt.Sprintf("line %d: db error: %v", idx+1, err))
 			continue
 		}
@@ -591,8 +671,19 @@ func (p *Plugin) exportAccounts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !p.requireRole(r, "admin") {
+		http.Error(w, "forbidden: exporting accounts requires admin role", http.StatusForbidden)
+		return
+	}
+
+	tdb := p.tenantDB(r.Context(), orgID)
+	if tdb == nil {
+		http.Error(w, "database unavailable", http.StatusInternalServerError)
+		return
+	}
+
 	var accounts []TwoFAAccount
-	if err := p.ctx.DB.WithContext(r.Context()).Where("org_id = ?", orgID).Find(&accounts).Error; err != nil {
+	if err := tdb.Find(&accounts).Error; err != nil {
 		http.Error(w, "db error", http.StatusInternalServerError)
 		return
 	}
@@ -611,7 +702,7 @@ func (p *Plugin) exportAccounts(w http.ResponseWriter, r *http.Request) {
 
 	out := make([]exportItem, 0, len(accounts))
 	for _, acc := range accounts {
-		secret, err := DecryptSecret(acc.EncryptedSecret, p.key)
+		secret, err := p.decrypt(acc.EncryptedSecret)
 		if err != nil {
 			continue
 		}
@@ -640,20 +731,24 @@ func (p *Plugin) listAuditLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var logs []TwoFAAuditLog
-	if p.ctx != nil && p.ctx.DB != nil {
-		p.ctx.DB.WithContext(r.Context()).
-			Where("org_id = ?", orgID).
-			Order("created_at DESC").
-			Limit(50).
-			Find(&logs)
+	tdb := p.tenantDB(r.Context(), orgID)
+	if tdb == nil {
+		http.Error(w, "database unavailable", http.StatusInternalServerError)
+		return
 	}
+
+	var logs []TwoFAAuditLog
+	_ = tdb.Scoped(&TwoFAAuditLog{}).Order("created_at DESC").Limit(50).Find(&logs).Error
 
 	writeJSON(w, logs)
 }
 
 func (p *Plugin) logAudit(ctx context.Context, orgID uint, accountID uint, accountName string, action string, actor string, ip string) {
-	if p.ctx == nil || p.ctx.DB == nil || orgID == 0 {
+	if orgID == 0 {
+		return
+	}
+	tdb := p.tenantDB(ctx, orgID)
+	if tdb == nil {
 		return
 	}
 	entry := TwoFAAuditLog{
@@ -664,7 +759,14 @@ func (p *Plugin) logAudit(ctx context.Context, orgID uint, accountID uint, accou
 		Actor:       actor,
 		IP:          ip,
 	}
-	_ = p.ctx.DB.WithContext(ctx).Create(&entry).Error
+	_ = tdb.Create(&entry).Error
+}
+
+func (p *Plugin) requireRole(r *http.Request, min string) bool {
+	if p.host != nil && p.host.Session() != nil {
+		return p.host.Session().RequireRole(r, min)
+	}
+	return false
 }
 
 func (p *Plugin) actor(r *http.Request) string {

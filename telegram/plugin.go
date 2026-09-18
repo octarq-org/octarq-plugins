@@ -11,6 +11,7 @@ package telegram
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/octarq-org/octarq/server/plugin"
@@ -99,8 +100,19 @@ type settingsOut struct {
 	HasToken bool   `json:"hasToken"`
 }
 
+func (p *Plugin) Validate(ctx context.Context, host plugin.Host) error {
+	if host == nil {
+		return errors.New("telegram: host runtime is required")
+	}
+	return nil
+}
+
 func (p *Plugin) getSettings(w http.ResponseWriter, r *http.Request) {
 	orgID := p.orgID(r)
+	if orgID == 0 {
+		http.Error(w, "unauthorized workspace", http.StatusUnauthorized)
+		return
+	}
 	token, chatID := p.creds(orgID)
 	writeJSON(w, settingsOut{ChatID: chatID, HasToken: token != ""})
 }
@@ -112,6 +124,10 @@ type settingsIn struct {
 
 func (p *Plugin) putSettings(w http.ResponseWriter, r *http.Request) {
 	orgID := p.orgID(r)
+	if orgID == 0 {
+		http.Error(w, "unauthorized workspace", http.StatusUnauthorized)
+		return
+	}
 	var in settingsIn
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
@@ -121,10 +137,23 @@ func (p *Plugin) putSettings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "settings unavailable", http.StatusInternalServerError)
 		return
 	}
-	_ = p.host.Settings().SetWorkspaceSetting(orgID, keyChatID, in.ChatID)
-	if in.BotToken != "" && p.host.Crypto() != nil {
-		if enc, err := p.host.Crypto().Encrypt([]byte(in.BotToken)); err == nil {
-			_ = p.host.Settings().SetWorkspaceSetting(orgID, keyBotToken, enc)
+	if err := p.host.Settings().SetWorkspaceSetting(orgID, keyChatID, in.ChatID); err != nil {
+		http.Error(w, "failed to save chat ID", http.StatusInternalServerError)
+		return
+	}
+	if in.BotToken != "" {
+		if p.host.Crypto() == nil {
+			http.Error(w, "crypto unavailable", http.StatusInternalServerError)
+			return
+		}
+		enc, err := p.host.Crypto().Encrypt([]byte(in.BotToken))
+		if err != nil {
+			http.Error(w, "encryption failed", http.StatusInternalServerError)
+			return
+		}
+		if err := p.host.Settings().SetWorkspaceSetting(orgID, keyBotToken, enc); err != nil {
+			http.Error(w, "failed to save bot token", http.StatusInternalServerError)
+			return
 		}
 	}
 	token, chatID := p.creds(orgID)
@@ -133,6 +162,10 @@ func (p *Plugin) putSettings(w http.ResponseWriter, r *http.Request) {
 
 func (p *Plugin) testSend(w http.ResponseWriter, r *http.Request) {
 	orgID := p.orgID(r)
+	if orgID == 0 {
+		http.Error(w, "unauthorized workspace", http.StatusUnauthorized)
+		return
+	}
 	if err := p.send(r.Context(), orgID, "✅ Octarq Telegram connector test — you're all set."); err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
@@ -155,6 +188,7 @@ func writeJSON(w http.ResponseWriter, v any) {
 // Compile-time assertions for every contract this plugin implements.
 var (
 	_ plugin.Plugin      = (*Plugin)(nil)
+	_ plugin.Validator   = (*Plugin)(nil)
 	_ plugin.Describer   = (*Plugin)(nil)
 	_ plugin.MCPProvider = (*Plugin)(nil)
 )
