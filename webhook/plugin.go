@@ -20,7 +20,8 @@ import (
 // reference to the Context so the MCP tool (registered outside Mount) can reach
 // the settings store and Notify.
 type Plugin struct {
-	ctx *plugin.Context
+	ctx  *plugin.Context
+	host plugin.Host
 }
 
 // Per-workspace setting key for the webhook URL.
@@ -44,11 +45,12 @@ func (*Plugin) Models() []any { return nil }
 // answers 404 before the handler runs.
 func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 	p.ctx = ctx
+	p.host = plugin.EnsureHost(ctx)
 
 	// Inbound email → Webhook. The handler runs async in its own goroutine, so
 	// it must not block the request path.
-	if ctx.OnEmail != nil {
-		ctx.OnEmail(func(e plugin.EmailEvent) {
+	if p.host != nil && p.host.Events() != nil {
+		p.host.Events().OnEmail(func(e plugin.EmailEvent) {
 			text := "📬 New mail\nTo: " + e.To + "\nFrom: " + e.From + "\nSubject: " + e.Subject
 			_ = p.send(context.Background(), e.OrgID, text)
 		})
@@ -79,10 +81,10 @@ func (p *Plugin) send(ctx context.Context, orgID uint, text string) error {
 
 // url reads the workspace's Webhook URL setting.
 func (p *Plugin) url(orgID uint) string {
-	if p.ctx == nil || p.ctx.GetWorkspaceSetting == nil {
+	if p.host == nil || p.host.Settings() == nil {
 		return ""
 	}
-	return p.ctx.GetWorkspaceSetting(orgID, keyURL)
+	return p.host.Settings().GetWorkspaceSetting(orgID, keyURL)
 }
 
 type settingsOut struct {
@@ -105,11 +107,11 @@ func (p *Plugin) putSettings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	if p.ctx.SetWorkspaceSetting == nil {
+	if p.host == nil || p.host.Settings() == nil {
 		http.Error(w, "settings unavailable", http.StatusInternalServerError)
 		return
 	}
-	_ = p.ctx.SetWorkspaceSetting(orgID, keyURL, in.URL)
+	_ = p.host.Settings().SetWorkspaceSetting(orgID, keyURL, in.URL)
 	writeJSON(w, settingsOut{URL: p.url(orgID)})
 }
 
@@ -123,8 +125,8 @@ func (p *Plugin) testSend(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Plugin) orgID(r *http.Request) uint {
-	if p.ctx != nil && p.ctx.OrgID != nil {
-		return p.ctx.OrgID(r)
+	if p.host != nil && p.host.Session() != nil {
+		return p.host.Session().OrgID(r)
 	}
 	return 0
 }

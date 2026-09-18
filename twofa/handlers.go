@@ -668,8 +668,8 @@ func (p *Plugin) logAudit(ctx context.Context, orgID uint, accountID uint, accou
 }
 
 func (p *Plugin) actor(r *http.Request) string {
-	if p.ctx != nil && p.ctx.UserID != nil {
-		uid := p.ctx.UserID(r)
+	if p.host != nil && p.host.Session() != nil {
+		uid := p.host.Session().UserID(r)
 		if uid > 0 {
 			return fmt.Sprintf("user:%d", uid)
 		}
@@ -678,10 +678,10 @@ func (p *Plugin) actor(r *http.Request) string {
 }
 
 func (p *Plugin) orgID(r *http.Request) uint {
-	if p.ctx != nil && p.ctx.OrgID != nil {
-		return p.ctx.OrgID(r)
+	if p.host != nil && p.host.Session() != nil {
+		return p.host.Session().OrgID(r)
 	}
-	return 1
+	return 0
 }
 
 func getID(r *http.Request) uint {

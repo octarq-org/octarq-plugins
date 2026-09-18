@@ -29,7 +29,7 @@ func (p *Plugin) mcpSend(ctx context.Context, _ *mcp.CallToolRequest, in sendInp
 	}
 	orgID := plugin.OrgIDFromContext(ctx)
 	if orgID == 0 {
-		orgID = 1
+		return nil, nil, fmt.Errorf("missing tenant context: unauthorized")
 	}
 	if u := p.url(orgID); u == "" {
 		return nil, nil, fmt.Errorf("webhook is not configured for this workspace; set a webhook URL in Settings first")

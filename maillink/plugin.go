@@ -32,7 +32,8 @@ var urlRe = regexp.MustCompile(`https?://[^\s"'<>)\]]+`)
 
 // Plugin is composed with app.Use(&maillink.Plugin{}).
 type Plugin struct {
-	ctx *plugin.Context
+	ctx  *plugin.Context
+	host plugin.Host
 }
 
 func (*Plugin) Name() string { return "maillink" }
@@ -48,8 +49,9 @@ func (*Plugin) Models() []any { return []any{&MailLink{}} }
 
 func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 	p.ctx = ctx
-	if ctx.OnEmail != nil {
-		ctx.OnEmail(p.onEmail)
+	p.host = plugin.EnsureHost(ctx)
+	if p.host != nil && p.host.Events() != nil {
+		p.host.Events().OnEmail(p.onEmail)
 	}
 	mux.Handle("GET /api/maillink/recent", ctx.Guard(http.HandlerFunc(p.recent)))
 }
@@ -74,26 +76,40 @@ func (p *Plugin) onEmail(e plugin.EmailEvent) {
 	if err != nil {
 		return
 	}
-	if p.ctx.DB != nil {
+	if p.host != nil {
+		if tdb := p.host.TenantDB(e.OrgID); tdb != nil {
+			_ = tdb.Create(&MailLink{OrgID: e.OrgID, Slug: slug, Target: target, Subject: e.Subject, From: e.From}).Error
+			return
+		}
+	}
+	if p.ctx != nil && p.ctx.DB != nil {
 		_ = p.ctx.DB.Create(&MailLink{OrgID: e.OrgID, Slug: slug, Target: target, Subject: e.Subject, From: e.From}).Error
 	}
 }
 
 func (p *Plugin) recent(w http.ResponseWriter, r *http.Request) {
 	var orgID uint
-	if p.ctx.OrgID != nil {
-		orgID = p.ctx.OrgID(r)
+	if p.host != nil && p.host.Session() != nil {
+		orgID = p.host.Session().OrgID(r)
 	}
 	writeJSON(w, p.list(r.Context(), orgID, 50))
 }
 
 func (p *Plugin) list(ctx context.Context, orgID uint, limit int) []MailLink {
 	out := []MailLink{}
-	if p.ctx.DB == nil || orgID == 0 {
+	if orgID == 0 {
 		return out
 	}
-	p.ctx.DB.WithContext(ctx).Where("org_id = ?", orgID).
-		Order("created_at DESC").Limit(limit).Find(&out)
+	if p.host != nil {
+		if tdb := p.host.TenantDB(orgID); tdb != nil {
+			tdb.WithContext(ctx).Order("created_at DESC").Limit(limit).Find(&out)
+			return out
+		}
+	}
+	if p.ctx != nil && p.ctx.DB != nil {
+		p.ctx.DB.WithContext(ctx).Where("org_id = ?", orgID).
+			Order("created_at DESC").Limit(limit).Find(&out)
+	}
 	return out
 }
 

@@ -29,7 +29,7 @@ func (p *Plugin) mcpSend(ctx context.Context, _ *mcp.CallToolRequest, in sendInp
 	}
 	orgID := plugin.OrgIDFromContext(ctx)
 	if orgID == 0 {
-		orgID = 1
+		return nil, nil, fmt.Errorf("missing tenant context: unauthorized")
 	}
 	if token, chatID := p.creds(orgID); token == "" || chatID == "" {
 		return nil, nil, fmt.Errorf("telegram is not configured for this workspace; set a bot token and chat id in Settings first")

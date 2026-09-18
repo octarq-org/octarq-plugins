@@ -3,6 +3,7 @@ package maillink
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -15,7 +16,7 @@ type listInput struct {
 
 // RegisterMCP exposes the auto-created email links to AI agents — the payoff of
 // the demo: an agent can call list_email_links to fetch "the short link from my
-// latest email" with no bespoke integration.
+// latest email" with no extra plumbing.
 func (p *Plugin) RegisterMCP(srv *mcp.Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "list_email_links",
@@ -26,7 +27,7 @@ func (p *Plugin) RegisterMCP(srv *mcp.Server) {
 func (p *Plugin) mcpList(ctx context.Context, _ *mcp.CallToolRequest, in listInput) (*mcp.CallToolResult, any, error) {
 	orgID := plugin.OrgIDFromContext(ctx)
 	if orgID == 0 {
-		orgID = 1
+		return nil, nil, errors.New("missing tenant context: unauthorized")
 	}
 	limit := in.Limit
 	if limit <= 0 || limit > 100 {
