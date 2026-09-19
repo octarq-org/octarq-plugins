@@ -125,7 +125,7 @@ func (p *Plugin) list(ctx context.Context, orgID uint, limit int) []MailLink {
 // static frontend menu is ignored even where one is still declared.
 func (*Plugin) Menus() []plugin.MenuItem {
 	return []plugin.MenuItem{
-		{ID: "maillink", Label: "Mail Links", Path: "/maillink", Icon: "🔗", Category: "Workspace"},
+		{ID: "maillink", Label: "Mail Links", Path: "/maillink", Icon: "link-2", Category: "Marketing"},
 	}
 }
 

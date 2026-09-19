@@ -82,7 +82,7 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 
 func (*Plugin) Menus() []plugin.MenuItem {
 	return []plugin.MenuItem{
-		{ID: "twofa", Label: "2FA Vault", Path: "/twofa", Icon: "🔐", Category: "Workspace"},
+		{ID: "twofa", Label: "2FA Vault", Path: "/twofa", Icon: "shield", Category: "Security"},
 	}
 }
 
