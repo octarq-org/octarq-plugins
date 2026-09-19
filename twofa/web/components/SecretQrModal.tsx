@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Modal, Button, Field } from "@octarq/plugin-sdk";
+import { Modal, Button, Field, Input, Alert, FormError, Skeleton } from "@octarq/plugin-sdk";
+import { AlertTriangle, Copy, Check } from "lucide-react";
 import type { AccountSummary, AccountDetail } from "../types";
 
 interface Props {
@@ -73,22 +74,24 @@ export function SecretQrModal({ onClose, account, t }: Props) {
     >
       <div className="space-y-4 text-sm">
         {loading ? (
-          <div className="py-8 text-center text-white/50">
-            {t("twofa.loading", "Loading secure credentials...")}
+          <div className="space-y-3">
+            <Skeleton className="h-48 rounded-lg" />
+            <Skeleton className="h-9 rounded-lg" />
+            <Skeleton className="h-9 rounded-lg" />
           </div>
         ) : error ? (
-          <div className="text-red-400">{error}</div>
+          <FormError err={error} />
         ) : (
           <>
-            {/* Scannable QR Code */}
+            {/* Scannable QR code */}
             {qrDataUrl && (
-              <div className="flex flex-col items-center justify-center p-4 bg-white/5 rounded-lg border border-white/10">
+              <div className="flex flex-col items-center justify-center rounded-lg border border-border bg-well p-4">
                 <img
                   src={qrDataUrl}
                   alt="TOTP QR Code"
                   className="h-48 w-48 rounded bg-white p-2 shadow-md"
                 />
-                <p className="mt-2 text-xs text-white/50">
+                <p className="mt-2 text-xs text-muted-foreground">
                   {t("twofa.scanHelp", "Scan with Google Authenticator, 1Password, or any authenticator app.")}
                 </p>
               </div>
@@ -98,13 +101,9 @@ export function SecretQrModal({ onClose, account, t }: Props) {
             {detail?.secret && (
               <Field label={t("twofa.secretSeed", "Secret Seed (Base32)")}>
                 <div className="flex items-center gap-2">
-                  <input
-                    readOnly
-                    type="text"
-                    value={detail.secret}
-                    className="w-full rounded bg-white/5 px-3 py-2 font-mono text-sm text-emerald-400 border border-white/10 select-all"
-                  />
-                  <Button variant="ghost" onClick={copySecret}>
+                  <Input readOnly value={detail.secret} className="select-all font-mono text-sm" />
+                  <Button variant="outline" onClick={copySecret}>
+                    {copiedSecret ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                     {copiedSecret ? t("twofa.copied", "Copied!") : t("twofa.copy", "Copy")}
                   </Button>
                 </div>
@@ -115,27 +114,23 @@ export function SecretQrModal({ onClose, account, t }: Props) {
             {uri && (
               <Field label={t("twofa.keyURI", "Standard Key URI")}>
                 <div className="flex items-center gap-2">
-                  <input
-                    readOnly
-                    type="text"
-                    value={uri}
-                    className="w-full rounded bg-white/5 px-3 py-2 font-mono text-xs text-white/70 border border-white/10 select-all"
-                  />
-                  <Button variant="ghost" onClick={copyURI}>
+                  <Input readOnly value={uri} className="select-all font-mono text-xs" />
+                  <Button variant="outline" onClick={copyURI}>
+                    {copiedURI ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                     {copiedURI ? t("twofa.copied", "Copied!") : t("twofa.copy", "Copy")}
                   </Button>
                 </div>
               </Field>
             )}
 
-            {/* Security Audit Notice */}
-            <div className="rounded-lg bg-amber-500/10 p-3 border border-amber-500/20 text-xs text-amber-300">
-              ⚠️ {t("twofa.auditNotice", "Revealing this secret has been recorded in the workspace security audit trail.")}
-            </div>
+            {/* Security audit notice */}
+            <Alert variant="warning" icon={<AlertTriangle className="h-4 w-4" />}>
+              {t("twofa.auditNotice", "Revealing this secret has been recorded in the workspace security audit trail.")}
+            </Alert>
           </>
         )}
 
-        <div className="flex justify-end pt-2 border-t border-white/10">
+        <div className="flex justify-end border-t border-border pt-2">
           <Button onClick={onClose}>{t("twofa.close", "Close")}</Button>
         </div>
       </div>

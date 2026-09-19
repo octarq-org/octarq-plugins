@@ -1,9 +1,16 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ScreenWrap,
   PageHeader,
-  GlassCard,
-  Empty,
+  Table,
+  THead,
+  TBody,
+  TR,
+  TH,
+  TD,
+  TableEmpty,
+  TableError,
+  TableSkeleton,
   LockedFallback,
   useTranslation,
 } from "@octarq/plugin-sdk";
@@ -18,10 +25,12 @@ interface MailLink {
 
 export default function MailLinksPage() {
   const { t } = useTranslation();
-  const [links, setLinks] = useState<MailLink[]>([]);
+  const [links, setLinks] = useState<MailLink[] | null>(null);
   const [status, setStatus] = useState<number | null>(null);
+  const [error, setError] = useState<number | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setError(null);
     fetch("/api/maillink/recent", { credentials: "same-origin" })
       .then((res) => {
         if (!res.ok) {
@@ -31,8 +40,10 @@ export default function MailLinksPage() {
         return res.json() as Promise<MailLink[]>;
       })
       .then((rows) => rows && setLinks(rows))
-      .catch(() => setStatus(0));
+      .catch(() => setError(0));
   }, []);
+
+  useEffect(load, [load]);
 
   if (status === 402 || status === 404) {
     return (
@@ -45,23 +56,33 @@ export default function MailLinksPage() {
   return (
     <ScreenWrap>
       <PageHeader title={t("maillink.pageTitle", "Mail Links")} description={t("maillink.pageDesc")} />
-      {links.length === 0 ? (
-        <Empty>{t("maillink.empty")}</Empty>
+      {error !== null ? (
+        <TableError error={error} onRetry={load} />
+      ) : links === null ? (
+        <TableSkeleton columnsCount={4} rowsCount={5} />
+      ) : links.length === 0 ? (
+        <TableEmpty emptyText={t("maillink.empty")} />
       ) : (
-        <div className="space-y-2">
-          {links.map((l) => (
-            <GlassCard key={l.ID} className="flex items-center justify-between gap-4 p-4">
-              <div className="min-w-0">
-                <p className="truncate text-sm text-white/80">/{l.Slug}</p>
-                <p className="truncate text-xs text-white/40">{l.Target}</p>
-              </div>
-              <div className="shrink-0 text-right text-xs text-white/40">
-                <p className="truncate">{l.Subject || "(no subject)"}</p>
-                <p className="truncate">{l.From}</p>
-              </div>
-            </GlassCard>
-          ))}
-        </div>
+        <Table>
+          <THead>
+            <TR>
+              <TH>{t("maillink.colShort", "Short link")}</TH>
+              <TH>{t("maillink.colTarget", "Target")}</TH>
+              <TH>{t("maillink.colSubject", "Subject")}</TH>
+              <TH>{t("maillink.colFrom", "From")}</TH>
+            </TR>
+          </THead>
+          <TBody>
+            {links.map((l) => (
+              <TR key={l.ID}>
+                <TD className="font-mono text-xs text-foreground">/{l.Slug}</TD>
+                <TD className="max-w-[18rem] truncate text-xs text-muted-foreground">{l.Target}</TD>
+                <TD className="max-w-[18rem] truncate text-xs">{l.Subject || "—"}</TD>
+                <TD className="max-w-[14rem] truncate text-xs text-muted-foreground">{l.From}</TD>
+              </TR>
+            ))}
+          </TBody>
+        </Table>
       )}
     </ScreenWrap>
   );

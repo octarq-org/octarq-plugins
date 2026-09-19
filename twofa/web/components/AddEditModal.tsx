@@ -1,5 +1,15 @@
 import { useState, useEffect } from "react";
-import { Modal, Button, Field, Input } from "@octarq/plugin-sdk";
+import {
+  Modal,
+  Button,
+  Field,
+  Input,
+  Textarea,
+  Select,
+  Switch,
+  Tabs,
+  FormError,
+} from "@octarq/plugin-sdk";
 import type { AccountSummary, CreateAccountInput, UpdateAccountInput } from "../types";
 
 interface Props {
@@ -163,156 +173,132 @@ export function AddEditModal({ onClose, account, onSaved, t }: Props) {
     }
   };
 
+  const manualForm = (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <Field label={t("twofa.accountName", "Account Title")}>
+          <Input placeholder="AWS Production" value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label={t("twofa.issuer", "Issuer / Service")}>
+          <Input placeholder="Amazon Web Services" value={issuer} onChange={(e) => setIssuer(e.target.value)} />
+        </Field>
+      </div>
+
+      <Field label={t("twofa.username", "Account / Username / Email")}>
+        <Input placeholder="admin@octarq.com" value={accountName} onChange={(e) => setAccountName(e.target.value)} />
+      </Field>
+
+      <Field
+        label={
+          isEdit
+            ? t("twofa.secretEdit", "Secret Key (Leave blank to keep unchanged)")
+            : t("twofa.secret", "Base32 Secret Key")
+        }
+      >
+        <Input
+          type="password"
+          placeholder={isEdit ? "••••••••••••" : "JBSWY3DPEHPK3PXP"}
+          value={secret}
+          onChange={(e) => setSecret(e.target.value)}
+        />
+      </Field>
+
+      <div className="grid grid-cols-3 gap-3">
+        <Field label={t("twofa.algorithm", "Algorithm")}>
+          <Select
+            value={algorithm}
+            onValueChange={setAlgorithm}
+            options={[
+              { value: "SHA1", label: "SHA1" },
+              { value: "SHA256", label: "SHA256" },
+              { value: "SHA512", label: "SHA512" },
+            ]}
+          />
+        </Field>
+        <Field label={t("twofa.digits", "Digits")}>
+          <Select
+            value={String(digits)}
+            onValueChange={(v) => setDigits(parseInt(v, 10))}
+            options={[
+              { value: "6", label: "6 digits" },
+              { value: "8", label: "8 digits" },
+            ]}
+          />
+        </Field>
+        <Field label={t("twofa.period", "Period (sec)")}>
+          <Input
+            type="number"
+            value={period}
+            onChange={(e) => setPeriod(parseInt(e.target.value, 10) || 30)}
+          />
+        </Field>
+      </div>
+
+      <Field label={t("twofa.tags", "Tags (comma-separated)")}>
+        <Input
+          placeholder="Cloud, Production, Critical"
+          value={tags}
+          onChange={(e) => setTags(e.target.value)}
+        />
+      </Field>
+
+      <Field label={t("twofa.notes", "Notes")}>
+        <Textarea
+          rows={2}
+          placeholder="Emergency recovery credentials stored in 1Password vault"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+        />
+      </Field>
+
+      <div className="flex items-center gap-2 pt-1">
+        <Switch checked={pinned} onCheckedChange={setPinned} aria-label={t("twofa.pinToTop", "Pin this account to top of dashboard")} />
+        <span className="cursor-pointer text-xs text-muted-foreground" onClick={() => setPinned(!pinned)}>
+          {t("twofa.pinToTop", "Pin this account to top of dashboard")}
+        </span>
+      </div>
+    </div>
+  );
+
+  const uriForm = (
+    <div className="space-y-2">
+      <Field label={t("twofa.uriLabel", "otpauth:// URI")}>
+        <Textarea
+          rows={4}
+          className="font-mono text-xs"
+          placeholder="otpauth://totp/GitHub:user?secret=JBSWY3DPEHPK3PXP&issuer=GitHub"
+          value={uriInput}
+          onChange={(e) => handleParseURI(e.target.value)}
+        />
+      </Field>
+      <p className="text-xs text-muted-foreground">
+        {t("twofa.uriHelp", "Paste a provisioning URI to automatically parse the issuer, account, and secret parameters.")}
+      </p>
+    </div>
+  );
+
   return (
     <Modal
       onClose={onClose}
       title={isEdit ? t("twofa.editAccount", "Edit 2FA Account") : t("twofa.addAccount", "Add 2FA Account")}
     >
       <div className="space-y-4">
-        {/* Tab switcher for new accounts */}
-        {!isEdit && (
-          <div className="flex border-b border-white/10 pb-2 gap-3 text-sm">
-            <button
-              onClick={() => setTab("manual")}
-              className={`pb-1 ${tab === "manual" ? "border-b-2 border-emerald-400 font-semibold text-white" : "text-white/50 hover:text-white"}`}
-            >
-              {t("twofa.manualEntry", "Manual Entry")}
-            </button>
-            <button
-              onClick={() => setTab("uri")}
-              className={`pb-1 ${tab === "uri" ? "border-b-2 border-emerald-400 font-semibold text-white" : "text-white/50 hover:text-white"}`}
-            >
-              {t("twofa.pasteURI", "Paste Key URI (otpauth://)")}
-            </button>
-          </div>
+        {isEdit ? (
+          manualForm
+        ) : (
+          <Tabs
+            value={tab}
+            onValueChange={(v) => setTab(v as "manual" | "uri")}
+            items={[
+              { value: "manual", label: t("twofa.manualEntry", "Manual Entry"), content: manualForm },
+              { value: "uri", label: t("twofa.pasteURI", "Paste Key URI (otpauth://)"), content: uriForm },
+            ]}
+          />
         )}
 
-        {/* Quick Paste URI tab */}
-        {tab === "uri" && (
-          <div className="space-y-2">
-            <Field label={t("twofa.uriLabel", "otpauth:// URI")}>
-              <textarea
-                className="w-full rounded bg-white/5 p-2 text-xs font-mono text-white placeholder-white/30 border border-white/10 focus:border-emerald-500 focus:outline-none"
-                rows={4}
-                placeholder="otpauth://totp/GitHub:user?secret=JBSWY3DPEHPK3PXP&issuer=GitHub"
-                value={uriInput}
-                onChange={(e) => handleParseURI(e.target.value)}
-              />
-            </Field>
-            <p className="text-xs text-white/50">
-              {t("twofa.uriHelp", "Paste a provisioning URI to automatically parse the issuer, account, and secret parameters.")}
-            </p>
-          </div>
-        )}
+        {error && <FormError err={error} />}
 
-        {/* Manual Form tab */}
-        {tab === "manual" && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <Field label={t("twofa.accountName", "Account Title")}>
-                <Input
-                  placeholder="AWS Production"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                />
-              </Field>
-              <Field label={t("twofa.issuer", "Issuer / Service")}>
-                <Input
-                  placeholder="Amazon Web Services"
-                  value={issuer}
-                  onChange={(e) => setIssuer(e.target.value)}
-                />
-              </Field>
-            </div>
-
-            <Field label={t("twofa.username", "Account / Username / Email")}>
-              <Input
-                placeholder="admin@octarq.com"
-                value={accountName}
-                onChange={(e) => setAccountName(e.target.value)}
-              />
-            </Field>
-
-            <Field
-              label={
-                isEdit
-                  ? t("twofa.secretEdit", "Secret Key (Leave blank to keep unchanged)")
-                  : t("twofa.secret", "Base32 Secret Key")
-              }
-            >
-              <Input
-                type="password"
-                placeholder={isEdit ? "••••••••••••" : "JBSWY3DPEHPK3PXP"}
-                value={secret}
-                onChange={(e) => setSecret(e.target.value)}
-              />
-            </Field>
-
-            <div className="grid grid-cols-3 gap-3">
-              <Field label={t("twofa.algorithm", "Algorithm")}>
-                <select
-                  className="w-full rounded bg-white/5 px-2 py-2 text-sm text-white border border-white/10 focus:outline-none"
-                  value={algorithm}
-                  onChange={(e) => setAlgorithm(e.target.value)}
-                >
-                  <option value="SHA1">SHA1</option>
-                  <option value="SHA256">SHA256</option>
-                  <option value="SHA512">SHA512</option>
-                </select>
-              </Field>
-              <Field label={t("twofa.digits", "Digits")}>
-                <select
-                  className="w-full rounded bg-white/5 px-2 py-2 text-sm text-white border border-white/10 focus:outline-none"
-                  value={digits}
-                  onChange={(e) => setDigits(parseInt(e.target.value, 10))}
-                >
-                  <option value={6}>6 digits</option>
-                  <option value={8}>8 digits</option>
-                </select>
-              </Field>
-              <Field label={t("twofa.period", "Period (sec)")}>
-                <Input
-                  type="number"
-                  value={period}
-                  onChange={(e) => setPeriod(parseInt(e.target.value, 10) || 30)}
-                />
-              </Field>
-            </div>
-
-            <Field label={t("twofa.tags", "Tags (comma-separated)")}>
-              <Input
-                placeholder="Cloud, Production, Critical"
-                value={tags}
-                onChange={(e) => setTags(e.target.value)}
-              />
-            </Field>
-
-            <Field label={t("twofa.notes", "Notes")}>
-              <Input
-                placeholder="Emergency recovery credentials stored in 1Password vault"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-              />
-            </Field>
-
-            <div className="flex items-center gap-2 pt-1">
-              <input
-                type="checkbox"
-                id="pin-check"
-                checked={pinned}
-                onChange={(e) => setPinned(e.target.checked)}
-                className="rounded border-white/20 bg-white/10 text-emerald-500 focus:ring-0"
-              />
-              <label htmlFor="pin-check" className="text-xs text-white/80 cursor-pointer">
-                {t("twofa.pinToTop", "Pin this account to top of dashboard")}
-              </label>
-            </div>
-          </div>
-        )}
-
-        {error && <div className="text-xs text-red-400">{error}</div>}
-
-        <div className="flex justify-end gap-3 border-t border-white/10 pt-4">
+        <div className="flex justify-end gap-3 border-t border-border pt-4">
           <Button variant="ghost" onClick={onClose} disabled={loading}>
             {t("twofa.cancel", "Cancel")}
           </Button>
