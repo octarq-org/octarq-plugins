@@ -4,9 +4,14 @@ import {
   PageHeader,
   Button,
   Input,
+  Empty,
+  Skeleton,
   LockedFallback,
   useTranslation,
+  useToast,
+  useConfirm,
 } from "@octarq/plugin-sdk";
+import { Plus, RefreshCw, ScrollText, ShieldCheck } from "lucide-react";
 import type { AccountSummary } from "./types";
 import { AccountCard } from "./components/AccountCard";
 import { AddEditModal } from "./components/AddEditModal";
@@ -16,12 +21,13 @@ import { ImportExportModal } from "./components/ImportExportModal";
 
 export default function TwoFAPage() {
   const { t } = useTranslation();
+  const toast = useToast();
+  const confirm = useConfirm();
   const [accounts, setAccounts] = useState<AccountSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
-  const [toastMsg, setToastMsg] = useState("");
 
   // Modals state
   const [addEditOpen, setAddEditOpen] = useState(false);
@@ -79,11 +85,6 @@ export default function TwoFAPage() {
     return () => clearInterval(timer);
   }, [fetchAccounts]);
 
-  const showToast = (msg: string) => {
-    setToastMsg(msg);
-    setTimeout(() => setToastMsg(""), 2000);
-  };
-
   const handleTogglePin = async (id: number) => {
     try {
       const res = await fetch(`/api/twofa/accounts/${id}/pin`, {
@@ -99,9 +100,11 @@ export default function TwoFAPage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm(t("twofa.confirmDelete", "Are you sure you want to delete this 2FA account?"))) {
-      return;
-    }
+    const ok = await confirm({
+      message: t("twofa.confirmDelete", "Are you sure you want to delete this 2FA account?"),
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const res = await fetch(`/api/twofa/accounts/${id}`, {
         method: "DELETE",
@@ -109,7 +112,7 @@ export default function TwoFAPage() {
       });
       if (res.ok) {
         fetchAccounts();
-        showToast(t("twofa.deleted", "Account deleted."));
+        toast.success(t("twofa.deleted", "Account deleted."));
       }
     } catch {
       // ignore
@@ -167,10 +170,12 @@ export default function TwoFAPage() {
     );
   }
 
+  const isFiltering = Boolean(searchTerm || selectedTag);
+
   return (
     <ScreenWrap>
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <PageHeader
           title={t("twofa.pageTitle", "2FA Vault")}
           description={t(
@@ -180,30 +185,20 @@ export default function TwoFAPage() {
         />
 
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            onClick={() => setAuditLogsOpen(true)}
-            title={t("twofa.auditLogs", "Audit Logs")}
-            className="text-xs h-9 px-3"
-          >
-            📋 {t("twofa.auditLogs", "Audit Logs")}
+          <Button variant="ghost" size="sm" onClick={() => setAuditLogsOpen(true)} title={t("twofa.auditLogs", "Audit Logs")}>
+            <ScrollText className="h-3.5 w-3.5" /> {t("twofa.auditLogs", "Audit Logs")}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setImportExportOpen(true)} title={t("twofa.importExport", "Import / Export")}>
+            <RefreshCw className="h-3.5 w-3.5" /> {t("twofa.importExport", "Import / Export")}
           </Button>
           <Button
-            variant="ghost"
-            onClick={() => setImportExportOpen(true)}
-            title={t("twofa.importExport", "Import / Export")}
-            className="text-xs h-9 px-3"
-          >
-            🔄 {t("twofa.importExport", "Import / Export")}
-          </Button>
-          <Button
+            size="sm"
             onClick={() => {
               setEditingAccount(null);
               setAddEditOpen(true);
             }}
-            className="text-xs h-9 px-3"
           >
-            + {t("twofa.addAccount", "Add Account")}
+            <Plus className="h-3.5 w-3.5" /> {t("twofa.addAccount", "Add Account")}
           </Button>
         </div>
       </div>
@@ -220,78 +215,65 @@ export default function TwoFAPage() {
 
         {allTags.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 text-xs">
-            <span className="text-white/40 mr-1">{t("twofa.filterTag", "Tag:")}</span>
-            <button
+            <span className="mr-1 text-muted-foreground">{t("twofa.filterTag", "Tag:")}</span>
+            <Button
+              variant={selectedTag === null ? "secondary" : "subtle"}
+              size="sm"
               onClick={() => setSelectedTag(null)}
-              className={`rounded px-2 py-0.5 transition-colors ${
-                selectedTag === null
-                  ? "bg-emerald-500 text-white font-medium"
-                  : "bg-white/5 text-white/60 hover:bg-white/10"
-              }`}
             >
               {t("twofa.all", "All")}
-            </button>
+            </Button>
             {allTags.map((tg) => (
-              <button
+              <Button
                 key={tg}
+                variant={selectedTag === tg ? "secondary" : "subtle"}
+                size="sm"
                 onClick={() => setSelectedTag(selectedTag === tg ? null : tg)}
-                className={`rounded px-2 py-0.5 transition-colors ${
-                  selectedTag === tg
-                    ? "bg-emerald-500 text-white font-medium"
-                    : "bg-white/5 text-white/60 hover:bg-white/10"
-                }`}
               >
                 {tg}
-              </button>
+              </Button>
             ))}
           </div>
         )}
       </div>
 
-      {/* Toast Alert Feedback */}
-      {toastMsg && (
-        <div className="fixed bottom-6 right-6 z-50 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-lg animate-bounce">
-          {toastMsg}
-        </div>
-      )}
-
       {/* Account Cards Grid */}
       {loading ? (
-        <div className="py-16 text-center text-white/40">
-          {t("twofa.loadingAccounts", "Loading 2FA vault accounts...")}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-44 rounded-xl" />
+          ))}
         </div>
       ) : filteredAccounts.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-white/10 p-12 text-center">
-          <span className="text-4xl mb-3">🔐</span>
-          <h3 className="text-base font-semibold text-white">
-            {searchTerm || selectedTag
-              ? t("twofa.noMatches", "No accounts matching search criteria")
-              : t("twofa.emptyTitle", "No 2FA accounts registered yet")}
-          </h3>
-          <p className="mt-1 text-xs text-white/50 max-w-sm">
-            {searchTerm || selectedTag
+        <Empty
+          reason={isFiltering ? t("twofa.noMatches", "No accounts matching search criteria") : t("twofa.emptyTitle", "No 2FA accounts registered yet")}
+          detail={
+            isFiltering
               ? t("twofa.tryDifferentSearch", "Try searching with a different term or clearing active tag filters.")
-              : t("twofa.emptyDesc", "Add your first TOTP credential to start managing shared two-factor authentication tokens.")}
-          </p>
-          {!searchTerm && !selectedTag && (
-            <Button
-              className="mt-4 text-xs h-9 px-3"
-              onClick={() => {
-                setEditingAccount(null);
-                setAddEditOpen(true);
-              }}
-            >
-              + {t("twofa.addFirstAccount", "Add First Account")}
-            </Button>
-          )}
-        </div>
+              : t("twofa.emptyDesc", "Add your first TOTP credential to start managing shared two-factor authentication tokens.")
+          }
+          action={
+            !isFiltering ? (
+              <Button
+                size="sm"
+                onClick={() => {
+                  setEditingAccount(null);
+                  setAddEditOpen(true);
+                }}
+              >
+                <Plus className="h-3.5 w-3.5" /> {t("twofa.addFirstAccount", "Add First Account")}
+              </Button>
+            ) : undefined
+          }
+        >
+          <ShieldCheck className="h-8 w-8 text-foreground/30" />
+        </Empty>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filteredAccounts.map((acc) => (
             <AccountCard
               key={acc.id}
               account={acc}
-              onCopy={() => showToast(t("twofa.copiedToast", "Code copied to clipboard!"))}
               onTogglePin={handleTogglePin}
               onViewSecret={(a) => {
                 setSecretQrAccount(a);
@@ -329,19 +311,10 @@ export default function TwoFAPage() {
         />
       )}
 
-      {auditLogsOpen && (
-        <AuditLogsModal
-          onClose={() => setAuditLogsOpen(false)}
-          t={t}
-        />
-      )}
+      {auditLogsOpen && <AuditLogsModal onClose={() => setAuditLogsOpen(false)} t={t} />}
 
       {importExportOpen && (
-        <ImportExportModal
-          onClose={() => setImportExportOpen(false)}
-          onImported={fetchAccounts}
-          t={t}
-        />
+        <ImportExportModal onClose={() => setImportExportOpen(false)} onImported={fetchAccounts} t={t} />
       )}
     </ScreenWrap>
   );

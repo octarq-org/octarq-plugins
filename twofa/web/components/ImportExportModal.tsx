@@ -1,5 +1,15 @@
 import { useState } from "react";
-import { Modal, Button, Field, Input } from "@octarq/plugin-sdk";
+import {
+  Modal,
+  Button,
+  Field,
+  Input,
+  Textarea,
+  Tabs,
+  Alert,
+  useToast,
+} from "@octarq/plugin-sdk";
+import { AlertTriangle, Copy } from "lucide-react";
 
 interface Props {
   onClose: () => void;
@@ -8,23 +18,22 @@ interface Props {
 }
 
 export function ImportExportModal({ onClose, onImported, t }: Props) {
+  const toast = useToast();
   const [tab, setTab] = useState<"import" | "export">("import");
   const [importText, setImportText] = useState("");
   const [tags, setTags] = useState("");
   const [loading, setLoading] = useState(false);
-  const [resultMsg, setResultMsg] = useState("");
   const [exportData, setExportData] = useState<string>("");
   const [copied, setCopied] = useState(false);
 
   const handleImport = async () => {
-    setResultMsg("");
     const lines = importText
       .split("\n")
       .map((l) => l.trim())
       .filter((l) => l.startsWith("otpauth://"));
 
     if (lines.length === 0) {
-      setResultMsg(t("twofa.errNoValidURIs", "No valid otpauth:// lines found."));
+      toast.error(t("twofa.errNoValidURIs", "No valid otpauth:// lines found."));
       return;
     }
 
@@ -38,15 +47,15 @@ export function ImportExportModal({ onClose, onImported, t }: Props) {
       });
       const data = await res.json();
       if (res.ok) {
-        setResultMsg(
+        toast.success(
           `${t("twofa.importedSuccess", "Successfully imported")} ${data.imported} ${t("twofa.accounts", "accounts.")}`
         );
         onImported();
       } else {
-        setResultMsg(data.error || "Import failed");
+        toast.error(data.error || "Import failed");
       }
     } catch (err: unknown) {
-      setResultMsg(err instanceof Error ? err.message : "Network error");
+      toast.error(err instanceof Error ? err.message : "Network error");
     } finally {
       setLoading(false);
     }
@@ -61,7 +70,7 @@ export function ImportExportModal({ onClose, onImported, t }: Props) {
         setExportData(JSON.stringify(data, null, 2));
       }
     } catch {
-      setExportData("Failed to fetch export data");
+      toast.error(t("twofa.exportFailed", "Failed to fetch export data"));
     } finally {
       setLoading(false);
     }
@@ -74,6 +83,56 @@ export function ImportExportModal({ onClose, onImported, t }: Props) {
     setTimeout(() => setCopied(false), 1800);
   };
 
+  const importPanel = (
+    <div className="space-y-3">
+      <Field label={t("twofa.pasteURIs", "Paste otpauth:// URIs (one per line)")}>
+        <Textarea
+          rows={6}
+          className="font-mono text-xs"
+          placeholder={"otpauth://totp/GitHub:user?secret=JBSWY3DPEHPK3PXP\notpauth://totp/AWS:root?secret=GEZDGNBVGY3TQOJQ"}
+          value={importText}
+          onChange={(e) => setImportText(e.target.value)}
+        />
+      </Field>
+      <Field label={t("twofa.importTags", "Tags to apply to all imported items")}>
+        <Input placeholder="Imported, 2026-Batch" value={tags} onChange={(e) => setTags(e.target.value)} />
+      </Field>
+
+      <div className="flex justify-end gap-2 pt-2">
+        <Button onClick={handleImport} disabled={loading || !importText.trim()}>
+          {loading ? t("twofa.importing", "Importing...") : t("twofa.startImport", "Start Import")}
+        </Button>
+      </div>
+    </div>
+  );
+
+  const exportPanel = (
+    <div className="space-y-3">
+      <Alert variant="warning" icon={<AlertTriangle className="h-4 w-4" />}>
+        {t("twofa.exportWarning", "Exported JSON contains plaintext secret URIs. Store this backup securely and never share it publicly.")}
+      </Alert>
+
+      {loading ? (
+        <div className="py-8 text-center text-muted-foreground">{t("twofa.exporting", "Exporting accounts...")}</div>
+      ) : (
+        <>
+          <Textarea
+            readOnly
+            rows={8}
+            className="select-all font-mono text-xs"
+            value={exportData}
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={handleCopyExport}>
+              <Copy className="h-3.5 w-3.5" />
+              {copied ? t("twofa.copied", "Copied!") : t("twofa.copyJSON", "Copy JSON")}
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
   return (
     <Modal
       wide
@@ -81,82 +140,20 @@ export function ImportExportModal({ onClose, onImported, t }: Props) {
       title={t("twofa.importExportTitle", "Import / Export Accounts")}
     >
       <div className="space-y-4 text-sm">
-        <div className="flex border-b border-white/10 pb-2 gap-3 text-sm">
-          <button
-            onClick={() => setTab("import")}
-            className={`pb-1 ${tab === "import" ? "border-b-2 border-emerald-400 font-semibold text-white" : "text-white/50 hover:text-white"}`}
-          >
-            {t("twofa.importTab", "Batch Import")}
-          </button>
-          <button
-            onClick={() => {
-              setTab("export");
-              if (!exportData) handleExport();
-            }}
-            className={`pb-1 ${tab === "export" ? "border-b-2 border-emerald-400 font-semibold text-white" : "text-white/50 hover:text-white"}`}
-          >
-            {t("twofa.exportTab", "Export Backup")}
-          </button>
-        </div>
+        <Tabs
+          value={tab}
+          onValueChange={(v) => {
+            const next = v as "import" | "export";
+            setTab(next);
+            if (next === "export" && !exportData) handleExport();
+          }}
+          items={[
+            { value: "import", label: t("twofa.importTab", "Batch Import"), content: importPanel },
+            { value: "export", label: t("twofa.exportTab", "Export Backup"), content: exportPanel },
+          ]}
+        />
 
-        {tab === "import" && (
-          <div className="space-y-3">
-            <Field label={t("twofa.pasteURIs", "Paste otpauth:// URIs (one per line)")}>
-              <textarea
-                className="w-full rounded bg-white/5 p-2 font-mono text-xs text-white border border-white/10 focus:border-emerald-500 focus:outline-none"
-                rows={6}
-                placeholder={"otpauth://totp/GitHub:user?secret=JBSWY3DPEHPK3PXP\notpauth://totp/AWS:root?secret=GEZDGNBVGY3TQOJQ"}
-                value={importText}
-                onChange={(e) => setImportText(e.target.value)}
-              />
-            </Field>
-            <Field label={t("twofa.importTags", "Tags to apply to all imported items")}>
-              <Input
-                placeholder="Imported, 2026-Batch"
-                value={tags}
-                onChange={(e) => setTags(e.target.value)}
-              />
-            </Field>
-
-            {resultMsg && (
-              <div className="text-xs font-medium text-emerald-400">{resultMsg}</div>
-            )}
-
-            <div className="flex justify-end gap-2 pt-2">
-              <Button onClick={handleImport} disabled={loading || !importText.trim()}>
-                {loading ? t("twofa.importing", "Importing...") : t("twofa.startImport", "Start Import")}
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {tab === "export" && (
-          <div className="space-y-3">
-            <p className="text-xs text-amber-300 bg-amber-500/10 p-2.5 rounded border border-amber-500/20">
-              ⚠️ {t("twofa.exportWarning", "Exported JSON contains plaintext secret URIs. Store this backup securely and never share it publicly.")}
-            </p>
-
-            {loading ? (
-              <div className="py-8 text-center text-white/50">{t("twofa.exporting", "Exporting accounts...")}</div>
-            ) : (
-              <div className="relative">
-                <textarea
-                  readOnly
-                  className="w-full rounded bg-white/5 p-2 font-mono text-xs text-white border border-white/10 select-all"
-                  rows={8}
-                  value={exportData}
-                />
-                <div className="flex justify-end gap-2 pt-2">
-                  <Button variant="ghost" onClick={handleCopyExport}>
-                    {copied ? t("twofa.copied", "Copied!") : t("twofa.copyJSON", "Copy JSON")}
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="flex justify-end pt-2 border-t border-white/10">
+        <div className="flex justify-end border-t border-border pt-2">
           <Button onClick={onClose}>{t("twofa.close", "Close")}</Button>
         </div>
       </div>

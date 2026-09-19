@@ -7,10 +7,14 @@ settings:
 importers:
 
   .:
+    dependencies:
+      lucide-react:
+        specifier: ^0.469.0
+        version: 0.469.0(react@18.3.1)
     devDependencies:
       '@octarq/plugin-sdk':
-        specifier: ^0.15.0
-        version: 0.15.0(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: ^0.16.0
+        version: 0.16.0(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@types/react':
         specifier: ^18.3.1
         version: 18.3.31
@@ -75,8 +79,8 @@ packages:
   '@floating-ui/utils@0.2.12':
     resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
 
-  '@octarq/plugin-sdk@0.15.0':
-    resolution: {integrity: sha512-UnRNb7XhLOtAAap/Gsv9GruLRsBy0sOpsqrMPysx6m864Q2qQ+oIKTJROSm8y0xegFoN7I/yT9V8HppH4YtbSA==}
+  '@octarq/plugin-sdk@0.16.0':
+    resolution: {integrity: sha512-HypjZI5YySK2UG2ajfAetpoow232U49BewaHJhwQqjm+236mWfwFaOhHHgZubxAUGYP5xmLBFHQOTB1QtofUhg==}
     peerDependencies:
       react: ^18.0.0 || ^19.0.0
       react-dom: ^18.0.0 || ^19.0.0
@@ -122,6 +126,11 @@ packages:
   loose-envify@1.4.0:
     resolution: {integrity: sha512-lyuxPGr/Wfhrlem2CL/UcnUc1zcqKAImBDzukY7Y5F/yQiNdko6+fRLevlw1HgMySw7f611UIY408EtxRSoK3Q==}
     hasBin: true
+
+  lucide-react@0.469.0:
+    resolution: {integrity: sha512-28vvUnnKQ/dBwiCQtwJw7QauYnE7yd2Cyp4tTTJpvglX4EMpbflcdBgrgToX2j71B3YvugK/NH3BGUk+E/p/Fw==}
+    peerDependencies:
+      react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
   motion-dom@12.43.0:
     resolution: {integrity: sha512-azKON4d9S65PEoFUiQTMTgPheEmzf2QngdRc50AKfJp9Q9mmcBVw22c8eMq9k8kxOFHdL7+WZY7N/5F/lwiDag==}
@@ -214,7 +223,7 @@ snapshots:
 
   '@floating-ui/utils@0.2.12': {}
 
-  '@octarq/plugin-sdk@0.15.0(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@octarq/plugin-sdk@0.16.0(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@base-ui/react': 1.8.0(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       class-variance-authority: 0.7.1
@@ -263,6 +272,10 @@ snapshots:
   loose-envify@1.4.0:
     dependencies:
       js-tokens: 4.0.0
+
+  lucide-react@0.469.0(react@18.3.1):
+    dependencies:
+      react: 18.3.1
 
   motion-dom@12.43.0:
     dependencies:
