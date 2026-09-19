@@ -6,6 +6,11 @@
 // seams — OnEmail (inbound-mail hook), Notify (core's Webhook sender), the
 // per-workspace settings store, and MCPProvider — with no fork and no access to
 // octarq internals. Use it as a reference for writing your own connector.
+//
+// Deprecated: superseded by core's Webhook notification channel and the
+// event-subscription webhooks in Settings → Webhooks. Configure it there
+// instead; this plugin is no longer composed into octarq-pro and is kept only
+// as a reference example.
 package webhook
 
 import (
@@ -20,6 +25,8 @@ import (
 // Plugin is composed into a host with app.Use(&webhook.Plugin{}). It keeps a
 // reference to the Context so the MCP tool (registered outside Mount) can reach
 // the settings store and Notify.
+//
+// Deprecated: use core's Webhook notification channel instead (Settings → Alerts).
 type Plugin struct {
 	ctx  *plugin.Context
 	host plugin.Host
