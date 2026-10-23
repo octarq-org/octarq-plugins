@@ -16,6 +16,10 @@ type sendInput struct {
 // RegisterMCP exposes this plugin's tools to every connected AI agent — the
 // whole point of Octarq being agent-native: implement one optional interface and
 // your feature is drivable by Claude Code / Cursor with no extra plumbing.
+// MCPTier reports the license tier these tools require. Community
+// connectors are operator utilities, free in every build.
+func (*Plugin) MCPTier() string { return "" }
+
 func (p *Plugin) RegisterMCP(srv *mcp.Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "send_webhook",

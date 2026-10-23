@@ -17,6 +17,10 @@ type listInput struct {
 // RegisterMCP exposes the auto-created email links to AI agents — the payoff of
 // the demo: an agent can call list_email_links to fetch "the short link from my
 // latest email" with no extra plumbing.
+// MCPTier reports the license tier these tools require. Community
+// connectors are operator utilities, free in every build.
+func (*Plugin) MCPTier() string { return "" }
+
 func (p *Plugin) RegisterMCP(srv *mcp.Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "list_email_links",
