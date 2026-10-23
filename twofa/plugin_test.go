@@ -116,6 +116,9 @@ func setupTestEnv(t *testing.T) (*Plugin, *testMux, *gorm.DB) {
 
 	pCtx := &plugin.Context{
 		DB: db,
+		// The app always wraps plugin routes with Guard; mirror that here so
+		// Mount registers them. Role checks stay in the handlers under test.
+		Guard: func(h http.Handler) http.Handler { return h },
 		Host: &mockHost{
 			db:     db,
 			crypto: &mockCryptoVault{key: testKey},
@@ -418,4 +421,12 @@ func TestPlugin_AdminRoleGated(t *testing.T) {
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("Expected 403 for member get QR code, got %d", w.Code)
 	}
+}
+
+// TestPlugin_MountWithoutHTTPSurface pins the MCP composition contract: that
+// path mounts the plugin with a nil mux and a nil Guard, because it only wants
+// the MCP tools. Registering a route there panics the stdio server at startup.
+func TestPlugin_MountWithoutHTTPSurface(t *testing.T) {
+	p := &Plugin{}
+	p.Mount(nil, &plugin.Context{})
 }

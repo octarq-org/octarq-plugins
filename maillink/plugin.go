@@ -56,6 +56,11 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 	if p.host != nil && p.host.Events() != nil {
 		p.host.Events().OnEmail(p.onEmail)
 	}
+	// The MCP composition path mounts this plugin with no HTTP surface (nil
+	// mux, nil Guard) because it only wants the MCP tools. Skip the route there.
+	if mux == nil || ctx.Guard == nil {
+		return
+	}
 	mux.Handle("GET /api/maillink/recent", ctx.Guard(http.HandlerFunc(p.recent)))
 }
 
