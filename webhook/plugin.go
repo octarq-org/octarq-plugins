@@ -64,6 +64,11 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 		})
 	}
 
+	// The MCP composition path mounts this plugin with no HTTP surface (nil
+	// mux, nil Guard) because it only wants the MCP tools. Skip the routes there.
+	if mux == nil || ctx.Guard == nil {
+		return
+	}
 	mux.Handle("GET /api/webhook/settings", ctx.Guard(http.HandlerFunc(p.getSettings)))
 	mux.Handle("PUT /api/webhook/settings", ctx.Guard(http.HandlerFunc(p.putSettings)))
 	mux.Handle("POST /api/webhook/test", ctx.Guard(http.HandlerFunc(p.testSend)))

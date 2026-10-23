@@ -123,3 +123,11 @@ func TestWebhook_PutSettingsSuccess(t *testing.T) {
 		t.Fatalf("expected url saved, got %s", out.URL)
 	}
 }
+
+// TestWebhook_MountWithoutHTTPSurface pins the MCP composition contract: that
+// path mounts the plugin with a nil mux and a nil Guard, because it only wants
+// the MCP tools. Registering a route there panics the stdio server at startup.
+func TestWebhook_MountWithoutHTTPSurface(t *testing.T) {
+	p := &Plugin{}
+	p.Mount(nil, &plugin.Context{})
+}

@@ -59,12 +59,13 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 		ctx.Provide(plugin.ServiceHealthProvider, plugin.HealthProvider(p))
 	}
 
-	guard := func(h http.Handler) http.Handler {
-		if ctx != nil && ctx.Guard != nil {
-			return ctx.Guard(h)
-		}
-		return h
+	// The MCP composition path mounts this plugin with no HTTP surface (nil
+	// mux, nil Guard) because it only wants the MCP tools. Skip the routes
+	// there; never serve an unguarded one.
+	if mux == nil || ctx.Guard == nil {
+		return
 	}
+	guard := func(h http.Handler) http.Handler { return ctx.Guard(h) }
 
 	mux.Handle("GET /api/twofa/accounts", guard(http.HandlerFunc(p.listAccounts)))
 	mux.Handle("POST /api/twofa/accounts", guard(http.HandlerFunc(p.createAccount)))

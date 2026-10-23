@@ -104,3 +104,11 @@ func TestMailLink_ListAndTenantDB(t *testing.T) {
 		t.Fatalf("expected 1 link for org 2, got %+v", links2)
 	}
 }
+
+// TestMailLink_MountWithoutHTTPSurface pins the MCP composition contract: that
+// path mounts the plugin with a nil mux and a nil Guard, because it only wants
+// the MCP tools. Registering a route there panics the stdio server at startup.
+func TestMailLink_MountWithoutHTTPSurface(t *testing.T) {
+	p := &Plugin{}
+	p.Mount(nil, &plugin.Context{})
+}

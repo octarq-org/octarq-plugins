@@ -206,3 +206,11 @@ func TestTelegram_PutSettingsCryptoErrors(t *testing.T) {
 		t.Fatalf("unexpected settings out: %+v", out)
 	}
 }
+
+// TestTelegram_MountWithoutHTTPSurface pins the MCP composition contract: that
+// path mounts the plugin with a nil mux and a nil Guard, because it only wants
+// the MCP tools. Registering a route there panics the stdio server at startup.
+func TestTelegram_MountWithoutHTTPSurface(t *testing.T) {
+	p := &Plugin{}
+	p.Mount(nil, &plugin.Context{})
+}
