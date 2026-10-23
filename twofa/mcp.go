@@ -25,6 +25,10 @@ type verifyCodeInput struct {
 
 // RegisterMCP exposes the 2FA Vault tools to connected AI agents (Cursor, Claude Code, etc.),
 // allowing autonomous agents to query 2FA codes during automated workflows.
+// MCPTier reports the license tier these tools require. Community
+// connectors are operator utilities, free in every build.
+func (*Plugin) MCPTier() string { return "" }
+
 func (p *Plugin) RegisterMCP(srv *mcp.Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "get_2fa_code",
