@@ -747,6 +747,14 @@ func (p *Plugin) logAudit(ctx context.Context, orgID uint, accountID uint, accou
 	if orgID == 0 {
 		return
 	}
+	if p.ctx != nil && p.ctx.Audit != nil {
+		p.ctx.Audit(nil, "twofa."+action, "twofa_account", accountID, map[string]any{
+			"account_name": accountName,
+			"actor":        actor,
+			"ip":           ip,
+			"org_id":       orgID,
+		})
+	}
 	tdb := p.tenantDB(ctx, orgID)
 	if tdb == nil {
 		return
