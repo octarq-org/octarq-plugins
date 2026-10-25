@@ -1,8 +1,0 @@
-/vendor
-*.exe
-node_modules/
-web/node_modules/
-web/dist/
-.DS_Store
-.idea/
-.vscode/

@@ -15,10 +15,8 @@ Every plugin can also expose its tools to AI agents over MCP.
 
 | Plugin | What it does |
 |---|---|
-| [**telegram**](telegram/) | **Deprecated** — superseded by core's Telegram notification channel; configure it in Settings → Alerts (`/settings/notifications`). Kept only as a reference connector. |
-| [**webhook**](webhook/) | **Deprecated** — superseded by core's Webhook notification channel and the event-subscription webhooks in Settings → Webhooks (`/settings/webhooks`). Kept only as a reference connector. |
-| [**maillink**](maillink/) | **Agent-native demo** — auto-shortens the first link in each inbound email (via the core `links.create` service) and exposes `list_email_links` over MCP. |
 | [**twofa**](twofa/) | **2FA Vault** — centralized TOTP authenticator vault for infrastructure & shared accounts, AES-256-GCM encrypted, live countdown UI, and MCP tools for AI agents. |
+| [**maillink**](maillink/) | **Agent-native demo** — auto-shortens the first link in each inbound email (via the core `links.create` service) and exposes `list_email_links` over MCP. |
 | [**_template**](_template/) | Starter to copy when writing your own plugin. |
 
 ## Use a plugin
