@@ -2,6 +2,7 @@ package maillink
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -34,6 +35,7 @@ func (h *mockHost) Session() plugin.HostSession    { return h.session }
 func (h *mockHost) Crypto() plugin.CryptoVault     { return nil }
 func (h *mockHost) Settings() plugin.SettingsStore { return nil }
 func (h *mockHost) Events() plugin.EventSpine      { return nil }
+func (h *mockHost) HarnessSpec(context.Context, uint) (json.RawMessage, error) { return nil, nil }
 func (h *mockHost) TenantDB(orgID uint) *plugin.TenantDB {
 	if h.db == nil || orgID == 0 {
 		return nil
