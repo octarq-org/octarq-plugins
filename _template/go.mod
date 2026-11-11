@@ -1,8 +1,8 @@
 module github.com/octarq-org/octarq-plugin-template
 
-go 1.26.0
+go 1.27.3
 
-require github.com/octarq-org/octarq/server v0.5.1-0.20260918072422-a8c0c5258c9d
+require github.com/octarq-org/octarq/server v0.8.1-0.20261111110131-ba96f5da7df6
 
 require (
 	cloud.google.com/go v0.123.0 // indirect

@@ -16,7 +16,7 @@ on:
         description: Which plugin to publish
         type: choice
         default: all
-        options: [all, maillink, twofa]
+        options: [all, dns, links, mail, maillink, twofa]
 
 permissions:
   contents: read
@@ -26,6 +26,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.8.0
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -37,10 +40,10 @@ jobs:
           PLUGIN: ${{ inputs.plugin }}
         run: |
           set -e
-          targets="maillink twofa"
+          targets="dns links mail maillink twofa"
           if [ "$PLUGIN" != "all" ]; then targets="$PLUGIN"; fi
           for p in $targets; do
             echo "::group::publish @octarq/plugin-$p"
-            ( cd "$p/web" && npm publish --access public )
+            ( cd "$p/web" && pnpm publish --access public --no-git-checks )
             echo "::endgroup::"
           done
