@@ -1,11 +1,11 @@
 module github.com/octarq-org/octarq-plugins/twofa
 
-go 1.26.0
+go 1.27.3
 
 require (
 	github.com/glebarez/sqlite v1.11.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
-	github.com/octarq-org/octarq/server v0.5.1-0.20260918072422-a8c0c5258c9d
+	github.com/octarq-org/octarq/server v0.8.1-0.20261111110131-ba96f5da7df6
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	gorm.io/gorm v1.31.2
 )

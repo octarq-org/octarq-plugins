@@ -84,15 +84,19 @@ func (h *mockHost) Crypto() plugin.CryptoVault {
 	}
 	return h.crypto
 }
-func (h *mockHost) Settings() plugin.SettingsStore { return nil }
-func (h *mockHost) Events() plugin.EventSpine      { return nil }
+func (h *mockHost) Settings() plugin.SettingsStore                             { return nil }
+func (h *mockHost) Events() plugin.EventSpine                                  { return nil }
 func (h *mockHost) HarnessSpec(context.Context, uint) (json.RawMessage, error) { return nil, nil }
+func (h *mockHost) Workforce() plugin.Workforce                                { return nil }
 func (h *mockHost) TenantDB(orgID uint) *plugin.TenantDB {
 	if h.db == nil || orgID == 0 {
 		return nil
 	}
 	tdb, _ := plugin.NewTenantDB(h.db, orgID)
 	return tdb
+}
+func (h *mockHost) LookupCredential(ctx context.Context, orgID uint, query plugin.CredentialQuery) (*plugin.Credential, error) {
+	return nil, plugin.ErrCredentialResolverUnavailable
 }
 
 func setupTestEnv(t *testing.T) (*Plugin, *testMux, *gorm.DB) {

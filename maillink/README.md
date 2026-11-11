@@ -25,7 +25,7 @@ That's the pitch of Octarq being a *framework*: this is the whole plugin.
 
 ## Try it
 
-1. Compose it into your Octarq build (needs the `links` core plugin, which ships by default):
+1. Compose it into your Octarq build (it also needs the `links` plugin):
    ```bash
    OCTARQ_PLUGINS='[{"go":"github.com/octarq-org/octarq-plugins/maillink","npm":"@octarq/plugin-maillink"}]' make plugin-build
    ```

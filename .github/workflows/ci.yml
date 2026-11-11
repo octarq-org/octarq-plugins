@@ -1,16 +1,19 @@
 name: CI
+
 on:
   push:
     branches: [main]
   pull_request:
   workflow_dispatch:
+
 jobs:
-  build:
-    name: Go build & vet
+  go:
+    name: Go build, vet & test (${{ matrix.plugin }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        plugin: [maillink, twofa, _template]
+        plugin: [dns, links, mail, maillink, twofa, _template]
     defaults:
       run:
         working-directory: ${{ matrix.plugin }}
@@ -18,26 +21,27 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
-      - run: go build ./...
-      - run: go vet ./...
+          go-version-file: ${{ matrix.plugin }}/go.mod
+          cache-dependency-path: ${{ matrix.plugin }}/go.sum
+      # go.work is gitignored: this checkout has no sibling octarq source, so
+      # every module resolves octarq/server from the version pinned in its
+      # go.mod, the same way downstream users do.
+      - run: GOWORK=off go build ./...
+      - run: GOWORK=off go vet ./...
+      - run: GOWORK=off go test ./... -race
 
-  frontend:
-    name: Web type-check
+  web:
+    name: Web type-check & tests
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        plugin: [maillink, twofa, _template]
-    defaults:
-      run:
-        working-directory: ${{ matrix.plugin }}/web
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
-          version: 9.15.4
+          version: 11.8.0
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-      - run: pnpm install --no-frozen-lockfile
-      - run: pnpm exec tsc --noEmit
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check-types
+      - run: pnpm test
