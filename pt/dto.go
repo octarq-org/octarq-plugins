@@ -47,10 +47,10 @@ type summaryView struct {
 // overviewView is the dashboard-level summary plus the capability matrix the
 // add form renders.
 type overviewView struct {
-	Summary            summaryView    `json:"summary"`
-	Schemas            []adapter.Info `json:"schemas"`
-	SchedulerAvailable bool           `json:"scheduler_available"`
-	ServerTimezone     string         `json:"server_timezone"`
+	Summary            summaryView          `json:"summary"`
+	Schemas            []adapter.SchemaInfo `json:"schemas"`
+	SchedulerAvailable bool                 `json:"scheduler_available"`
+	ServerTimezone     string               `json:"server_timezone"`
 }
 
 // trackerWriteBody is the create and update payload. Every field is optional in

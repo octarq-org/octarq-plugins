@@ -9,7 +9,7 @@ import (
 
 // Info is the public description of a dialect, used by the add-tracker form
 // and the capability matrix in the UI.
-type Info struct {
+type SchemaInfo struct {
 	Schema       Schema       `json:"schema"`
 	DisplayName  string       `json:"display_name"`
 	Capabilities Capabilities `json:"capabilities"`
@@ -92,11 +92,11 @@ func (r *Registry) Suggest(host string) (Schema, bool) {
 }
 
 // List returns every dialect ordered by schema for a stable UI.
-func (r *Registry) List() []Info {
+func (r *Registry) List() []SchemaInfo {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	out := make([]Info, 0, len(r.order))
+	out := make([]SchemaInfo, 0, len(r.order))
 	for _, schema := range r.order {
 		a := r.bySchema[schema]
 		var domains []string
@@ -106,7 +106,7 @@ func (r *Registry) List() []Info {
 			}
 		}
 		sort.Strings(domains)
-		out = append(out, Info{
+		out = append(out, SchemaInfo{
 			Schema:       schema,
 			DisplayName:  a.DisplayName(),
 			Capabilities: a.Capabilities(),
