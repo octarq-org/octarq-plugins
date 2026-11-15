@@ -93,7 +93,7 @@ blob, err := vault.EncryptWithAAD(plaintext, []byte("pt:v1:"+orgID+":"+tracker.S
 - **Rotation**: `CryptoVault` has no DEK rotation primitive. Replacing a secret re-encrypts under the same subject and increments `secret_version`. Do not claim key rotation.
 - **No read-back**: no endpoint returns the ciphertext or the plaintext. Responses carry presence flags only.
 
-`Validate` fails closed when `Host.Crypto()` is nil: storing account secrets in plaintext is not a degraded mode. `HasEncryptedData` reports true while any non-empty ciphertext exists, so core can refuse to boot after a backup restore that lost the data key.
+`Validate` fails closed when `Host.Crypto()` is nil: storing account secrets in plaintext is not a degraded mode. The one exception is the stdio MCP composition. That path mounts every plugin with a no-op host, and core validates against that host, so the plugin treats a mount without an HTTP surface (`mux == nil`) as MCP-only: it boots, publishes read tools only, and registers no tool that would need the vault (see §7). A server mount without a vault still refuses to start. `HasEncryptedData` reports true while any non-empty ciphertext exists, so core can refuse to boot after a backup restore that lost the data key.
 
 ---
 
@@ -190,6 +190,8 @@ The create path verifies a supplied cookie or API key before it writes any row. 
 | `pt_tracker_history` | read | Snapshot series |
 | `pt_signin` | write | Idempotent; the daily ledger applies |
 | `pt_refresh_stats` | write | |
+
+The write tools decrypt a stored credential, so they are registered only when the mount has a vault. The stdio MCP composition has none and publishes the three read tools alone.
 
 The workspace always comes from `plugin.OrgIDFromContext`; zero is an error. No tool changes configuration or reads credentials. Write tools refuse a context with no role, because a stdio session has no actor to attribute the request to.
 

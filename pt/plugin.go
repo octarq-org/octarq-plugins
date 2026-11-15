@@ -43,6 +43,11 @@ type Plugin struct {
 	host plugin.Host
 	db   *gorm.DB
 
+	// mcpOnly records that the last mount had no HTTP surface. The stdio MCP
+	// composition mounts every plugin that way and hands it a no-op host, so a
+	// missing vault is expected there, not a broken deployment.
+	mcpOnly bool
+
 	registryOnce sync.Once
 	registryVal  *adapter.Registry
 
@@ -113,6 +118,7 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 	}
 	p.mu.Lock()
 	p.ctx = ctx
+	p.mcpOnly = mux == nil
 	if ctx.DB != nil {
 		p.db = ctx.DB
 	}
@@ -139,7 +145,17 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 
 // Validate refuses to start without a credential vault. Storing tracker
 // account secrets unencrypted is not an acceptable degraded mode.
+//
+// The stdio MCP composition is the one mount without a vault: it hands every
+// plugin a no-op host. There the plugin registers read tools only (see
+// RegisterMCP), so nothing can ask it to encrypt and the mount is valid.
 func (p *Plugin) Validate(ctx context.Context, host plugin.Host) error {
+	p.mu.RLock()
+	mcpOnly := p.mcpOnly
+	p.mu.RUnlock()
+	if mcpOnly {
+		return nil
+	}
 	if host == nil || host.Crypto() == nil {
 		return errors.New("pt: credential vault unavailable (Host.Crypto is nil); refusing to start")
 	}

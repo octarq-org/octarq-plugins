@@ -54,6 +54,13 @@ func (p *Plugin) RegisterMCP(srv *mcp.Server) {
 		Description: "Read the statistics history of one tracker, newest first.",
 	}, p.mcpTrackerHistory)
 
+	// The write tools decrypt a stored credential. The stdio composition
+	// mounts with a no-op host, so registering them there would expose tools
+	// that fail on every call.
+	if !p.vaultAvailable() {
+		return
+	}
+
 	plugin.AddMCPTool(srv, "pt", &mcp.Tool{
 		Name:        "pt_signin",
 		Description: "Run the daily sign-in of one tracker now. The call is idempotent unless force is set.",
@@ -63,6 +70,12 @@ func (p *Plugin) RegisterMCP(srv *mcp.Server) {
 		Name:        "pt_refresh_stats",
 		Description: "Read the current statistics of one tracker now and store a snapshot.",
 	}, p.mcpRefreshStats)
+}
+
+// vaultAvailable reports whether this mount can decrypt a stored credential.
+func (p *Plugin) vaultAvailable() bool {
+	host := p.hostRef()
+	return host != nil && host.Crypto() != nil
 }
 
 type mcpTrackerArgs struct {
