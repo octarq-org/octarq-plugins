@@ -63,4 +63,25 @@ describe("pt plugin i18n", () => {
       }
     }
   });
+
+  // The SDK files a composed plugin dictionary under the plugin name, so a bare
+  // key never resolves. Only the scoped hook may reach for a translation.
+  const SOURCES = import.meta.glob("./**/*.tsx", {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  }) as Record<string, string>;
+
+  it("reads every component source", () => {
+    expect(Object.keys(SOURCES).length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("looks every key up through the plugin namespace", () => {
+    for (const [file, source] of Object.entries(SOURCES)) {
+      expect(source, file).not.toContain("useTranslation(");
+      for (const match of source.matchAll(/\bt\(\s*"([A-Za-z0-9_]+)"/g)) {
+        expect(match[1] in english, `${file}: t("${match[1]}")`).toBe(true);
+      }
+    }
+  });
 });
