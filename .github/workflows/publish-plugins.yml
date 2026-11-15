@@ -16,7 +16,7 @@ on:
         description: Which plugin to publish
         type: choice
         default: all
-        options: [all, dns, links, mail, maillink, twofa]
+        options: [all, dns, links, mail, maillink, pt, twofa]
 
 permissions:
   contents: read
@@ -40,7 +40,7 @@ jobs:
           PLUGIN: ${{ inputs.plugin }}
         run: |
           set -e
-          targets="dns links mail maillink twofa"
+          targets="dns links mail maillink pt twofa"
           if [ "$PLUGIN" != "all" ]; then targets="$PLUGIN"; fi
           for p in $targets; do
             echo "::group::publish @octarq/plugin-$p"
