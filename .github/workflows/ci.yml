@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        plugin: [dns, links, mail, maillink, twofa, _template]
+        plugin: [dns, links, mail, maillink, pt, twofa, _template]
     defaults:
       run:
         working-directory: ${{ matrix.plugin }}

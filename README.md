@@ -21,6 +21,7 @@ Every plugin can also expose its tools to AI agents over MCP.
 | [**dns**](dns/) | **DNS** — domains, providers, records, email authentication presets, and DDNS tokens. |
 | [**twofa**](twofa/) | **2FA Vault** — centralized TOTP authenticator vault for infrastructure & shared accounts, AES-256-GCM encrypted, live countdown UI, and MCP tools for AI agents. |
 | [**maillink**](maillink/) | **Agent-native demo** — auto-shortens the first link in each inbound email (via the links service) and exposes `list_email_links` over MCP. |
+| [**pt**](pt/) | **PT accounts** — encrypted private-tracker credentials, one-click login, daily sign-in, and level / traffic / ratio / bonus readout. |
 | [**_template**](_template/) | Starter to copy when writing your own plugin. |
 
 ## Use a plugin
