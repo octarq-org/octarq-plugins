@@ -22,32 +22,37 @@ func mcpTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// The stdio MCP composition mounts every plugin with no HTTP surface and a
-// no-op host. The plugin must boot there: it serves read tools and skips the
-// tools that need the vault.
-func TestValidateAcceptsMCPMountWithoutVault(t *testing.T) {
-	p := &Plugin{}
-	p.Mount(nil, &plugin.Context{DB: mcpTestDB(t)})
-
-	if !p.mcpOnly {
-		t.Fatal("a nil mux was not recorded as an MCP-only mount")
-	}
-	if p.vaultAvailable() {
-		t.Fatal("the MCP mount reports a vault it does not have")
-	}
-	if err := p.Validate(context.Background(), plugin.EnsureHost(nil)); err != nil {
-		t.Fatalf("MCP mount refused: %v", err)
-	}
-}
-
-// A real server mount without a vault must still refuse to start.
-func TestValidateRefusesHTTPMountWithoutVault(t *testing.T) {
-	p := &Plugin{}
+func mountHTTP(t *testing.T, p *Plugin, host plugin.Host) {
+	t.Helper()
 	p.Mount(http.NewServeMux(), &plugin.Context{
 		DB:    mcpTestDB(t),
 		Guard: func(h http.Handler) http.Handler { return h },
-		Host:  &plugin.TestHost{},
+		Host:  host,
 	})
+}
+
+// The stdio MCP path validates against a no-op host after the server mount has
+// already captured the real host. The captured vault is the one the tools use,
+// so the plugin must boot there instead of stopping the whole MCP endpoint.
+func TestValidateKeepsTheVaultAcrossTheMCPRemount(t *testing.T) {
+	p := &Plugin{}
+	mountHTTP(t, p, &plugin.TestHost{CryptoMock: newFakeVault()})
+
+	// The MCP composition re-mounts with a nil mux and a stub host.
+	p.Mount(nil, &plugin.Context{DB: mcpTestDB(t)})
+
+	if err := p.Validate(context.Background(), plugin.EnsureHost(nil)); err != nil {
+		t.Fatalf("MCP re-mount refused: %v", err)
+	}
+	if !p.vaultAvailable() {
+		t.Fatal("the stub host replaced the real one")
+	}
+}
+
+// A real server mount without a vault must refuse to start.
+func TestValidateRefusesHTTPMountWithoutVault(t *testing.T) {
+	p := &Plugin{}
+	mountHTTP(t, p, &plugin.TestHost{})
 
 	if err := p.Validate(context.Background(), &plugin.TestHost{}); err == nil {
 		t.Fatal("a server mount without a vault started anyway")
@@ -57,20 +62,15 @@ func TestValidateRefusesHTTPMountWithoutVault(t *testing.T) {
 	}
 }
 
-// A server mount keeps the vault, so the write tools stay available even when
-// an MCP connection re-mounts the plugin.
-func TestHTTPMountKeepsWriteTools(t *testing.T) {
+// A plugin that never saw a real host has nothing to serve, so it refuses.
+func TestValidateRefusesWithoutAnyHost(t *testing.T) {
 	p := &Plugin{}
-	p.Mount(http.NewServeMux(), &plugin.Context{
-		DB:    mcpTestDB(t),
-		Guard: func(h http.Handler) http.Handler { return h },
-		Host:  &plugin.TestHost{CryptoMock: newFakeVault()},
-	})
+	p.Mount(nil, &plugin.Context{DB: mcpTestDB(t)})
 
-	if !p.vaultAvailable() {
-		t.Fatal("a server mount with a vault reports none")
+	if err := p.Validate(context.Background(), plugin.EnsureHost(nil)); err == nil {
+		t.Fatal("a mount without a vault started anyway")
 	}
-	if err := p.Validate(context.Background(), &plugin.TestHost{CryptoMock: newFakeVault()}); err != nil {
-		t.Fatalf("server mount refused a real vault: %v", err)
+	if p.vaultAvailable() {
+		t.Fatal("a mount without a host reports a vault")
 	}
 }

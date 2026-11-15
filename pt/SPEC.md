@@ -93,7 +93,7 @@ blob, err := vault.EncryptWithAAD(plaintext, []byte("pt:v1:"+orgID+":"+tracker.S
 - **Rotation**: `CryptoVault` has no DEK rotation primitive. Replacing a secret re-encrypts under the same subject and increments `secret_version`. Do not claim key rotation.
 - **No read-back**: no endpoint returns the ciphertext or the plaintext. Responses carry presence flags only.
 
-`Validate` fails closed when `Host.Crypto()` is nil: storing account secrets in plaintext is not a degraded mode. The one exception is the stdio MCP composition. That path mounts every plugin with a no-op host, and core validates against that host, so the plugin treats a mount without an HTTP surface (`mux == nil`) as MCP-only: it boots, publishes read tools only, and registers no tool that would need the vault (see §7). A server mount without a vault still refuses to start. `HasEncryptedData` reports true while any non-empty ciphertext exists, so core can refuse to boot after a backup restore that lost the data key.
+`Validate` fails closed when the vault is missing: storing account secrets in plaintext is not a degraded mode. The host captured at an HTTP mount is the one validated, because it is the one the plugin keeps. Core validates the stdio MCP path against a no-op host, but the plugin does not adopt that stub (see `Mount`), so the real vault still answers. An MCP-only process that never mounted a real host has no vault and refuses to start. `HasEncryptedData` reports true while any non-empty ciphertext exists, so core can refuse to boot after a backup restore that lost the data key.
 
 ---
 
