@@ -8,6 +8,7 @@ import {
   Tabs,
   Alert,
   useToast,
+  req,
 } from "@octarq/plugin-sdk";
 import { AlertTriangle, Copy } from "lucide-react";
 
@@ -39,23 +40,16 @@ export function ImportExportModal({ onClose, onImported, t }: Props) {
 
     setLoading(true);
     try {
-      const res = await fetch("/api/twofa/import", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uris: lines, tags: tags.trim() }),
+      const data = await req<{ imported: number }>("POST", "/api/twofa/import", {
+        uris: lines,
+        tags: tags.trim(),
       });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success(
-          `${t("twofa.importedSuccess", "Successfully imported")} ${data.imported} ${t("twofa.accounts", "accounts.")}`
-        );
-        onImported();
-      } else {
-        toast.error(data.error || "Import failed");
-      }
+      toast.success(
+        `${t("twofa.importedSuccess", "Successfully imported")} ${data.imported} ${t("twofa.accounts", "accounts.")}`
+      );
+      onImported();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Network error");
+      toast.error(err instanceof Error ? err.message : "Import failed");
     } finally {
       setLoading(false);
     }
@@ -64,11 +58,7 @@ export function ImportExportModal({ onClose, onImported, t }: Props) {
   const handleExport = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/twofa/export", { credentials: "same-origin" });
-      if (res.ok) {
-        const data = await res.json();
-        setExportData(JSON.stringify(data, null, 2));
-      }
+      setExportData(JSON.stringify(await req("GET", "/api/twofa/export"), null, 2));
     } catch {
       toast.error(t("twofa.exportFailed", "Failed to fetch export data"));
     } finally {

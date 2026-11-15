@@ -1,87 +1,8 @@
 // Mail feature API surface — the slice of the JSON API owned by the mail plugin.
 // Fully self-contained without relative host leaks.
 
-export class ApiError extends Error {
-  status: number;
-  body?: any;
-  requestId?: string;
-  constructor(status: number, message: string, body?: any, requestId?: string) {
-    super(message);
-    this.status = status;
-    this.body = body;
-    this.requestId = requestId;
-  }
-}
+import { req } from "@octarq/plugin-sdk";
 
-export function getAppLang(): string {
-  try {
-    const saved = localStorage.getItem("lang");
-    if (saved) return saved;
-  } catch {
-    /* ignore */
-  }
-  return typeof navigator !== "undefined" ? navigator.language || "en" : "en";
-}
-
-interface ErrorEnvelope {
-  message?: string;
-  error?: string;
-  detail?: string;
-  details?: Array<string | { location?: string; message?: string }>;
-}
-
-export async function req<T>(method: string, path: string, body?: unknown, lang?: string): Promise<T> {
-  const currentLang = lang || getAppLang();
-  const headers: Record<string, string> = {
-    "Accept-Language": currentLang,
-  };
-  if (body) {
-    headers["Content-Type"] = "application/json";
-  }
-  const res = await fetch(path, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) {
-    let msg = res.statusText;
-    let parsed: ErrorEnvelope | null = null;
-    try {
-      parsed = (await res.json()) as ErrorEnvelope;
-      if (parsed?.message) {
-        msg = parsed.message;
-        if (parsed.details && Array.isArray(parsed.details) && parsed.details.length > 0) {
-          const detailMsgs = parsed.details
-            .map((d) => {
-              if (typeof d === "string") return d;
-              if (d?.message) {
-                const loc = d.location ? `${d.location.replace(/^body\./, "")}: ` : "";
-                return `${loc}${d.message}`;
-              }
-              return "";
-            })
-            .filter(Boolean)
-            .join("; ");
-          if (detailMsgs) msg = `${msg} (${detailMsgs})`;
-        }
-      } else if (parsed?.error) {
-        msg = parsed.error;
-      } else if (parsed?.detail) {
-        msg = parsed.detail;
-      }
-    } catch {
-      // Non-JSON error body: fall through to statusText.
-    }
-    const requestId = res.headers.get("x-request-id") || undefined;
-    throw new ApiError(res.status, msg || `HTTP ${res.status}`, parsed, requestId);
-  }
-  if (res.status === 204) return undefined as unknown as T;
-  const contentType = res.headers.get("content-type");
-  if (contentType && contentType.includes("application/json")) {
-    return (await res.json()) as T;
-  }
-  return (await res.text()) as unknown as T;
-}
 
 export interface HostEntry {
   host: string;

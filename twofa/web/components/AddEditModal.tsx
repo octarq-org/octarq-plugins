@@ -9,6 +9,7 @@ import {
   Switch,
   Tabs,
   FormError,
+  req,
 } from "@octarq/plugin-sdk";
 import type { AccountSummary, CreateAccountInput, UpdateAccountInput } from "../types";
 
@@ -150,20 +151,7 @@ export function AddEditModal({ onClose, account, onSaved, t }: Props) {
         payload.secret = secret.trim();
       }
 
-      const res = await fetch(url, {
-        method,
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const text = await res.text();
-        setError(text || `Request failed with status ${res.status}`);
-        setLoading(false);
-        return;
-      }
-
+      await req(method, url, payload);
       setLoading(false);
       onSaved();
       onClose();

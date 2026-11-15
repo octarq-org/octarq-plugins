@@ -13,6 +13,8 @@ import {
   TableSkeleton,
   LockedFallback,
   useTranslation,
+  req,
+  ApiError,
 } from "@octarq/plugin-sdk";
 
 interface MailLink {
@@ -31,16 +33,14 @@ export default function MailLinksPage() {
 
   const load = useCallback(() => {
     setError(null);
-    fetch("/api/maillink/recent", { credentials: "same-origin" })
-      .then((res) => {
-        if (!res.ok) {
-          setStatus(res.status);
-          return null;
-        }
-        return res.json() as Promise<MailLink[]>;
-      })
-      .then((rows) => rows && setLinks(rows))
-      .catch(() => setError(0));
+    req<MailLink[]>("GET", "/api/maillink/recent")
+      .then((rows) => setLinks(rows))
+      .catch((err: unknown) => {
+        // 402 and 404 have their own screen; any other status is a failure.
+        const code = err instanceof ApiError ? err.status : 0;
+        if (code === 402 || code === 404) setStatus(code);
+        else setError(code);
+      });
   }, []);
 
   useEffect(load, [load]);

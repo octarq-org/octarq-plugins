@@ -11,6 +11,7 @@ import {
   TD,
   TableSkeleton,
   TableEmpty,
+  req,
 } from "@octarq/plugin-sdk";
 import type { AuditLog } from "../types";
 
@@ -25,13 +26,12 @@ export function AuditLogsModal({ onClose, t }: Props) {
 
   useEffect(() => {
     setLoading(true);
-    fetch("/api/twofa/logs", { credentials: "same-origin" })
-      .then((res) => (res.ok ? (res.json() as Promise<AuditLog[]>) : []))
+    req<AuditLog[]>("GET", "/api/twofa/logs")
+      .catch(() => [] as AuditLog[])
       .then((data) => {
         setLogs(data);
         setLoading(false);
-      })
-      .catch(() => setLoading(false));
+      });
   }, []);
 
   const getBadgeTone = (action: string) => {
