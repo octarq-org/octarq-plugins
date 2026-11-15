@@ -7,7 +7,7 @@ require (
 	github.com/danielgtaylor/huma/v2 v2.38.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
-	github.com/octarq-org/octarq/server v0.8.1-0.20261115083615-9092ca8864ad
+	github.com/octarq-org/octarq/server v0.8.1-0.20261115063653-13f87b2108f3
 	golang.org/x/net v0.60.0
 	golang.org/x/sync v0.23.0
 	gorm.io/gorm v1.31.2
