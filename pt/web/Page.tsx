@@ -8,7 +8,6 @@ import {
   StatCard,
   useConfirm,
   useToast,
-  useTranslation,
 } from "@octarq/plugin-sdk";
 import { AlertTriangle, HardDrive, Plus, RefreshCw } from "lucide-react";
 import { ApiError, apiGet, apiSend } from "./api";
@@ -17,11 +16,12 @@ import { TrackerCard } from "./components/TrackerCard";
 import { TrackerForm } from "./components/TrackerForm";
 import { TrackerDetail } from "./components/TrackerDetail";
 import { formatBytes, formatRatio, outcomeKey } from "./format";
+import { usePtTranslation } from "./usePtTranslation";
 
 type ActionKind = "signin" | "login" | "refresh";
 
 export default function PTPage() {
-  const { t, lang } = useTranslation();
+  const { t, lang } = usePtTranslation();
   const toast = useToast();
   const confirm = useConfirm();
 
