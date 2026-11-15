@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Modal, Button, Field, Input, Alert, FormError, Skeleton } from "@octarq/plugin-sdk";
+import { Modal, Button, Field, Input, Alert, FormError, Skeleton, req } from "@octarq/plugin-sdk";
 import { AlertTriangle, Copy, Check } from "lucide-react";
 import type { AccountSummary, AccountDetail } from "../types";
 
@@ -28,14 +28,10 @@ export function SecretQrModal({ onClose, account, t }: Props) {
     }
 
     setLoading(true);
-    // Fetch secret with reveal=true
+    // One read reveals the secret; the other draws its QR code.
     Promise.all([
-      fetch(`/api/twofa/accounts/${account.id}?reveal=true`, {
-        credentials: "same-origin",
-      }).then((res) => (res.ok ? (res.json() as Promise<AccountDetail>) : null)),
-      fetch(`/api/twofa/accounts/${account.id}/qr`, {
-        credentials: "same-origin",
-      }).then((res) => (res.ok ? res.json() : null)),
+      req<AccountDetail>("GET", `/api/twofa/accounts/${account.id}?reveal=true`).catch(() => null),
+      req<{ qr_data_url?: string; uri?: string }>("GET", `/api/twofa/accounts/${account.id}/qr`).catch(() => null),
     ])
       .then(([accData, qrData]) => {
         if (accData) setDetail(accData);

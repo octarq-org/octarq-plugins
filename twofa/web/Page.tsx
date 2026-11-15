@@ -10,6 +10,8 @@ import {
   useTranslation,
   useToast,
   useConfirm,
+  req,
+  ApiError,
 } from "@octarq/plugin-sdk";
 import { Plus, RefreshCw, ScrollText, ShieldCheck } from "lucide-react";
 import type { AccountSummary } from "./types";
@@ -39,17 +41,10 @@ export default function TwoFAPage() {
 
   const fetchAccounts = useCallback(async () => {
     try {
-      const res = await fetch("/api/twofa/accounts", { credentials: "same-origin" });
-      if (!res.ok) {
-        setStatus(res.status);
-        setLoading(false);
-        return;
-      }
-      const data = (await res.json()) as AccountSummary[];
-      setAccounts(data);
+      setAccounts(await req<AccountSummary[]>("GET", "/api/twofa/accounts"));
       setLoading(false);
-    } catch {
-      setStatus(0);
+    } catch (err: unknown) {
+      setStatus(err instanceof ApiError ? err.status : 0);
       setLoading(false);
     }
   }, []);
@@ -87,15 +82,10 @@ export default function TwoFAPage() {
 
   const handleTogglePin = async (id: number) => {
     try {
-      const res = await fetch(`/api/twofa/accounts/${id}/pin`, {
-        method: "POST",
-        credentials: "same-origin",
-      });
-      if (res.ok) {
-        fetchAccounts();
-      }
+      await req("POST", `/api/twofa/accounts/${id}/pin`);
+      fetchAccounts();
     } catch {
-      // ignore
+      // A pin that did not save shows on the next read of the list.
     }
   };
 
@@ -106,16 +96,11 @@ export default function TwoFAPage() {
     });
     if (!ok) return;
     try {
-      const res = await fetch(`/api/twofa/accounts/${id}`, {
-        method: "DELETE",
-        credentials: "same-origin",
-      });
-      if (res.ok) {
-        fetchAccounts();
-        toast.success(t("twofa.deleted", "Account deleted."));
-      }
+      await req("DELETE", `/api/twofa/accounts/${id}`);
+      fetchAccounts();
+      toast.success(t("twofa.deleted", "Account deleted."));
     } catch {
-      // ignore
+      // The account stays in the list, which says it was not deleted.
     }
   };
 
