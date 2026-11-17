@@ -197,7 +197,7 @@ export function DomainDetailWorkspace({
           >
 
             {verifying && dnsStatus === null ? (
-              <div className="flex flex-col items-center justify-center p-10 rounded-2xl bg-well border border-border space-y-3">
+              <div className="flex flex-col items-center justify-center p-10 rounded-lg bg-well border border-border space-y-3">
                 <RefreshCw className="h-6 w-6 text-accent-fg animate-spin" />
                 <span className="text-xs text-muted-foreground">{t("domains.verifying")}</span>
               </div>

@@ -1,4 +1,4 @@
-import { Code, Empty, Field, Input, Guide, Modal, Switch, timeAgo, ScreenWrap, PageHeader, GlassCard, Badge, Button, Select, Alert, confirmDialog, Table, THead, TBody, TR, TH, TD, FormError, useTranslation, roleSatisfies, useCurrentRole } from "@octarq/plugin-sdk";
+import { Code, Empty, Field, Input, Guide, Modal, Switch, timeAgo, Badge, Button, Select, Alert, confirmDialog, Table, THead, TBody, TR, TH, TD, FormError, useTranslation, roleSatisfies, useCurrentRole } from "@octarq/plugin-sdk";
 import { HostList } from "../components/HostList";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -87,7 +87,7 @@ export function RecordsView({ domain }: { domain: Domain }) {
       ) : filtered.length === 0 ? (
         <p className="text-muted-foreground p-6 text-center text-xs">{t("domains.noRecordsMatching")}</p>
       ) : (
-        <div className="bg-well rounded-2xl border border-border overflow-hidden">
+        <div className="bg-well rounded-lg border border-border overflow-hidden">
           <Table>
             <THead className="border-b border-border bg-well">
               <TR>

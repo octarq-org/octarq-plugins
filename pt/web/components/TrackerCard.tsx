@@ -58,7 +58,7 @@ export function TrackerCard({
     : t("pending", "Waiting");
 
   return (
-    <article className="flex h-full flex-col rounded-2xl border border-border bg-card p-5 shadow-[var(--shadow-card)]">
+    <article className="flex h-full flex-col rounded-lg border border-border bg-card p-5">
       <header className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="truncate font-display text-[1.0625rem] font-semibold tracking-[-0.01em] text-foreground">

@@ -44,4 +44,5 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check-types
+      - run: pnpm lint:ui
       - run: pnpm test
