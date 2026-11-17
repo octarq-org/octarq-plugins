@@ -1,4 +1,4 @@
-import { Code, Field, Input, Textarea, Guide, Modal, Switch, timeAgo, ScreenWrap, PageHeader, GlassCard, Badge, Button, Select, Alert, confirmDialog, FormError, useTranslation, roleSatisfies, useCurrentRole } from "@octarq/plugin-sdk";
+import { Code, Field, Input, Textarea, Guide, Modal, Switch, timeAgo, Badge, Button, Select, Alert, confirmDialog, FormError, useTranslation, roleSatisfies, useCurrentRole } from "@octarq/plugin-sdk";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { mailApi, Attachment, Email, Mailbox } from "../api";

@@ -170,7 +170,8 @@ export function EmailViewForm({
 
       <div className="flex-1 overflow-y-auto p-5 min-h-[400px] bg-well">
         {email.html ? (
-          <iframe srcDoc={email.html} className="h-full min-h-[400px] w-full bg-white rounded-xl shadow-inner border-0" sandbox="" title={t("mail.iframeTitle")} />
+          /* ui-color-ok: HTML emails assume a light paper viewport */
+          <iframe srcDoc={email.html} className="h-full min-h-[400px] w-full rounded-lg border border-border bg-white" sandbox="" title={t("mail.iframeTitle")} />
         ) : (
           <pre className="whitespace-pre-wrap break-words font-sans text-sm text-foreground leading-relaxed">{email.text}</pre>
         )}

@@ -184,8 +184,8 @@ export default function MailPage() {
                   onChanged={() => { loadEmails(true); loadBoxes(); }}
                 />
               ) : (
-                <div className="flex min-h-[420px] flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-well px-6 py-16 text-center">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-card text-accent-fg shadow-[var(--shadow-card)] ring-1 ring-border">
+                <div className="flex min-h-[420px] flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-well px-6 py-16 text-center">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-border bg-card text-accent-fg">
                     <Inbox className="h-5 w-5" />
                   </div>
                   <p className="font-display text-[13px] text-foreground">{t("mail.selectEmail")}</p>

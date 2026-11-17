@@ -51,10 +51,10 @@ export function DnsReputationScoreCard({ repScore }: { repScore: DnsReputationSc
   const descKey = `domains.scoreDesc_${repScore.grade}`;
 
   return (
-    <div className="rounded-2xl bg-well border border-border p-5 space-y-4">
+    <div className="rounded-lg bg-well border border-border p-5 space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-start gap-4">
-          <div className="flex flex-col items-center justify-center h-16 w-16 rounded-2xl bg-well border border-border shrink-0">
+          <div className="flex flex-col items-center justify-center h-16 w-16 rounded-lg bg-well border border-border shrink-0">
             <span className="text-2xl font-black font-mono tracking-tight text-foreground">
               {repScore.score}
             </span>
@@ -117,7 +117,7 @@ export function DnsFixAlertBanner({
 
   if (!repScore.hasIssues) {
     return (
-      <div className="flex items-center gap-3 p-4 rounded-xl bg-success-bg/15 border border-success-border text-xs text-success-fg">
+      <div className="flex items-center gap-3 p-4 rounded-lg bg-success-bg border border-success-border text-xs text-success-fg">
         <ShieldCheck className="h-5 w-5 shrink-0 text-success-fg" />
         <span className="font-medium">{t("domains.allRecordsHealthy")}</span>
       </div>
@@ -125,7 +125,7 @@ export function DnsFixAlertBanner({
   }
 
   return (
-    <div className="p-4 rounded-2xl bg-warning-bg/10 border border-warning-border space-y-3">
+    <div className="p-4 rounded-lg bg-warning-bg border border-warning-border space-y-3">
       <div className="flex items-start gap-3">
         <AlertTriangle className="h-5 w-5 text-warning-fg shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0">

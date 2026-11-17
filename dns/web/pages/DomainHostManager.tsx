@@ -1,4 +1,4 @@
-import { Code, Empty, Field, Input, Guide, Modal, timeAgo, ScreenWrap, PageHeader, GlassCard, Badge, Button, Select, Table, THead, TBody, TR, TH, TD, toast, useTranslation } from "@octarq/plugin-sdk";
+import { Code, Empty, Field, Input, Guide, Modal, timeAgo, Badge, Button, Select, Table, THead, TBody, TR, TH, TD, toast, useTranslation } from "@octarq/plugin-sdk";
 import { HostList } from "../components/HostList";
 import { useEffect, useMemo, useState } from "react";
 import { dnsApi, Domain, HostEntry, ProviderAccount, DNSRecord, DNSVerifyResult, HostDNSStatus, LinkHostStatus, DNSRecordStatus } from "../api";
@@ -67,7 +67,7 @@ export function DomainHostManager({ domain, onReload }: { domain: Domain; onRelo
   }
 
   return (
-    <div className="bg-well rounded-2xl p-4 border border-border space-y-4">
+    <div className="bg-well rounded-lg p-4 border border-border space-y-4">
       {hosts.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t("domains.noActiveHosts")}</p>
       ) : (

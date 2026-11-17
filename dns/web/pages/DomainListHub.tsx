@@ -77,7 +77,7 @@ export function DomainListHub({
           </div>
         }
       >
-        <div className="h-14 w-14 rounded-2xl bg-accent-soft flex items-center justify-center text-accent-fg">
+        <div className="h-14 w-14 rounded-lg bg-accent-soft flex items-center justify-center text-accent-fg">
           <Globe className="h-7 w-7" />
         </div>
       </Empty>

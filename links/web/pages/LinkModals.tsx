@@ -96,7 +96,8 @@ export function LinkModals({
           onClose={onCloseQr}
         >
           <div className="flex flex-col items-center gap-5 py-4">
-            <div className="bg-white p-5 rounded-2xl shadow-sm border border-border">
+            {/* ui-color-ok: QR modules require a solid white quiet zone in both light and dark themes */}
+            <div className="rounded-lg border border-border bg-white p-4">
               <img
                 src={`/api/links/${qrLink.id}/qr`}
                 alt={t("links.qrAlt")}

@@ -85,7 +85,7 @@ export function SecretQrModal({ onClose, account, t }: Props) {
                 <img
                   src={qrDataUrl}
                   alt="TOTP QR Code"
-                  className="h-48 w-48 rounded bg-white p-2 shadow-md"
+                  className={/* ui-color-ok */ "h-48 w-48 rounded-md border border-border bg-white p-2"}
                 />
                 <p className="mt-2 text-xs text-muted-foreground">
                   {t("twofa.scanHelp", "Scan with Google Authenticator, 1Password, or any authenticator app.")}
