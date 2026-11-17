@@ -51,8 +51,8 @@ importers:
   _template/web:
     devDependencies:
       '@octarq/plugin-sdk':
-        specifier: ^0.21.0
-        version: 0.21.0(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: ^0.24.0
+        version: 0.24.0(@tanstack/react-query@5.107.1(@types/react@18.3.31)(react@18.3.1))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@types/react':
         specifier: ^18.3.1
         version: 18.3.31
@@ -76,8 +76,8 @@ importers:
         version: 1.71.0(@types/react@18.3.31)(react@18.3.1)
     devDependencies:
       '@octarq/plugin-sdk':
-        specifier: ^0.23.0
-        version: 0.23.0(@tanstack/react-query@5.107.1(@types/react@18.3.31)(react@18.3.1))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: ^0.24.0
+        version: 0.24.0(@tanstack/react-query@5.107.1(@types/react@18.3.31)(react@18.3.1))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@types/react':
         specifier: ^18.3.1
         version: 18.3.31
@@ -104,8 +104,8 @@ importers:
         version: 1.71.0(@types/react@18.3.31)(react@18.3.1)
     devDependencies:
       '@octarq/plugin-sdk':
-        specifier: ^0.23.0
-        version: 0.23.0(@tanstack/react-query@5.107.1(@types/react@18.3.31)(react@18.3.1))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: ^0.24.0
+        version: 0.24.0(@tanstack/react-query@5.107.1(@types/react@18.3.31)(react@18.3.1))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@types/react':
         specifier: ^18.3.1
         version: 18.3.31
@@ -132,8 +132,8 @@ importers:
         version: 1.71.0(@types/react@18.3.31)(react@18.3.1)
     devDependencies:
       '@octarq/plugin-sdk':
-        specifier: ^0.23.0
-        version: 0.23.0(@tanstack/react-query@5.107.1(@types/react@18.3.31)(react@18.3.1))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: ^0.24.0
+        version: 0.24.0(@tanstack/react-query@5.107.1(@types/react@18.3.31)(react@18.3.1))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@types/react':
         specifier: ^18.3.1
         version: 18.3.31
@@ -156,8 +156,8 @@ importers:
   maillink/web:
     devDependencies:
       '@octarq/plugin-sdk':
-        specifier: ^0.23.0
-        version: 0.23.0(@tanstack/react-query@5.107.1(@types/react@18.3.31)(react@18.3.1))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: ^0.24.0
+        version: 0.24.0(@tanstack/react-query@5.107.1(@types/react@18.3.31)(react@18.3.1))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@types/react':
         specifier: ^18.3.1
         version: 18.3.31
@@ -181,8 +181,8 @@ importers:
         version: 1.71.0(@types/react@18.3.31)(react@18.3.1)
     devDependencies:
       '@octarq/plugin-sdk':
-        specifier: ^0.21.0
-        version: 0.21.0(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: ^0.24.0
+        version: 0.24.0(@tanstack/react-query@5.107.1(@types/react@18.3.31)(react@18.3.1))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@types/react':
         specifier: ^18.3.1
         version: 18.3.31
@@ -206,8 +206,8 @@ importers:
         version: 1.71.0(@types/react@18.3.31)(react@18.3.1)
     devDependencies:
       '@octarq/plugin-sdk':
-        specifier: ^0.23.0
-        version: 0.23.0(@tanstack/react-query@5.107.1(@types/react@18.3.31)(react@18.3.1))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: ^0.24.0
+        version: 0.24.0(@tanstack/react-query@5.107.1(@types/react@18.3.31)(react@18.3.1))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@types/react':
         specifier: ^18.3.1
         version: 18.3.31
@@ -470,14 +470,8 @@ packages:
   '@jridgewell/sourcemap-codec@1.6.0':
     resolution: {integrity: sha512-T7jf+5zgsZHwNJ4lvQ7/aezbyk0nNX+zJVWpmHA7VYsEx7a7qr5Rg5IbtJFqkgze5Y2sruq1RUY8Q837Od7iFw==}
 
-  '@octarq/plugin-sdk@0.21.0':
-    resolution: {integrity: sha512-FLO6vTDGrKFSLE9zZ5dO458S5cyOKtj2jksOxvZy9K9ZqZFKITRaw6yD699CrRzldSbnHTJKNSJDVen6k0dfTg==}
-    peerDependencies:
-      react: ^18.0.0 || ^19.0.0
-      react-dom: ^18.0.0 || ^19.0.0
-
-  '@octarq/plugin-sdk@0.23.0':
-    resolution: {integrity: sha512-AE9XobN3RH4HAsFzzG0TLnfKPNDJo6GPgsDrEYw+/a6Yfr7+vsgNvgPJzLWLGvktmPLNgST5EclwD+LQuHFTsg==}
+  '@octarq/plugin-sdk@0.24.0':
+    resolution: {integrity: sha512-rH0+K3gcbIaAY0yozRWl4Hwkf+F8VSCYot/jYiM522buthvftiwdCP50XRau8w1uwJEWUN8Egj3Qm2YsbwZgfA==}
     peerDependencies:
       '@tanstack/react-query': ^5.0.0
       react: ^18.0.0 || ^19.0.0
@@ -1352,23 +1346,7 @@ snapshots:
 
   '@jridgewell/sourcemap-codec@1.6.0': {}
 
-  '@octarq/plugin-sdk@0.21.0(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
-    dependencies:
-      '@base-ui/react': 1.6.0(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      class-variance-authority: 0.7.1
-      clsx: 2.1.1
-      framer-motion: 12.43.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      react: 18.3.1
-      react-dom: 18.3.1(react@18.3.1)
-      sonner: 2.0.8(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      tailwind-merge: 3.7.0
-    transitivePeerDependencies:
-      - '@date-fns/tz'
-      - '@emotion/is-prop-valid'
-      - '@types/react'
-      - date-fns
-
-  '@octarq/plugin-sdk@0.23.0(@tanstack/react-query@5.107.1(@types/react@18.3.31)(react@18.3.1))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@octarq/plugin-sdk@0.24.0(@tanstack/react-query@5.107.1(@types/react@18.3.31)(react@18.3.1))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@base-ui/react': 1.6.0(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@tanstack/react-query': 5.107.1(@types/react@18.3.31)(react@18.3.1)

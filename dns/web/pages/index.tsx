@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Button, GlassCard, PageHeader, Panel, ScreenWrap, TabBar, toast, useTranslation, usePluginGate, roleSatisfies, useCurrentRole } from "@octarq/plugin-sdk";
+import { Button, PageCard, PageShell, Panel, TabBar, toast, useTranslation, usePluginGate, roleSatisfies, useCurrentRole } from "@octarq/plugin-sdk";
 import { dnsApi, Domain, ProviderAccount } from "../api";
 import { Globe, RefreshCw, Plus, ArrowLeft } from "lucide-react";
 import { ProviderAccounts } from "./ProviderAccounts";
@@ -157,23 +157,23 @@ export default function DomainsPage() {
   }
 
   return (
-    <ScreenWrap>
-      <PageHeader
-        title={t("domains.pageTitle")}
-        description={t("domains.pageDescription")}
-        action={
-          <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setSyncing(true)}>
-              <RefreshCw className="h-3.5 w-3.5" />
-              {t("domains.syncCloudflare")}
-            </Button>
-            <Button variant="primary" size="sm" onClick={() => setActive("new")}>
-              <Plus className="h-3.5 w-3.5" />
-              {t("domains.addDomain")}
-            </Button>
-          </div>
-        }
-      />
+    <PageShell
+      width="full"
+      title={t("domains.pageTitle")}
+      description={t("domains.pageDescription")}
+      action={
+        <div className="flex gap-2">
+          <Button variant="ghost" size="sm" onClick={() => setSyncing(true)}>
+            <RefreshCw className="h-3.5 w-3.5" />
+            {t("domains.syncCloudflare")}
+          </Button>
+          <Button variant="primary" size="sm" onClick={() => setActive("new")}>
+            <Plus className="h-3.5 w-3.5" />
+            {t("domains.addDomain")}
+          </Button>
+        </div>
+      }
+    >
 
       <TabBar
         className="mb-6"
@@ -254,9 +254,9 @@ export default function DomainsPage() {
       {tab === "ddns" && <DDNSView domains={domains} />}
 
       {tab === "settings" && (
-        <GlassCard className="p-6">
+        <PageCard className="mt-0 p-6">
           <ProviderAccounts />
-        </GlassCard>
+        </PageCard>
       )}
 
       {syncing && (
@@ -269,6 +269,6 @@ export default function DomainsPage() {
           }}
         />
       )}
-    </ScreenWrap>
+    </PageShell>
   );
 }

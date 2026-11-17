@@ -2,10 +2,9 @@ import {
   Alert,
   Badge,
   Empty,
-  ScreenWrap,
-  PageHeader,
+  PageShell,
+  PageCard,
   Panel,
-  GlassCard,
   Button,
   Input,
   Table,
@@ -189,19 +188,19 @@ export default function LinksPage() {
   const emptyStateOwnsCreate = tab === "links" && !error && !loading && links.length === 0 && !q;
 
   return (
-    <ScreenWrap>
-      <PageHeader
-        title={t("links.pageTitle")}
-        description={t("links.pageDescription")}
-        action={
-          emptyStateOwnsCreate ? undefined : (
-            <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-3.5 w-3.5" />
-              {t("links.newLink")}
-            </Button>
-          )
-        }
-      />
+    <PageShell
+      width="full"
+      title={t("links.pageTitle")}
+      description={t("links.pageDescription")}
+      action={
+        emptyStateOwnsCreate ? undefined : (
+          <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+            <Plus className="h-3.5 w-3.5" />
+            {t("links.newLink")}
+          </Button>
+        )
+      }
+    >
 
       <TabBar
         className="mb-6"
@@ -258,7 +257,7 @@ export default function LinksPage() {
             <ListSkeleton rows={8} ariaLabel={t("links.loading")} />
           ) : links.length === 0 ? (
             q ? (
-              <GlassCard className="flex flex-col items-center gap-3 px-4 py-12 text-center">
+              <PageCard className="mt-0 flex flex-col items-center gap-3 px-4 py-12 text-center">
                 <p className="text-sm text-muted-foreground">
                   {t("links.emptyFilteredReason")} <span className="font-mono text-foreground">{`“${q}”`}</span>
                 </p>
@@ -269,7 +268,7 @@ export default function LinksPage() {
                 >
                   {t("links.emptyFilteredAction")}
                 </Button>
-              </GlassCard>
+              </PageCard>
             ) : (
               <Empty
                 reason={t("links.emptyNoLinksReason")}
@@ -295,7 +294,7 @@ export default function LinksPage() {
             )
           ) : (
             <>
-            <GlassCard className="overflow-hidden border border-border">
+            <PageCard className="mt-0 overflow-hidden p-0">
               <div className="overflow-x-auto max-h-[700px] overflow-y-auto" onScroll={handleScroll}>
                 <Table>
                   <THead className="border-b border-border bg-well">
@@ -327,7 +326,7 @@ export default function LinksPage() {
                 </Table>
                 {loading && <div className="p-3 text-center text-xs text-muted-foreground">{t("links.loading")}</div>}
               </div>
-            </GlassCard>
+            </PageCard>
             {error && (
               <Alert
                 variant="danger"
@@ -351,41 +350,41 @@ export default function LinksPage() {
         <div className="space-y-6" data-testid="anomalies-projection-view">
           {/* Overview Stat Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <GlassCard className="p-4 space-y-1.5">
+            <PageCard className="mt-0 p-4 space-y-1.5">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">{t("links.anomalyTraffic", "Traffic Anomalies")}</span>
                 <Activity className="h-4 w-4 text-success-fg" />
               </div>
               <div className="text-xl font-semibold text-foreground">0</div>
               <div className="text-[11px] text-success-fg font-medium">{t("links.anomalyHealthySpikes", "Healthy · No spikes")}</div>
-            </GlassCard>
+            </PageCard>
 
-            <GlassCard className="p-4 space-y-1.5">
+            <PageCard className="mt-0 p-4 space-y-1.5">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">{t("links.anomalyBot", "Bot Filtering")}</span>
                 <ShieldCheck className="h-4 w-4 text-accent-fg" />
               </div>
               <div className="text-xl font-semibold text-foreground">{t("links.anomalyActive", "Active")}</div>
               <div className="text-[11px] text-muted-foreground">{t("links.anomalyRateLimitActive", "Rate limiting active")}</div>
-            </GlassCard>
+            </PageCard>
 
-            <GlassCard className="p-4 space-y-1.5">
+            <PageCard className="mt-0 p-4 space-y-1.5">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">{t("links.anomalyLatency", "Redirect Latency")}</span>
                 <Activity className="h-4 w-4 text-info-fg" />
               </div>
               <div className="text-xl font-semibold text-foreground">{t("links.anomalyLatencyValue", "< 35ms")}</div>
               <div className="text-[11px] text-success-fg font-medium">{t("links.anomalyP99Latency", "p99 edge redirect")}</div>
-            </GlassCard>
+            </PageCard>
 
-            <GlassCard className="p-4 space-y-1.5">
+            <PageCard className="mt-0 p-4 space-y-1.5">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">{t("links.anomalyLoops", "Redirect Loops")}</span>
                 <AlertTriangle className="h-4 w-4 text-warning-fg" />
               </div>
               <div className="text-xl font-semibold text-foreground">0</div>
               <div className="text-[11px] text-muted-foreground">{t("links.anomalyLoopClear", "Loop detector clear")}</div>
-            </GlassCard>
+            </PageCard>
           </div>
 
           {/* Anomaly Real-Time Monitor Card */}
@@ -457,6 +456,6 @@ export default function LinksPage() {
         onCopyQrLink={copy}
         linkURL={linkURL}
       />
-    </ScreenWrap>
+    </PageShell>
   );
 }

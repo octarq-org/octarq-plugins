@@ -1,4 +1,4 @@
-import { Field, Input, GlassCard, Badge, Button, toast, confirmDialog, useTranslation, roleSatisfies, useCurrentRole } from "@octarq/plugin-sdk";
+import { Field, Input, PageCard, Badge, Button, toast, confirmDialog, useTranslation, roleSatisfies, useCurrentRole } from "@octarq/plugin-sdk";
 import { useEffect, useState } from "react";
 import { mailApi, Attachment, Email } from "../api";
 import { Paperclip, Trash2, Reply, Download, X, Sparkles, ExternalLink, ShieldAlert, ArchiveRestore, Edit3, Copy, KeyRound } from "lucide-react";
@@ -89,7 +89,7 @@ export function EmailViewForm({
   }
 
   return (
-    <GlassCard className="flex flex-col h-full max-h-full min-h-0">
+    <PageCard className="mt-0 flex flex-col h-full max-h-full min-h-0 p-0">
       <div className="p-5 border-b border-border flex justify-between items-start shrink-0 gap-4">
         <div className="flex-1 min-w-0">
           <h2 className="text-lg font-bold text-foreground mb-2 leading-snug">{email.subject || t("mail.noSubject")}</h2>
@@ -277,6 +277,6 @@ export function EmailViewForm({
           </div>
         </div>
       </div>
-    </GlassCard>
+    </PageCard>
   );
 }
