@@ -1,4 +1,4 @@
-import { GlassCard, Button, Modal, Field, Input, Select, Badge, Empty, timeAgo, toast, Alert, confirmDialog, useTranslation, roleSatisfies, useCurrentRole } from "@octarq/plugin-sdk";
+import { PageCard, Button, Modal, Field, Input, Select, Badge, Empty, timeAgo, toast, Alert, confirmDialog, useTranslation, roleSatisfies, useCurrentRole } from "@octarq/plugin-sdk";
 import { useEffect, useState } from "react";
 import { Domain, dnsApi, DDNSToken, CreateDDNSTokenResult } from "../api";
 import { KeyRound, Plus, Trash2, Copy, Check, AlertTriangle } from "lucide-react";
@@ -144,9 +144,9 @@ export function DDNSView({ domains }: { domains: Domain[] }) {
           {tokens.map((tok) => {
             const dom = domains.find((d) => d.id === tok.domainId);
             return (
-              <GlassCard
+              <PageCard
                 key={tok.id}
-                className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                className="mt-0 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
               >
                 <div className="space-y-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -188,7 +188,7 @@ export function DDNSView({ domains }: { domains: Domain[] }) {
                     {t("domains.revokeToken")}
                   </Button>
                 )}
-              </GlassCard>
+              </PageCard>
             );
           })}
         </div>

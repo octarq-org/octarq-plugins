@@ -9,9 +9,8 @@
 // Both are covered by the SDK's <LockedFallback status={…} />.
 import { useEffect, useState } from "react";
 import {
-  ScreenWrap,
-  PageHeader,
-  GlassCard,
+  PageShell,
+  PageCard,
   LockedFallback,
   useTranslation,
 } from "@octarq/plugin-sdk";
@@ -43,32 +42,31 @@ export default function MyPluginPage() {
   // neutral loading/empty state below (never a raw error).
   if (status === 402 || status === 404) {
     return (
-      <ScreenWrap>
+      <PageShell title={t("myplugin.pageTitle", "My Plugin")}>
         <LockedFallback
           status={status}
           feature={t("myplugin.feature", "My Plugin")}
           description={t("myplugin.description", "A starter Octarq plugin.")}
         />
-      </ScreenWrap>
+      </PageShell>
     );
   }
 
   return (
-    <ScreenWrap>
-      <PageHeader
-        title={t("myplugin.pageTitle", "My Plugin")}
-        description={t("myplugin.pageDesc", "A starter full-stack Octarq plugin.")}
-      />
-      <GlassCard className="p-6">
+    <PageShell
+      title={t("myplugin.pageTitle", "My Plugin")}
+      description={t("myplugin.pageDesc", "A starter full-stack Octarq plugin.")}
+    >
+      <PageCard className="mt-6 p-6">
         {ping ? (
           <div className="space-y-1 text-sm">
-            <p className="text-white/80">{ping.message}</p>
-            <p className="text-white/40">{ping.time}</p>
+            <p className="text-foreground">{ping.message}</p>
+            <p className="text-muted-foreground">{ping.time}</p>
           </div>
         ) : (
-          <p className="text-sm text-white/40">{t("myplugin.loading", "Loading…")}</p>
+          <p className="text-sm text-muted-foreground">{t("myplugin.loading", "Loading…")}</p>
         )}
-      </GlassCard>
-    </ScreenWrap>
+      </PageCard>
+    </PageShell>
   );
 }

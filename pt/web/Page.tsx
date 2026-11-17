@@ -2,8 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Button,
   Empty,
-  PageHeader,
-  ScreenWrap,
+  PageShell,
   Skeleton,
   StatCard,
   useConfirm,
@@ -110,49 +109,52 @@ export default function PTPage() {
   const unknown = t("unknown", "—");
   const summary = overview?.summary;
 
-  const header = (
-    <PageHeader
-      title={t("pageTitle", "PT Accounts")}
-      description={t("pageDescription", "Private-tracker accounts: logins, daily sign-in, and traffic statistics.")}
-      eyebrow="PT"
-      action={
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={() => void load()} disabled={loading}>
-            <RefreshCw className="mr-1.5 h-4 w-4" />
-            {t("reload", "Reload")}
-          </Button>
-          <Button
-            onClick={() => {
-              setEditing(undefined);
-              setFormOpen(true);
-            }}
-          >
-            <Plus className="mr-1.5 h-4 w-4" />
-            {t("addTracker", "Add site")}
-          </Button>
-        </div>
-      }
-    />
+  const headerAction = (
+    <div className="flex items-center gap-2">
+      <Button variant="secondary" onClick={() => void load()} disabled={loading}>
+        <RefreshCw className="mr-1.5 h-4 w-4" />
+        {t("reload", "Reload")}
+      </Button>
+      <Button
+        onClick={() => {
+          setEditing(undefined);
+          setFormOpen(true);
+        }}
+      >
+        <Plus className="mr-1.5 h-4 w-4" />
+        {t("addTracker", "Add site")}
+      </Button>
+    </div>
   );
 
   if (loading) {
     return (
-      <ScreenWrap>
-        {header}
+      <PageShell
+        width="full"
+        title={t("pageTitle", "PT Accounts")}
+        description={t("pageDescription", "Private-tracker accounts: logins, daily sign-in, and traffic statistics.")}
+        eyebrow="PT"
+        action={headerAction}
+      >
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-64 w-full rounded-2xl" />
+            <Skeleton key={i} className="h-64 w-full rounded-lg" />
           ))}
         </div>
-      </ScreenWrap>
+      </PageShell>
     );
   }
 
   if (status !== null) {
     const forbidden = status === 403;
     return (
-      <ScreenWrap>
-        {header}
+      <PageShell
+        width="full"
+        title={t("pageTitle", "PT Accounts")}
+        description={t("pageDescription", "Private-tracker accounts: logins, daily sign-in, and traffic statistics.")}
+        eyebrow="PT"
+        action={headerAction}
+      >
         <Empty
           reason={forbidden ? t("errorForbidden", "You do not have permission.") : t("loadFailedReason", "The accounts could not be loaded.")}
           action={
@@ -163,13 +165,18 @@ export default function PTPage() {
             )
           }
         />
-      </ScreenWrap>
+      </PageShell>
     );
   }
 
   return (
-    <ScreenWrap>
-      {header}
+    <PageShell
+      width="full"
+      title={t("pageTitle", "PT Accounts")}
+      description={t("pageDescription", "Private-tracker accounts: logins, daily sign-in, and traffic statistics.")}
+      eyebrow="PT"
+      action={headerAction}
+    >
 
       {overview && !overview.scheduler_available ? (
         <div className="mb-4 flex items-start gap-2 rounded-lg border border-warning-border bg-warning-bg px-3 py-2 text-[12.5px] leading-relaxed text-warning-fg">
@@ -250,7 +257,7 @@ export default function PTPage() {
       {detail ? (
         <TrackerDetail tracker={detail} t={t} lang={lang} onClose={() => setDetailId(null)} />
       ) : null}
-    </ScreenWrap>
+    </PageShell>
   );
 }
 

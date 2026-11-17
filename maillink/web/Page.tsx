@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  ScreenWrap,
-  PageHeader,
+  PageShell,
+  PageCard,
   Table,
   THead,
   TBody,
@@ -47,15 +47,18 @@ export default function MailLinksPage() {
 
   if (status === 402 || status === 404) {
     return (
-      <ScreenWrap>
+      <PageShell title={t("maillink.pageTitle", "Mail Links")}>
         <LockedFallback status={status} feature="Mail Links" description={t("maillink.pageDesc")} />
-      </ScreenWrap>
+      </PageShell>
     );
   }
 
   return (
-    <ScreenWrap>
-      <PageHeader title={t("maillink.pageTitle", "Mail Links")} description={t("maillink.pageDesc")} />
+    <PageShell
+      width="full"
+      title={t("maillink.pageTitle", "Mail Links")}
+      description={t("maillink.pageDesc")}
+    >
       {error !== null ? (
         <TableError error={error} onRetry={load} />
       ) : links === null ? (
@@ -63,27 +66,29 @@ export default function MailLinksPage() {
       ) : links.length === 0 ? (
         <TableEmpty emptyText={t("maillink.empty")} />
       ) : (
-        <Table>
-          <THead>
-            <TR>
-              <TH>{t("maillink.colShort", "Short link")}</TH>
-              <TH>{t("maillink.colTarget", "Target")}</TH>
-              <TH>{t("maillink.colSubject", "Subject")}</TH>
-              <TH>{t("maillink.colFrom", "From")}</TH>
-            </TR>
-          </THead>
-          <TBody>
-            {links.map((l) => (
-              <TR key={l.ID}>
-                <TD className="font-mono text-xs text-foreground">/{l.Slug}</TD>
-                <TD className="max-w-[18rem] truncate text-xs text-muted-foreground">{l.Target}</TD>
-                <TD className="max-w-[18rem] truncate text-xs">{l.Subject || "—"}</TD>
-                <TD className="max-w-[14rem] truncate text-xs text-muted-foreground">{l.From}</TD>
+        <PageCard className="mt-0 overflow-hidden p-0">
+          <Table>
+            <THead>
+              <TR>
+                <TH>{t("maillink.colShort", "Short link")}</TH>
+                <TH>{t("maillink.colTarget", "Target")}</TH>
+                <TH>{t("maillink.colSubject", "Subject")}</TH>
+                <TH>{t("maillink.colFrom", "From")}</TH>
               </TR>
-            ))}
-          </TBody>
-        </Table>
+            </THead>
+            <TBody>
+              {links.map((l) => (
+                <TR key={l.ID}>
+                  <TD className="font-mono text-xs text-foreground">/{l.Slug}</TD>
+                  <TD className="max-w-[18rem] truncate text-xs text-muted-foreground">{l.Target}</TD>
+                  <TD className="max-w-[18rem] truncate text-xs">{l.Subject || "—"}</TD>
+                  <TD className="max-w-[14rem] truncate text-xs text-muted-foreground">{l.From}</TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        </PageCard>
       )}
-    </ScreenWrap>
+    </PageShell>
   );
 }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { GlassCard, Button, Badge, useToast } from "@octarq/plugin-sdk";
+import { PageCard, Button, Badge, useToast } from "@octarq/plugin-sdk";
 import { Copy, Check, Pencil, Pin, QrCode, Trash2 } from "lucide-react";
 import type { AccountSummary } from "../types";
 
@@ -64,7 +64,7 @@ export function AccountCard({
     : [];
 
   return (
-    <GlassCard className="relative flex flex-col justify-between p-5 transition-all duration-200">
+    <PageCard className="mt-0 relative flex flex-col justify-between p-5 transition-colors duration-150">
       <div>
         {/* Top bar: title, issuer/account & pin */}
         <div className="flex items-start justify-between gap-2">
@@ -201,6 +201,6 @@ export function AccountCard({
           </Button>
         </div>
       </div>
-    </GlassCard>
+    </PageCard>
   );
 }

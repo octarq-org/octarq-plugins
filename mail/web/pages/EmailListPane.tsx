@@ -1,4 +1,4 @@
-import { GlassCard, Empty, Button, Input, ListSkeleton, useTranslation } from "@octarq/plugin-sdk";
+import { PageCard, Empty, Button, Input, ListSkeleton, useTranslation } from "@octarq/plugin-sdk";
 import { Search, X, Mail as MailIcon, Inbox } from "lucide-react";
 import { Email, Mailbox } from "../api";
 import { MailFolder } from "./types";
@@ -56,7 +56,7 @@ export function EmailListPane({
         )}
       </div>
 
-      <GlassCard className="flex-1 overflow-hidden">
+      <PageCard className="mt-0 flex-1 overflow-hidden p-0">
         {emails.length === 0 && loading ? (
           <ListSkeleton rows={7} ariaLabel={t("mail.loading")} />
         ) : (
@@ -117,7 +117,7 @@ export function EmailListPane({
             )}
           </div>
         )}
-      </GlassCard>
+      </PageCard>
     </div>
   );
 }

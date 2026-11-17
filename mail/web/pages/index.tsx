@@ -1,4 +1,4 @@
-import { ScreenWrap, PageHeader, GlassCard, Button, useTranslation } from "@octarq/plugin-sdk";
+import { PageShell, Button, useTranslation } from "@octarq/plugin-sdk";
 import { useEffect, useState, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { mailApi, Domain, effectiveMailHosts, Email, Mailbox } from "../api";
@@ -121,26 +121,26 @@ export default function MailPage() {
   const totalUnread = useMemo(() => boxes.reduce((acc, b) => acc + (b.unread || 0), 0), [boxes]);
 
   return (
-    <ScreenWrap>
-      <PageHeader
-        title={t("mail.pageTitle")}
-        description={t("mail.pageDesc")}
-        action={
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={markAllRead}>
-              {t("mail.markRead")}
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setCompose(true)}>
-              <Send className="h-3.5 w-3.5" />
-              {t("mail.compose")}
-            </Button>
-            <Button variant="primary" size="sm" onClick={() => setNewBox(true)}>
-              <Plus className="h-3.5 w-3.5" />
-              {t("mail.newMailbox")}
-            </Button>
-          </div>
-        }
-      />
+    <PageShell
+      width="full"
+      title={t("mail.pageTitle")}
+      description={t("mail.pageDesc")}
+      action={
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={markAllRead}>
+            {t("mail.markRead")}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setCompose(true)}>
+            <Send className="h-3.5 w-3.5" />
+            {t("mail.compose")}
+          </Button>
+          <Button variant="primary" size="sm" onClick={() => setNewBox(true)}>
+            <Plus className="h-3.5 w-3.5" />
+            {t("mail.newMailbox")}
+          </Button>
+        </div>
+      }
+    >
 
       <MailTabs tab={tab} onTabChange={setTab} />
 
@@ -209,6 +209,6 @@ export default function MailPage() {
           onDraftSaved={() => { loadEmails(true); }}
         />
       )}
-    </ScreenWrap>
+    </PageShell>
   );
 }

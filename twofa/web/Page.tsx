@@ -1,7 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import {
-  ScreenWrap,
-  PageHeader,
+  PageShell,
   Button,
   Input,
   Empty,
@@ -145,30 +144,27 @@ export default function TwoFAPage() {
   // Locked/gated state fallback
   if (status === 402 || status === 404) {
     return (
-      <ScreenWrap>
+      <PageShell title={t("twofa.pageTitle", "2FA Vault")}>
         <LockedFallback
           status={status}
           feature="2FA Vault"
           description={t("twofa.pageDesc", "Centralized TOTP two-factor authentication manager for team & infrastructure accounts.")}
         />
-      </ScreenWrap>
+      </PageShell>
     );
   }
 
   const isFiltering = Boolean(searchTerm || selectedTag);
 
   return (
-    <ScreenWrap>
-      {/* Header */}
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <PageHeader
-          title={t("twofa.pageTitle", "2FA Vault")}
-          description={t(
-            "twofa.pageDesc",
-            "Centralized TOTP two-factor authentication manager for team & infrastructure accounts."
-          )}
-        />
-
+    <PageShell
+      width="full"
+      title={t("twofa.pageTitle", "2FA Vault")}
+      description={t(
+        "twofa.pageDesc",
+        "Centralized TOTP two-factor authentication manager for team & infrastructure accounts."
+      )}
+      action={
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={() => setAuditLogsOpen(true)} title={t("twofa.auditLogs", "Audit Logs")}>
             <ScrollText className="h-3.5 w-3.5" /> {t("twofa.auditLogs", "Audit Logs")}
@@ -186,7 +182,8 @@ export default function TwoFAPage() {
             <Plus className="h-3.5 w-3.5" /> {t("twofa.addAccount", "Add Account")}
           </Button>
         </div>
-      </div>
+      }
+    >
 
       {/* Filter and Search Bar */}
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -301,6 +298,6 @@ export default function TwoFAPage() {
       {importExportOpen && (
         <ImportExportModal onClose={() => setImportExportOpen(false)} onImported={fetchAccounts} t={t} />
       )}
-    </ScreenWrap>
+    </PageShell>
   );
 }

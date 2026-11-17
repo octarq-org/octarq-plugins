@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Button, Empty, GlassCard, Input, Badge, useTranslation, ListSkeleton } from "@octarq/plugin-sdk";
+import { Button, Empty, PageCard, Input, Badge, useTranslation, ListSkeleton } from "@octarq/plugin-sdk";
 import { Domain, ProviderAccount } from "../api";
 import { Globe, RefreshCw, Plus, Mail, Link as LinkIcon, Settings, Layers, ShieldCheck } from "lucide-react";
 import type { DomainSubTab } from "./DomainDetailWorkspace";
@@ -119,14 +119,14 @@ export function DomainListHub({
       {loading && domains.length === 0 ? (
         <ListSkeleton rows={6} ariaLabel={t("domains.loading")} />
       ) : domains.length === 0 && q ? (
-        <GlassCard className="flex flex-col items-center gap-3 p-8 text-center">
+        <PageCard className="mt-0 flex flex-col items-center gap-3 p-8 text-center">
           <p className="text-sm text-muted-foreground">
             {t("domains.emptyFilteredReason")} <span className="font-mono text-foreground">{`“${q}”`}</span>
           </p>
           <Button variant="ghost" className="text-xs py-1.5" onClick={() => onSearchChange("")}>
             {t("domains.emptyFilteredAction")}
           </Button>
-        </GlassCard>
+        </PageCard>
       ) : (
         <div className="grid grid-cols-1 gap-3">
           {domains.map((d) => (
@@ -134,7 +134,7 @@ export function DomainListHub({
               key={d.id}
               role="button"
               tabIndex={0}
-              className="glass p-4 rounded-2xl border border-border hover:border-border-strong transition-colors cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-border"
+              className="rounded-lg border border-border bg-card p-4 hover:border-border-strong transition-colors cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={() => {
                 onSelectDomain(d, "records");
               }}
