@@ -188,7 +188,7 @@ export function DnsTroubleshootingGuide({ issues }: { issues: DnsDiagnosticIssue
                   </Badge>
                   <span className="text-xs font-mono text-foreground font-medium">{issue.host}</span>
                 </div>
-                <StatusBadge status={badgeStatus}>
+                <StatusBadge tone={badgeStatus}>
                   {issue.issueType === "misconfigured" ? t("domains.misconfigured") : t("domains.missing")}
                 </StatusBadge>
               </div>
@@ -251,7 +251,7 @@ function DnsStatusBadge({ status, label }: { status: DNSRecordStatus; label: str
   return (
     <div className="flex flex-col items-center p-3 rounded-lg bg-card border border-border">
       <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">{label}</span>
-      <div className="mt-2"><StatusBadge status={badgeStatus}>{text}</StatusBadge></div>
+      <div className="mt-2"><StatusBadge tone={badgeStatus}>{text}</StatusBadge></div>
     </div>
   );
 }
@@ -291,7 +291,7 @@ export function LinkHostRow({ link }: { link: LinkHostStatus }) {
         <div className="text-xs font-mono text-muted-foreground truncate">{link.host}</div>
         <div className="text-[10px] text-muted-foreground truncate font-mono">{detail}</div>
       </div>
-      <StatusBadge status={badgeStatus}>{text}</StatusBadge>
+      <StatusBadge tone={badgeStatus}>{text}</StatusBadge>
     </div>
   );
 }

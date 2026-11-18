@@ -122,7 +122,6 @@ export default function MailPage() {
 
   return (
     <PageShell
-      width="full"
       title={t("mail.pageTitle")}
       description={t("mail.pageDesc")}
       action={

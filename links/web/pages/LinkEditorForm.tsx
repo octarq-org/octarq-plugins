@@ -404,11 +404,11 @@ function RoutingRulesEditor({ rules, onChange, geoReady }: { rules: any[]; onCha
             {rule.type === "geo" && (
               <div className="flex items-center gap-2 pt-0.5">
                 {geoReady ? (
-                  <StatusBadge status="success" shape="dot">
+                  <StatusBadge tone="success" shape="dot">
                     {t("links.geoReady", "GeoIP Active")}
                   </StatusBadge>
                 ) : (
-                  <StatusBadge status="warning" shape="dash" title={t("links.geoUnavailableDesc", "Server lacks GeoIP database. Country routing is bypassed.")}>
+                  <StatusBadge tone="warning" shape="dash" title={t("links.geoUnavailableDesc", "Server lacks GeoIP database. Country routing is bypassed.")}>
                     {t("links.geoUnavailable", "GeoIP Unavailable (bypassed)")}
                   </StatusBadge>
                 )}

@@ -126,7 +126,7 @@ export function LinkTableRow({
 
       {/* Status */}
       <TD className="text-center">
-        <StatusBadge status={l.archived ? "paused" : "success"} className="text-[10px]">
+        <StatusBadge tone={l.archived ? "paused" : "success"} className="text-[10px]">
           {l.archived ? t("links.archived") : t("links.active")}
         </StatusBadge>
       </TD>

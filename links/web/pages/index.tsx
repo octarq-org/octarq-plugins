@@ -2,7 +2,6 @@ import {
   Alert,
   Empty,
   PageShell,
-  PageColumn,
   PageCard,
   Panel,
   Button,
@@ -193,7 +192,6 @@ export default function LinksPage() {
 
   return (
     <PageShell
-      width="full"
       title={t("links.pageTitle")}
       description={t("links.pageDescription")}
       action={
@@ -416,7 +414,7 @@ export default function LinksPage() {
           <Panel
             title={t("links.tabAnomalies", "Anomaly Monitoring")}
             description={t("links.anomalyDesc", "Real-time monitors track 404 floods, redirect loops, and abnormal traffic spikes.")}
-            action={<StatusBadge status="success" className="text-xs">{t("links.anomalyOperational", "Operational")}</StatusBadge>}
+            action={<StatusBadge tone="success" className="text-xs">{t("links.anomalyOperational", "Operational")}</StatusBadge>}
           >
 
             <div className="py-8 text-center space-y-2">
@@ -431,40 +429,38 @@ export default function LinksPage() {
       )}
 
       {tab === "reserved" && (
-        <PageColumn className="pb-0">
-          <div className="space-y-6" data-testid="reserved-projection-view">
-            {/* Guidance Banner */}
-            <div className="flex items-center justify-between p-3 rounded-lg border border-primary/20 bg-accent-soft text-xs text-foreground">
-              <div className="flex items-center gap-2">
-                <Blocks className="h-4 w-4 text-accent-fg shrink-0" />
-                <span>{t("links.reservedInstanceNotice", "Configure custom instance-level reserved slugs in Instance Settings.")}</span>
-              </div>
-              <NavLink
-                to="/instance/settings"
-                className="text-accent-fg hover:underline font-medium text-xs whitespace-nowrap ml-3"
-              >
-                {t("links.reservedInstanceAction", "Configure Instance Settings →")}
-              </NavLink>
+        <div className="space-y-6" data-testid="reserved-projection-view">
+          {/* Guidance Banner */}
+          <div className="flex items-center justify-between p-3 rounded-lg border border-primary/20 bg-accent-soft text-xs text-foreground">
+            <div className="flex items-center gap-2">
+              <Blocks className="h-4 w-4 text-accent-fg shrink-0" />
+              <span>{t("links.reservedInstanceNotice", "Configure custom instance-level reserved slugs in Instance Settings.")}</span>
             </div>
-
-            <Panel
-              title={t("links.reservedTitle", "System Reserved Words")}
-              description={t("links.reservedDesc", "Reserved words prevent short links from colliding with system routes and administrative endpoints.")}
+            <NavLink
+              to="/instance/settings"
+              className="text-accent-fg hover:underline font-medium text-xs whitespace-nowrap ml-3"
             >
-
-              <div className="flex flex-wrap gap-2 pt-2">
-                {SYSTEM_RESERVED_SLUGS.map((slug) => (
-                  <span
-                    key={slug}
-                    className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-mono bg-well border border-border text-foreground"
-                  >
-                    /{slug}
-                  </span>
-                ))}
-              </div>
-            </Panel>
+              {t("links.reservedInstanceAction", "Configure Instance Settings →")}
+            </NavLink>
           </div>
-        </PageColumn>
+
+          <Panel
+            title={t("links.reservedTitle", "System Reserved Words")}
+            description={t("links.reservedDesc", "Reserved words prevent short links from colliding with system routes and administrative endpoints.")}
+          >
+
+            <div className="flex flex-wrap gap-2 pt-2">
+              {SYSTEM_RESERVED_SLUGS.map((slug) => (
+                <span
+                  key={slug}
+                  className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-mono bg-well border border-border text-foreground"
+                >
+                  /{slug}
+                </span>
+              ))}
+            </div>
+          </Panel>
+        </div>
       )}
 
       <LinkModals

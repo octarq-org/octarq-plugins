@@ -55,7 +55,6 @@ export default function MailLinksPage() {
 
   return (
     <PageShell
-      width="full"
       title={t("maillink.pageTitle", "Mail Links")}
       description={t("maillink.pageDesc")}
     >

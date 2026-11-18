@@ -130,7 +130,6 @@ export default function PTPage() {
   if (loading) {
     return (
       <PageShell
-        width="full"
         title={t("pageTitle", "PT Accounts")}
         description={t("pageDescription", "Private-tracker accounts: logins, daily sign-in, and traffic statistics.")}
         eyebrow="PT"
@@ -197,7 +196,6 @@ export default function PTPage() {
     const forbidden = status === 403;
     return (
       <PageShell
-        width="full"
         title={t("pageTitle", "PT Accounts")}
         description={t("pageDescription", "Private-tracker accounts: logins, daily sign-in, and traffic statistics.")}
         eyebrow="PT"
@@ -219,7 +217,6 @@ export default function PTPage() {
 
   return (
     <PageShell
-      width="full"
       title={t("pageTitle", "PT Accounts")}
       description={t("pageDescription", "Private-tracker accounts: logins, daily sign-in, and traffic statistics.")}
       eyebrow="PT"
