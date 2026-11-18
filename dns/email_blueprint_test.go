@@ -18,9 +18,9 @@ func setupBlueprintPlugin(t *testing.T) *Plugin {
 	t.Helper()
 	p := New()
 	p.db = freshMemDB(t)
+	p.vaultSvc = newMockVaultService()
 	p.audit = func(r *http.Request, action, targetType string, targetID uint, meta map[string]any) {}
 	p.publishEvent = func(orgID uint, event string, data any) {}
-	p.decrypt = func(s string) ([]byte, error) { return []byte(s), nil }
 	p.orgID = func(r *http.Request) uint {
 		var id uint
 		fmt.Sscanf(r.Header.Get("X-Org-ID"), "%d", &id)
@@ -39,8 +39,8 @@ func setupBlueprintPlugin(t *testing.T) *Plugin {
 // backed by the named fake provider. Returns the domain ID.
 func seedBlueprintDomain(t *testing.T, p *Plugin, orgID uint, domainName, provName string) uint {
 	t.Helper()
-	acc := ProviderAccount{OrgID: orgID, Name: domainName + "-acc", Type: provName, Config: "{}"}
-	if err := p.db.Create(&acc).Error; err != nil {
+	acc, err := seedVaultProviderAccount(p, orgID, domainName+"-acc", provName, map[string]any{"apiToken": "tok"})
+	if err != nil {
 		t.Fatalf("seedBlueprintDomain: create account: %v", err)
 	}
 	dom := Domain{OrgID: orgID, Name: domainName, ProviderAccountID: acc.ID, ZoneID: "zone-" + domainName}

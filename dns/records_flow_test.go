@@ -93,8 +93,8 @@ func registerFakeProvider(t *testing.T, name string, f provider.Provider) string
 // plugin's providerFor() resolves to the fake provider.
 func seedDomainForProvider(t *testing.T, p *Plugin, name, zoneID string, provName string) (uint, uint) {
 	t.Helper()
-	acc := ProviderAccount{OrgID: 1, Name: name + "-acc", Type: provName, Config: "{}"}
-	if err := p.db.Create(&acc).Error; err != nil {
+	acc, err := seedVaultProviderAccount(p, 1, name+"-acc", provName, map[string]any{"apiToken": "tok"})
+	if err != nil {
 		t.Fatalf("seed provider account: %v", err)
 	}
 	dom := Domain{OrgID: 1, Name: name, ProviderAccountID: acc.ID, ZoneID: zoneID}
@@ -196,8 +196,8 @@ func TestRecordsScopedToCallersOrg(t *testing.T) {
 	_ = myDom
 
 	// A domain with no zone id is refused before touching the provider.
-	noZoneAcc := ProviderAccount{OrgID: 1, Name: "nozone-acc", Type: provName, Config: "{}"}
-	if err := p.db.Create(&noZoneAcc).Error; err != nil {
+	noZoneAcc, err := seedVaultProviderAccount(p, 1, "nozone-acc", provName, map[string]any{"apiToken": "tok"})
+	if err != nil {
 		t.Fatal(err)
 	}
 	noZone := Domain{OrgID: 1, Name: "nozone.example.com", ProviderAccountID: noZoneAcc.ID, ZoneID: ""}
@@ -340,8 +340,8 @@ func TestSyncDomainsGates(t *testing.T) {
 	}
 
 	// Unregistered provider type -> 400.
-	unknownAcc := ProviderAccount{OrgID: 1, Name: "ghost", Type: "no-such-provider", Config: "{}"}
-	if err := p.db.Create(&unknownAcc).Error; err != nil {
+	unknownAcc, err := seedVaultProviderAccount(p, 1, "ghost", "no-such-provider", map[string]any{"apiToken": "tok"})
+	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := p.syncDomains(ctx, &SyncDomainsInput{Ctx: mkCtx(req), Body: struct {

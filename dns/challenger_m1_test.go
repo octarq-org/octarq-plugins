@@ -2,7 +2,6 @@ package dns
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -130,11 +129,11 @@ func TestChallengerM1_DDNSConcurrentUpdate(t *testing.T) {
 func TestChallengerM1_FailClosedHostCredentials(t *testing.T) {
 	p, srv, db := newVerifyHarness(t)
 
-	// Replace host with one that returns an error
+	// Replace vault with one that returns an error
+	mv := newMockVaultService()
+	mv.getErr = fmt.Errorf("kms backend unreachable")
+	p.vaultSvc = mv
 	p.host = &plugin.TestHost{
-		LookupCredentialMock: func(ctx context.Context, orgID uint, query plugin.CredentialQuery) (*plugin.Credential, error) {
-			return nil, fmt.Errorf("kms backend unreachable")
-		},
 		SessionMock: &plugin.TestSession{
 			OrgIDFn: func(*http.Request) uint { return 1 },
 		},

@@ -2,7 +2,6 @@ package mail
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -51,14 +50,14 @@ func (p *Plugin) getBackendConfig() string {
 	return "database"
 }
 
-// credentialHost returns the mounted Host, or a no-op host when the plugin has
-// none (unit tests build the plugin directly). The no-op host reports
-// ErrCredentialResolverUnavailable, which is exactly "no Integrations Hub here".
-func (p *Plugin) credentialHost() plugin.Host {
-	if p.host != nil {
-		return p.host
+func (p *Plugin) vault() (plugin.VaultService, error) {
+	if p.vaultSvc != nil {
+		return p.vaultSvc, nil
 	}
-	return plugin.EnsureHost(nil)
+	if svc, ok := plugin.LookupAs[plugin.VaultService](p.ctx, plugin.ServiceVault); ok && svc != nil {
+		return svc, nil
+	}
+	return nil, plugin.ErrVaultUnavailable
 }
 
 func (p *Plugin) isSuppressed(orgID uint, addr string) bool {
@@ -114,38 +113,48 @@ func (p *Plugin) anySuppressed(orgID uint, addrs []string) (string, error) {
 	return "", nil
 }
 
-// senderFromCredential builds a mail.Sender and sender from-address from a
-// decrypted Credential (supporting SMTP relays and Resend).
-func (p *Plugin) senderFromCredential(cred *plugin.Credential) (mail.Sender, string, error) {
-	if cred == nil || len(cred.ConfigJSON) == 0 {
+func strFromAny(v any) string {
+	s, ok := v.(string)
+	if !ok {
+		return ""
+	}
+	return s
+}
+
+func intFromAny(v any) int {
+	switch n := v.(type) {
+	case int:
+		return n
+	case int64:
+		return int(n)
+	case float64:
+		return int(n)
+	case string:
+		i, _ := strconv.Atoi(strings.TrimSpace(n))
+		return i
+	default:
+		return 0
+	}
+}
+
+// senderFromVaultSecret builds a mail.Sender and sender from-address from a
+// decrypted VaultSecret (supporting SMTP relays and Resend).
+func (p *Plugin) senderFromVaultSecret(sec *plugin.VaultSecret) (mail.Sender, string, error) {
+	if sec == nil || len(sec.Payload) == 0 {
 		return nil, "", errors.New("empty credential configuration")
 	}
 
-	var m struct {
-		Host      string `json:"host"`
-		SMTPHost  string `json:"smtpHost"`
-		Port      int    `json:"port"`
-		User      string `json:"user"`
-		APIKey    string `json:"apiKey"`
-		Pass      string `json:"pass"`
-		SecretKey string `json:"secretKey"`
-		FromEmail string `json:"fromEmail"`
-	}
-	if err := json.Unmarshal(cred.ConfigJSON, &m); err != nil {
-		return nil, "", fmt.Errorf("malformed credential configuration: %w", err)
-	}
-
-	from := strings.TrimSpace(m.FromEmail)
+	from := strings.TrimSpace(strFromAny(sec.Payload["fromEmail"]))
 	if from == "" {
 		// A sender without a From address is not usable: the relay would reject
 		// it, or deliver as no-reply@octarq.local and burn the sending domain.
 		return nil, "", errors.New("sender From address is not configured")
 	}
 
-	if cred.Provider == "resend" {
-		apiKey := m.APIKey
+	if sec.Meta.Provider == "resend" {
+		apiKey := strFromAny(sec.Payload["apiKey"])
 		if apiKey == "" {
-			apiKey = m.SecretKey
+			apiKey = strFromAny(sec.Payload["secretKey"])
 		}
 		if apiKey == "" {
 			return nil, "", errors.New("resend API key is required")
@@ -153,35 +162,78 @@ func (p *Plugin) senderFromCredential(cred *plugin.Credential) (mail.Sender, str
 		return mail.NewResendSender(apiKey, from), from, nil
 	}
 
-	// Default to SMTP
-	host := m.SMTPHost
+	host := strFromAny(sec.Payload["smtpHost"])
 	if host == "" {
-		host = m.Host
+		host = strFromAny(sec.Payload["host"])
 	}
 	if host == "" {
 		return nil, "", errors.New("smtp host is required")
 	}
-	port := m.Port
+	port := intFromAny(sec.Payload["smtpPort"])
+	if port == 0 {
+		port = intFromAny(sec.Payload["port"])
+	}
 	if port == 0 {
 		port = 587
 	}
-	user := m.User
+	user := strFromAny(sec.Payload["user"])
 	if user == "" {
-		user = m.APIKey
+		user = strFromAny(sec.Payload["apiKey"])
 	}
-	pass := m.Pass
+	pass := strFromAny(sec.Payload["pass"])
 	if pass == "" {
-		pass = m.SecretKey
+		pass = strFromAny(sec.Payload["secretKey"])
 	}
 
 	return mail.NewCustomSender(host, fmt.Sprint(port), user, pass, from), from, nil
 }
 
+func (p *Plugin) resolveSenderPassword(ctx context.Context, s *SMTPSender) (string, error) {
+	if s.VaultItemID == 0 {
+		return "", errors.New("SMTP sender credentials are not configured")
+	}
+	vs, err := p.vault()
+	if err != nil {
+		return "", err
+	}
+	var sec *plugin.VaultSecret
+	if s.OrgID == 0 {
+		items, lErr := vs.ListItems(ctx, 0, plugin.VaultFilter{
+			Scope:        plugin.VaultScopeInstance,
+			ProviderType: "communication",
+		})
+		if lErr != nil {
+			return "", lErr
+		}
+		var keyName string
+		for _, it := range items {
+			if it.ID == s.VaultItemID {
+				keyName = it.KeyName
+				break
+			}
+		}
+		if keyName == "" {
+			return "", plugin.ErrSecretNotFound
+		}
+		sec, err = vs.ResolveInstanceSecret(ctx, keyName)
+	} else {
+		sec, err = vs.GetSecret(ctx, s.OrgID, s.VaultItemID)
+	}
+	if err != nil {
+		return "", err
+	}
+	if sec == nil {
+		return "", plugin.ErrSecretNotFound
+	}
+	pass := strFromAny(sec.Payload["secretKey"])
+	if pass == "" {
+		pass = strFromAny(sec.Payload["pass"])
+	}
+	return pass, nil
+}
+
 // mailReady reports whether this instance can deliver a SYSTEM message
-// (verification, password reset, invite). Those flows have no org, so they go
-// through the instance-level system sender and never through the Integrations
-// Hub; readiness must therefore answer for the same registry sendSystemMail
-// reads, or the signup gate promises mail that cannot be sent.
+// (verification, password reset, invite).
 func (p *Plugin) mailReady() bool {
 	_, err := p.systemSender()
 	return err == nil
@@ -198,6 +250,24 @@ func (p *Plugin) systemSender() (*SMTPSender, error) {
 				if err := p.db.First(&s, id).Error; err == nil {
 					return &s, nil
 				}
+				if vs, vErr := p.vault(); vErr == nil {
+					items, lErr := vs.ListItems(context.Background(), 0, plugin.VaultFilter{
+						Scope:        plugin.VaultScopeInstance,
+						ProviderType: "communication",
+					})
+					if lErr == nil {
+						for _, it := range items {
+							if it.ID == uint(id) && (it.Provider == "smtp" || it.Provider == "resend") && it.KeyName != "" {
+								return &SMTPSender{
+									ID:          it.ID,
+									OrgID:       0,
+									Name:        it.Name,
+									VaultItemID: it.ID,
+								}, nil
+							}
+						}
+					}
+				}
 				return nil, fmt.Errorf("configured system SMTP sender %d not found: %w", id, gorm.ErrRecordNotFound)
 			}
 			return nil, fmt.Errorf("invalid mail_system_sender_id setting %q", idStr)
@@ -207,16 +277,52 @@ func (p *Plugin) systemSender() (*SMTPSender, error) {
 }
 
 // deliverVia sends one message through the given sender record, handling
-// password decryption, usage metering and the email.send_failed event. Shared
-// by system mail, org mail and the per-sender connectivity test so the three
-// cannot drift on how a send is metered or reported.
+// password resolution from VaultService, usage metering and the email.send_failed event.
 func (p *Plugin) deliverVia(s *SMTPSender, to, subject, htmlBody, textBody string) error {
-	pass, err := p.decrypt(s.Pass)
-	if err != nil {
-		return err
+	ctx := context.Background()
+	var sender mail.Sender
+	from := s.FromEmail
+
+	if s.Host == "" && s.OrgID == 0 && s.VaultItemID > 0 {
+		vs, err := p.vault()
+		if err != nil {
+			return err
+		}
+		items, err := vs.ListItems(ctx, 0, plugin.VaultFilter{
+			Scope:        plugin.VaultScopeInstance,
+			ProviderType: "communication",
+		})
+		if err != nil {
+			return err
+		}
+		var keyName string
+		for _, it := range items {
+			if it.ID == s.VaultItemID {
+				keyName = it.KeyName
+				break
+			}
+		}
+		if keyName == "" {
+			return plugin.ErrSecretNotFound
+		}
+		sec, err := vs.ResolveInstanceSecret(ctx, keyName)
+		if err != nil {
+			return err
+		}
+		var sErr error
+		sender, from, sErr = p.senderFromVaultSecret(sec)
+		if sErr != nil {
+			return sErr
+		}
+	} else {
+		pass, err := p.resolveSenderPassword(ctx, s)
+		if err != nil {
+			return err
+		}
+		sender = mail.NewCustomSender(s.Host, fmt.Sprint(s.Port), s.User, pass, from)
 	}
-	sender := mail.NewCustomSender(s.Host, fmt.Sprint(s.Port), s.User, string(pass), s.FromEmail)
-	if err := sender.Send(mail.Message{From: s.FromEmail, To: []string{to}, Subject: subject, HTML: htmlBody, Text: textBody}); err != nil {
+
+	if err := sender.Send(mail.Message{From: from, To: []string{to}, Subject: subject, HTML: htmlBody, Text: textBody}); err != nil {
 		if p.publishEvent != nil {
 			p.publishEvent(s.OrgID, "email.send_failed", map[string]any{"to": []string{to}, "subject": subject, "error": err.Error()})
 		}
@@ -230,9 +336,6 @@ func (p *Plugin) deliverVia(s *SMTPSender, to, subject, htmlBody, textBody strin
 
 // sendSystemMail delivers an instance-level system message (verification,
 // password reset, invite) through the system sender resolved by systemSender.
-// Unlike sendMail it has no orgID: these flows must work for recipients with
-// no membership yet. Usage and failure events are attributed to the sender's
-// owning workspace so metering and webhooks keep a real org id.
 func (p *Plugin) sendSystemMail(to, subject, htmlBody, textBody string) error {
 	s, err := p.systemSender()
 	if err != nil {
@@ -241,41 +344,39 @@ func (p *Plugin) sendSystemMail(to, subject, htmlBody, textBody string) error {
 	return p.deliverVia(s, to, subject, htmlBody, textBody)
 }
 
-// sendMail delivers an org-level message. Exactly one registry is
-// authoritative: an instance with the Integrations Hub mounted sends through
-// the org's hub integration and refuses when none exists; standalone Core
-// sends through the org's local mail_smtp_senders row.
+// sendMail delivers an org-level message using VaultService communication
+// integrations (SMTP or Resend). Fails closed if Vault is unavailable or no
+// mail integration exists.
 func (p *Plugin) sendMail(orgID uint, to, subject, htmlBody, textBody string) error {
 	if p.isSuppressed(orgID, to) {
 		return fmt.Errorf("recipient address %s is in suppression list", to)
 	}
 
-	host := p.credentialHost()
-	hubMounted := true
+	ctx := context.Background()
+	vs, err := p.vault()
+	if err != nil {
+		return err
+	}
 
-	// Query the mail providers explicitly: a bare provider_type=communication
-	// lookup can return a Telegram or Slack integration, which cannot send mail.
-	for _, provider := range []string{"smtp", "resend"} {
-		cred, err := host.LookupCredential(context.Background(), orgID, plugin.CredentialQuery{
-			ProviderType: "communication",
-			Provider:     provider,
-		})
-		if errors.Is(err, plugin.ErrCredentialResolverUnavailable) {
-			hubMounted = false
-			break
-		}
-		if err != nil {
-			if errors.Is(err, plugin.ErrCredentialNotFound) {
-				continue
-			}
-			return fmt.Errorf("resolve %s integration for org %d: %w", provider, orgID, err)
-		}
-		if cred == nil {
+	items, err := vs.ListItems(ctx, orgID, plugin.VaultFilter{
+		Scope:        plugin.VaultScopeOrg,
+		ProviderType: "communication",
+	})
+	if err != nil {
+		return fmt.Errorf("resolve mail integration for org %d: %w", orgID, err)
+	}
+
+	for _, item := range items {
+		if item.Provider != "smtp" && item.Provider != "resend" {
 			continue
 		}
-		sender, from, sErr := p.senderFromCredential(cred)
+		sec, secErr := vs.GetSecret(ctx, orgID, item.ID)
+		if secErr != nil {
+			return fmt.Errorf("resolve %s integration for org %d: %w", item.Provider, orgID, secErr)
+		}
+		sender, from, sErr := p.senderFromVaultSecret(sec)
 		if sErr != nil {
-			return fmt.Errorf("invalid %s integration for org %d: %w", provider, orgID, sErr)
+			return fmt.Errorf("invalid %s integration for org %d: %w", item.Provider, orgID, sErr)
 		}
 		if err := sender.Send(mail.Message{From: from, To: []string{to}, Subject: subject, HTML: htmlBody, Text: textBody}); err != nil {
 			if p.publishEvent != nil {
@@ -289,19 +390,7 @@ func (p *Plugin) sendMail(orgID uint, to, subject, htmlBody, textBody string) er
 		return nil
 	}
 
-	if hubMounted {
-		return fmt.Errorf("no SMTP or Resend integration is configured for org %d", orgID)
-	}
-
-	tdb := p.tenantDB(orgID)
-	if tdb == nil {
-		return fmt.Errorf("database unavailable for org %d", orgID)
-	}
-	var s SMTPSender
-	if err := tdb.Order("id").First(&s).Error; err != nil {
-		return fmt.Errorf("no SMTP sender configured for org %d", orgID)
-	}
-	return p.deliverVia(&s, to, subject, htmlBody, textBody)
+	return fmt.Errorf("no SMTP or Resend integration is configured for org %d", orgID)
 }
 
 func (p *Plugin) recordSentEmail(orgID uint, from, to, subject, text, html string) {

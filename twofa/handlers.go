@@ -3,12 +3,151 @@ package twofa
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/octarq-org/octarq/server/plugin"
 )
+
+func metaString(meta map[string]any, key string) string {
+	if meta == nil {
+		return ""
+	}
+	v, _ := meta[key].(string)
+	return v
+}
+
+func metaInt(meta map[string]any, key string, fallback int) int {
+	if meta == nil {
+		return fallback
+	}
+	switch v := meta[key].(type) {
+	case int:
+		if v > 0 {
+			return v
+		}
+	case int64:
+		if v > 0 {
+			return int(v)
+		}
+	case float64:
+		if v > 0 {
+			return int(v)
+		}
+	}
+	return fallback
+}
+
+func metaBool(meta map[string]any, key string) bool {
+	if meta == nil {
+		return false
+	}
+	v, _ := meta[key].(bool)
+	return v
+}
+
+func metaToAccount(item plugin.VaultItemMeta) TwoFAAccount {
+	tags := metaString(item.Metadata, "tags")
+	if tags == "" && len(item.Tags) > 0 {
+		tags = strings.Join(item.Tags, ", ")
+	}
+	algo := metaString(item.Metadata, "algorithm")
+	if algo == "" {
+		algo = "SHA1"
+	}
+	return TwoFAAccount{
+		ID:        item.ID,
+		CreatedAt: item.CreatedAt,
+		UpdatedAt: item.UpdatedAt,
+		OrgID:     item.OrgID,
+		Name:      item.Name,
+		Issuer:    metaString(item.Metadata, "issuer"),
+		Account:   metaString(item.Metadata, "account"),
+		Algorithm: algo,
+		Digits:    metaInt(item.Metadata, "digits", 6),
+		Period:    metaInt(item.Metadata, "period", 30),
+		Tags:      tags,
+		Notes:     metaString(item.Metadata, "notes"),
+		Pinned:    metaBool(item.Metadata, "pinned"),
+	}
+}
+
+func metaToSummary(item plugin.VaultItemMeta, code string, rem int) AccountSummary {
+	acc := metaToAccount(item)
+	return AccountSummary{
+		ID:               acc.ID,
+		CreatedAt:        acc.CreatedAt,
+		UpdatedAt:        acc.UpdatedAt,
+		OrgID:            acc.OrgID,
+		Name:             acc.Name,
+		Issuer:           acc.Issuer,
+		Account:          acc.Account,
+		Algorithm:        acc.Algorithm,
+		Digits:           acc.Digits,
+		Period:           acc.Period,
+		Tags:             acc.Tags,
+		Notes:            acc.Notes,
+		Pinned:           acc.Pinned,
+		CurrentCode:      code,
+		SecondsRemaining: rem,
+	}
+}
+
+func buildTwoFAMetadata(acc *TwoFAAccount) map[string]any {
+	return map[string]any{
+		"issuer":    acc.Issuer,
+		"account":   acc.Account,
+		"algorithm": acc.Algorithm,
+		"digits":    acc.Digits,
+		"period":    acc.Period,
+		"tags":      acc.Tags,
+		"notes":     acc.Notes,
+		"pinned":    acc.Pinned,
+	}
+}
+
+func buildTwoFAPayload(acc *TwoFAAccount, secret string) map[string]any {
+	return map[string]any{
+		"issuer":     acc.Issuer,
+		"account":    acc.Account,
+		"secret":     secret,
+		"otpauthUri": BuildOTPAuthURI(acc, secret),
+	}
+}
+
+func splitTags(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	var out []string
+	for _, part := range parts {
+		if t := strings.TrimSpace(part); t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+func extractSecretFromPayload(payload map[string]any) string {
+	if payload == nil {
+		return ""
+	}
+	if s, ok := payload["secret"].(string); ok && strings.TrimSpace(s) != "" {
+		return NormalizeSecret(s)
+	}
+	if uri, ok := payload["otpauthUri"].(string); ok && strings.TrimSpace(uri) != "" {
+		if _, s, err := ParseOTPAuthURI(uri); err == nil {
+			return s
+		}
+	}
+	return ""
+}
 
 // listAccounts returns safe summaries for all 2FA accounts belonging to the active org,
 // including real-time TOTP codes and time remaining.
@@ -19,48 +158,40 @@ func (p *Plugin) listAccounts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tdb := p.tenantDB(r.Context(), orgID)
-	if tdb == nil {
-		http.Error(w, "database unavailable", http.StatusInternalServerError)
+	vs, err := p.vault()
+	if err != nil {
+		http.Error(w, "credential vault unavailable", http.StatusInternalServerError)
 		return
 	}
 
-	var accounts []TwoFAAccount
-	if err := tdb.Scoped(&TwoFAAccount{}).Order("pinned DESC, name ASC, id ASC").Find(&accounts).Error; err != nil {
+	items, err := vs.ListItems(r.Context(), orgID, plugin.VaultFilter{
+		Scope:    plugin.VaultScopeOrg,
+		ItemType: "twofa_totp",
+	})
+	if err != nil {
 		http.Error(w, "failed to query accounts", http.StatusInternalServerError)
 		return
 	}
 
-	now := time.Now()
-	summaries := make([]AccountSummary, 0, len(accounts))
-	for _, acc := range accounts {
-		var currentCode string
-		var rem int
-		if secret, err := p.decrypt(acc.EncryptedSecret); err == nil {
-			if code, err := GenerateCode(secret, now, acc.Period, acc.Digits, acc.Algorithm); err == nil {
-				currentCode = code
-				rem = SecondsRemaining(now, acc.Period)
-			}
+	summaries := make([]AccountSummary, 0, len(items))
+	for _, item := range items {
+		code, rem, cErr := vs.ComputeTOTP(r.Context(), orgID, item.ID)
+		if cErr != nil {
+			code = ""
+			rem = 0
 		}
-
-		summaries = append(summaries, AccountSummary{
-			ID:               acc.ID,
-			CreatedAt:        acc.CreatedAt,
-			UpdatedAt:        acc.UpdatedAt,
-			OrgID:            acc.OrgID,
-			Name:             acc.Name,
-			Issuer:           acc.Issuer,
-			Account:          acc.Account,
-			Algorithm:        acc.Algorithm,
-			Digits:           acc.Digits,
-			Period:           acc.Period,
-			Tags:             acc.Tags,
-			Notes:            acc.Notes,
-			Pinned:           acc.Pinned,
-			CurrentCode:      currentCode,
-			SecondsRemaining: rem,
-		})
+		summaries = append(summaries, metaToSummary(item, code, rem))
 	}
+
+	sort.Slice(summaries, func(i, j int) bool {
+		if summaries[i].Pinned != summaries[j].Pinned {
+			return summaries[i].Pinned
+		}
+		if summaries[i].Name != summaries[j].Name {
+			return summaries[i].Name < summaries[j].Name
+		}
+		return summaries[i].ID < summaries[j].ID
+	})
 
 	writeJSON(w, summaries)
 }
@@ -75,34 +206,30 @@ func (p *Plugin) getAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.URL.Query().Get("reveal") == "true" {
-		if !p.requireRole(r, "admin") {
-			http.Error(w, "forbidden: revealing secret requires admin role", http.StatusForbidden)
+	reveal := r.URL.Query().Get("reveal") == "true"
+	if reveal && !p.requireRole(r, "admin") {
+		http.Error(w, "forbidden: revealing secret requires admin role", http.StatusForbidden)
+		return
+	}
+
+	vs, err := p.vault()
+	if err != nil {
+		http.Error(w, "credential vault unavailable", http.StatusInternalServerError)
+		return
+	}
+
+	meta, err := vs.GetMeta(r.Context(), orgID, id)
+	if err != nil {
+		if errors.Is(err, plugin.ErrSecretNotFound) {
+			http.Error(w, "account not found", http.StatusNotFound)
 			return
 		}
-	}
-
-	tdb := p.tenantDB(r.Context(), orgID)
-	if tdb == nil {
-		http.Error(w, "database unavailable", http.StatusInternalServerError)
+		http.Error(w, "failed to load account", http.StatusInternalServerError)
 		return
 	}
 
-	var acc TwoFAAccount
-	if err := tdb.First(&acc, "id = ?", id).Error; err != nil {
-		http.Error(w, "account not found", http.StatusNotFound)
-		return
-	}
-
-	secret, err := p.decrypt(acc.EncryptedSecret)
-	if err != nil {
-		http.Error(w, "failed to decrypt secret", http.StatusInternalServerError)
-		return
-	}
-
-	now := time.Now()
-	currentCode, _ := GenerateCode(secret, now, acc.Period, acc.Digits, acc.Algorithm)
-	rem := SecondsRemaining(now, acc.Period)
+	acc := metaToAccount(*meta)
+	currentCode, rem, _ := vs.ComputeTOTP(r.Context(), orgID, id)
 
 	resp := map[string]any{
 		"id":                acc.ID,
@@ -122,8 +249,13 @@ func (p *Plugin) getAccount(w http.ResponseWriter, r *http.Request) {
 		"seconds_remaining": rem,
 	}
 
-	if r.URL.Query().Get("reveal") == "true" {
-		resp["secret"] = secret
+	if reveal {
+		sec, sErr := vs.GetSecret(r.Context(), orgID, id)
+		if sErr != nil {
+			http.Error(w, "failed to decrypt secret", http.StatusInternalServerError)
+			return
+		}
+		resp["secret"] = extractSecretFromPayload(sec.Payload)
 		p.logAudit(r.Context(), orgID, acc.ID, acc.Name, "view_secret", p.actor(r), r.RemoteAddr)
 	}
 
@@ -170,7 +302,6 @@ func (p *Plugin) createAccount(w http.ResponseWriter, r *http.Request) {
 		parsedSecret = s
 	}
 
-	// Request parameters override or provide manual data
 	if in.Name != "" {
 		acc.Name = in.Name
 	}
@@ -229,50 +360,34 @@ func (p *Plugin) createAccount(w http.ResponseWriter, r *http.Request) {
 		acc.Period = 30
 	}
 
-	tdb := p.tenantDB(r.Context(), orgID)
-	if tdb == nil {
-		http.Error(w, "database unavailable", http.StatusInternalServerError)
-		return
-	}
-
-	enc, err := p.encrypt(finalSecret)
+	vs, err := p.vault()
 	if err != nil {
-		http.Error(w, "encryption failed", http.StatusInternalServerError)
+		http.Error(w, "credential vault unavailable", http.StatusInternalServerError)
 		return
 	}
 
-	acc.OrgID = orgID
-	acc.EncryptedSecret = enc
-
-	if err := tdb.Create(&acc).Error; err != nil {
+	meta, err := vs.PutSecret(r.Context(), plugin.PutSecretRequest{
+		OrgID:          orgID,
+		Scope:          plugin.VaultScopeOrg,
+		CollectionSlug: "default",
+		ItemType:       "twofa_totp",
+		Name:           acc.Name,
+		Tags:           splitTags(acc.Tags),
+		Metadata:       buildTwoFAMetadata(&acc),
+		Payload:        buildTwoFAPayload(&acc, finalSecret),
+		ActorUserID:    p.actorUserID(r),
+	})
+	if err != nil {
 		http.Error(w, "failed to save account", http.StatusInternalServerError)
 		return
 	}
 
-	p.logAudit(r.Context(), orgID, acc.ID, acc.Name, "create_account", p.actor(r), r.RemoteAddr)
+	p.logAudit(r.Context(), orgID, meta.ID, meta.Name, "create_account", p.actor(r), r.RemoteAddr)
 
-	now := time.Now()
-	currentCode, _ := GenerateCode(finalSecret, now, acc.Period, acc.Digits, acc.Algorithm)
-	rem := SecondsRemaining(now, acc.Period)
+	currentCode, rem, _ := vs.ComputeTOTP(r.Context(), orgID, meta.ID)
 
 	w.WriteHeader(http.StatusCreated)
-	writeJSON(w, AccountSummary{
-		ID:               acc.ID,
-		CreatedAt:        acc.CreatedAt,
-		UpdatedAt:        acc.UpdatedAt,
-		OrgID:            acc.OrgID,
-		Name:             acc.Name,
-		Issuer:           acc.Issuer,
-		Account:          acc.Account,
-		Algorithm:        acc.Algorithm,
-		Digits:           acc.Digits,
-		Period:           acc.Period,
-		Tags:             acc.Tags,
-		Notes:            acc.Notes,
-		Pinned:           acc.Pinned,
-		CurrentCode:      currentCode,
-		SecondsRemaining: rem,
-	})
+	writeJSON(w, metaToSummary(*meta, currentCode, rem))
 }
 
 type updateAccountIn struct {
@@ -301,17 +416,22 @@ func (p *Plugin) updateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tdb := p.tenantDB(r.Context(), orgID)
-	if tdb == nil {
-		http.Error(w, "database unavailable", http.StatusInternalServerError)
+	vs, err := p.vault()
+	if err != nil {
+		http.Error(w, "credential vault unavailable", http.StatusInternalServerError)
 		return
 	}
 
-	var acc TwoFAAccount
-	if err := tdb.First(&acc, "id = ?", id).Error; err != nil {
-		http.Error(w, "account not found", http.StatusNotFound)
+	meta, err := vs.GetMeta(r.Context(), orgID, id)
+	if err != nil {
+		if errors.Is(err, plugin.ErrSecretNotFound) {
+			http.Error(w, "account not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "failed to load account", http.StatusInternalServerError)
 		return
 	}
+	acc := metaToAccount(*meta)
 
 	var in updateAccountIn
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
@@ -347,49 +467,26 @@ func (p *Plugin) updateAccount(w http.ResponseWriter, r *http.Request) {
 		acc.Pinned = *in.Pinned
 	}
 
+	var payload map[string]any
 	if in.Secret != "" {
 		clean := NormalizeSecret(in.Secret)
 		if _, err := DecodeBase32(clean); err != nil {
 			http.Error(w, "invalid base32 secret", http.StatusBadRequest)
 			return
 		}
-		enc, err := p.encrypt(clean)
-		if err != nil {
-			http.Error(w, "encryption failed", http.StatusInternalServerError)
-			return
-		}
-		acc.EncryptedSecret = enc
+		payload = buildTwoFAPayload(&acc, clean)
 	}
 
-	if err := tdb.Save(&acc).Error; err != nil {
+	updated, err := vs.UpdateSecret(r.Context(), orgID, id, &acc.Name, buildTwoFAMetadata(&acc), payload, nil, "Updated 2FA account", p.actorUserID(r))
+	if err != nil {
 		http.Error(w, "failed to update account", http.StatusInternalServerError)
 		return
 	}
 
-	p.logAudit(r.Context(), orgID, acc.ID, acc.Name, "update_account", p.actor(r), r.RemoteAddr)
+	p.logAudit(r.Context(), orgID, updated.ID, updated.Name, "update_account", p.actor(r), r.RemoteAddr)
 
-	secret, _ := p.decrypt(acc.EncryptedSecret)
-	now := time.Now()
-	currentCode, _ := GenerateCode(secret, now, acc.Period, acc.Digits, acc.Algorithm)
-	rem := SecondsRemaining(now, acc.Period)
-
-	writeJSON(w, AccountSummary{
-		ID:               acc.ID,
-		CreatedAt:        acc.CreatedAt,
-		UpdatedAt:        acc.UpdatedAt,
-		OrgID:            acc.OrgID,
-		Name:             acc.Name,
-		Issuer:           acc.Issuer,
-		Account:          acc.Account,
-		Algorithm:        acc.Algorithm,
-		Digits:           acc.Digits,
-		Period:           acc.Period,
-		Tags:             acc.Tags,
-		Notes:            acc.Notes,
-		Pinned:           acc.Pinned,
-		CurrentCode:      currentCode,
-		SecondsRemaining: rem,
-	})
+	currentCode, rem, _ := vs.ComputeTOTP(r.Context(), orgID, updated.ID)
+	writeJSON(w, metaToSummary(*updated, currentCode, rem))
 }
 
 func (p *Plugin) deleteAccount(w http.ResponseWriter, r *http.Request) {
@@ -405,24 +502,32 @@ func (p *Plugin) deleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tdb := p.tenantDB(r.Context(), orgID)
-	if tdb == nil {
-		http.Error(w, "database unavailable", http.StatusInternalServerError)
+	vs, err := p.vault()
+	if err != nil {
+		http.Error(w, "credential vault unavailable", http.StatusInternalServerError)
 		return
 	}
 
-	var acc TwoFAAccount
-	if err := tdb.First(&acc, "id = ?", id).Error; err != nil {
-		http.Error(w, "account not found", http.StatusNotFound)
+	meta, err := vs.GetMeta(r.Context(), orgID, id)
+	if err != nil {
+		if errors.Is(err, plugin.ErrSecretNotFound) {
+			http.Error(w, "account not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "failed to load account", http.StatusInternalServerError)
 		return
 	}
 
-	if err := tdb.Delete(&acc).Error; err != nil {
+	if err := vs.DeleteSecret(r.Context(), orgID, id); err != nil {
+		if errors.Is(err, plugin.ErrSecretNotFound) {
+			http.Error(w, "account not found", http.StatusNotFound)
+			return
+		}
 		http.Error(w, "failed to delete account", http.StatusInternalServerError)
 		return
 	}
 
-	p.logAudit(r.Context(), orgID, acc.ID, acc.Name, "delete_account", p.actor(r), r.RemoteAddr)
+	p.logAudit(r.Context(), orgID, meta.ID, meta.Name, "delete_account", p.actor(r), r.RemoteAddr)
 	writeJSON(w, map[string]bool{"deleted": true})
 }
 
@@ -434,21 +539,28 @@ func (p *Plugin) togglePin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tdb := p.tenantDB(r.Context(), orgID)
-	if tdb == nil {
-		http.Error(w, "database unavailable", http.StatusInternalServerError)
+	vs, err := p.vault()
+	if err != nil {
+		http.Error(w, "credential vault unavailable", http.StatusInternalServerError)
 		return
 	}
 
-	var acc TwoFAAccount
-	if err := tdb.First(&acc, "id = ?", id).Error; err != nil {
-		http.Error(w, "account not found", http.StatusNotFound)
+	meta, err := vs.GetMeta(r.Context(), orgID, id)
+	if err != nil {
+		if errors.Is(err, plugin.ErrSecretNotFound) {
+			http.Error(w, "account not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "failed to load account", http.StatusInternalServerError)
 		return
 	}
 
-	acc.Pinned = !acc.Pinned
-	_ = tdb.Save(&acc)
-	writeJSON(w, map[string]bool{"pinned": acc.Pinned})
+	pinned := !metaBool(meta.Metadata, "pinned")
+	if _, err := vs.UpdateSecret(r.Context(), orgID, id, nil, map[string]any{"pinned": pinned}, nil, nil, "Toggled pin", p.actorUserID(r)); err != nil {
+		http.Error(w, "failed to update pin", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]bool{"pinned": pinned})
 }
 
 func (p *Plugin) getCode(w http.ResponseWriter, r *http.Request) {
@@ -459,37 +571,33 @@ func (p *Plugin) getCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tdb := p.tenantDB(r.Context(), orgID)
-	if tdb == nil {
-		http.Error(w, "database unavailable", http.StatusInternalServerError)
-		return
-	}
-
-	var acc TwoFAAccount
-	if err := tdb.First(&acc, "id = ?", id).Error; err != nil {
-		http.Error(w, "account not found", http.StatusNotFound)
-		return
-	}
-
-	secret, err := p.decrypt(acc.EncryptedSecret)
+	vs, err := p.vault()
 	if err != nil {
-		http.Error(w, "failed to decrypt secret", http.StatusInternalServerError)
+		http.Error(w, "credential vault unavailable", http.StatusInternalServerError)
 		return
 	}
 
-	now := time.Now()
-	code, err := GenerateCode(secret, now, acc.Period, acc.Digits, acc.Algorithm)
+	meta, err := vs.GetMeta(r.Context(), orgID, id)
+	if err != nil {
+		if errors.Is(err, plugin.ErrSecretNotFound) {
+			http.Error(w, "account not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "failed to load account", http.StatusInternalServerError)
+		return
+	}
+
+	code, rem, err := vs.ComputeTOTP(r.Context(), orgID, id)
 	if err != nil {
 		http.Error(w, "failed to generate code", http.StatusInternalServerError)
 		return
 	}
-	rem := SecondsRemaining(now, acc.Period)
-	validUntil := now.Add(time.Duration(rem) * time.Second)
+	validUntil := time.Now().Add(time.Duration(rem) * time.Second)
 
-	p.logAudit(r.Context(), orgID, acc.ID, acc.Name, "generate_code", p.actor(r), r.RemoteAddr)
+	p.logAudit(r.Context(), orgID, meta.ID, meta.Name, "generate_code", p.actor(r), r.RemoteAddr)
 
 	writeJSON(w, map[string]any{
-		"id":                acc.ID,
+		"id":                meta.ID,
 		"code":              code,
 		"seconds_remaining": rem,
 		"valid_until":       validUntil.UTC().Format(time.RFC3339),
@@ -514,24 +622,24 @@ func (p *Plugin) verifyCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tdb := p.tenantDB(r.Context(), orgID)
-	if tdb == nil {
-		http.Error(w, "database unavailable", http.StatusInternalServerError)
-		return
-	}
-
-	var acc TwoFAAccount
-	if err := tdb.First(&acc, "id = ?", id).Error; err != nil {
-		http.Error(w, "account not found", http.StatusNotFound)
-		return
-	}
-
-	secret, err := p.decrypt(acc.EncryptedSecret)
+	vs, err := p.vault()
 	if err != nil {
+		http.Error(w, "credential vault unavailable", http.StatusInternalServerError)
+		return
+	}
+
+	sec, err := vs.GetSecret(r.Context(), orgID, id)
+	if err != nil {
+		if errors.Is(err, plugin.ErrSecretNotFound) {
+			http.Error(w, "account not found", http.StatusNotFound)
+			return
+		}
 		http.Error(w, "failed to decrypt secret", http.StatusInternalServerError)
 		return
 	}
 
+	acc := metaToAccount(sec.Meta)
+	secret := extractSecretFromPayload(sec.Payload)
 	valid := VerifyCode(secret, in.Code, time.Now(), acc.Period, acc.Digits, acc.Algorithm, 1)
 	p.logAudit(r.Context(), orgID, acc.ID, acc.Name, "verify_code", p.actor(r), r.RemoteAddr)
 
@@ -551,24 +659,24 @@ func (p *Plugin) getQRCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tdb := p.tenantDB(r.Context(), orgID)
-	if tdb == nil {
-		http.Error(w, "database unavailable", http.StatusInternalServerError)
-		return
-	}
-
-	var acc TwoFAAccount
-	if err := tdb.First(&acc, "id = ?", id).Error; err != nil {
-		http.Error(w, "account not found", http.StatusNotFound)
-		return
-	}
-
-	secret, err := p.decrypt(acc.EncryptedSecret)
+	vs, err := p.vault()
 	if err != nil {
+		http.Error(w, "credential vault unavailable", http.StatusInternalServerError)
+		return
+	}
+
+	sec, err := vs.GetSecret(r.Context(), orgID, id)
+	if err != nil {
+		if errors.Is(err, plugin.ErrSecretNotFound) {
+			http.Error(w, "account not found", http.StatusNotFound)
+			return
+		}
 		http.Error(w, "failed to decrypt secret", http.StatusInternalServerError)
 		return
 	}
 
+	acc := metaToAccount(sec.Meta)
+	secret := extractSecretFromPayload(sec.Payload)
 	uri := BuildOTPAuthURI(&acc, secret)
 	p.logAudit(r.Context(), orgID, acc.ID, acc.Name, "view_qr", p.actor(r), r.RemoteAddr)
 
@@ -607,9 +715,9 @@ func (p *Plugin) importAccounts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tdb := p.tenantDB(r.Context(), orgID)
-	if tdb == nil {
-		http.Error(w, "database unavailable", http.StatusInternalServerError)
+	vs, err := p.vault()
+	if err != nil {
+		http.Error(w, "credential vault unavailable", http.StatusInternalServerError)
 		return
 	}
 
@@ -621,6 +729,7 @@ func (p *Plugin) importAccounts(w http.ResponseWriter, r *http.Request) {
 
 	imported := 0
 	errs := make([]string, 0)
+	actorID := p.actorUserID(r)
 
 	for idx, u := range in.URIs {
 		u = strings.TrimSpace(u)
@@ -633,14 +742,6 @@ func (p *Plugin) importAccounts(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		enc, err := p.encrypt(s)
-		if err != nil {
-			errs = append(errs, fmt.Sprintf("line %d: encryption error", idx+1))
-			continue
-		}
-
-		acc.OrgID = orgID
-		acc.EncryptedSecret = enc
 		if in.Tags != "" {
 			if acc.Tags != "" {
 				acc.Tags += ", " + in.Tags
@@ -649,8 +750,18 @@ func (p *Plugin) importAccounts(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		if err := tdb.Create(acc).Error; err != nil {
-			errs = append(errs, fmt.Sprintf("line %d: db error: %v", idx+1, err))
+		if _, err := vs.PutSecret(r.Context(), plugin.PutSecretRequest{
+			OrgID:          orgID,
+			Scope:          plugin.VaultScopeOrg,
+			CollectionSlug: "default",
+			ItemType:       "twofa_totp",
+			Name:           acc.Name,
+			Tags:           splitTags(acc.Tags),
+			Metadata:       buildTwoFAMetadata(acc),
+			Payload:        buildTwoFAPayload(acc, s),
+			ActorUserID:    actorID,
+		}); err != nil {
+			errs = append(errs, fmt.Sprintf("line %d: vault error: %v", idx+1, err))
 			continue
 		}
 		imported++
@@ -676,15 +787,18 @@ func (p *Plugin) exportAccounts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tdb := p.tenantDB(r.Context(), orgID)
-	if tdb == nil {
-		http.Error(w, "database unavailable", http.StatusInternalServerError)
+	vs, err := p.vault()
+	if err != nil {
+		http.Error(w, "credential vault unavailable", http.StatusInternalServerError)
 		return
 	}
 
-	var accounts []TwoFAAccount
-	if err := tdb.Find(&accounts).Error; err != nil {
-		http.Error(w, "db error", http.StatusInternalServerError)
+	items, err := vs.ListItems(r.Context(), orgID, plugin.VaultFilter{
+		Scope:    plugin.VaultScopeOrg,
+		ItemType: "twofa_totp",
+	})
+	if err != nil {
+		http.Error(w, "vault query error", http.StatusInternalServerError)
 		return
 	}
 
@@ -700,12 +814,14 @@ func (p *Plugin) exportAccounts(w http.ResponseWriter, r *http.Request) {
 		URI       string `json:"uri"`
 	}
 
-	out := make([]exportItem, 0, len(accounts))
-	for _, acc := range accounts {
-		secret, err := p.decrypt(acc.EncryptedSecret)
+	out := make([]exportItem, 0, len(items))
+	for _, item := range items {
+		sec, err := vs.GetSecret(r.Context(), orgID, item.ID)
 		if err != nil {
 			continue
 		}
+		acc := metaToAccount(sec.Meta)
+		secret := extractSecretFromPayload(sec.Payload)
 		uri := BuildOTPAuthURI(&acc, secret)
 		out = append(out, exportItem{
 			Name:      acc.Name,
@@ -777,12 +893,16 @@ func (p *Plugin) requireRole(r *http.Request, min string) bool {
 	return false
 }
 
+func (p *Plugin) actorUserID(r *http.Request) uint {
+	if p.host != nil && p.host.Session() != nil && r != nil {
+		return p.host.Session().UserID(r)
+	}
+	return 0
+}
+
 func (p *Plugin) actor(r *http.Request) string {
-	if p.host != nil && p.host.Session() != nil {
-		uid := p.host.Session().UserID(r)
-		if uid > 0 {
-			return fmt.Sprintf("user:%d", uid)
-		}
+	if uid := p.actorUserID(r); uid > 0 {
+		return fmt.Sprintf("user:%d", uid)
 	}
 	return "dashboard"
 }

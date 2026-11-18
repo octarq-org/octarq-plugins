@@ -2,11 +2,9 @@ package dns
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -15,13 +13,10 @@ import (
 
 var errBoom = errors.New("boom")
 
-// setupProviderDB is setupFullDNSTestDB plus the encrypt seam the provider
-// CRUD paths need (the base harness only wires decrypt).
+// setupProviderDB is setupFreshTestDB with VaultService wired.
 func setupProviderDB(t *testing.T) (*Plugin, func(req *http.Request) huma.Context) {
 	t.Helper()
-	p, mkCtx := setupFreshTestDB(t)
-	p.encrypt = func(b []byte) (string, error) { return string(b), nil }
-	return p, mkCtx
+	return setupFreshTestDB(t)
 }
 
 var auditCalls []string
@@ -53,7 +48,7 @@ func TestProviderAccountCRUDFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("createProviderAccount: %v", err)
 	}
-	if created.Body.ID == 0 || created.Body.Name != "Personal CF" || !created.Body.HasCredentials {
+	if created.Body.ID == 0 || created.Body.Name != "Personal CF" || !created.Body.HasCredentials || created.Body.VaultItemID == 0 {
 		t.Fatalf("created account wrong: %+v", created.Body)
 	}
 	if len(auditCalls) != 1 || auditCalls[0] != "provider.create" {
@@ -63,8 +58,9 @@ func TestProviderAccountCRUDFlow(t *testing.T) {
 	if err := p.db.First(&stored, created.Body.ID).Error; err != nil {
 		t.Fatalf("reload: %v", err)
 	}
-	if stored.Config != `{"apiToken":"tok"}` {
-		t.Errorf("stored encrypted config = %q", stored.Config)
+	sec, err := p.vaultSvc.GetSecret(ctx, 1, stored.VaultItemID)
+	if err != nil || sec.Payload["apiToken"] != "tok" {
+		t.Errorf("vault secret = %+v, err=%v", sec, err)
 	}
 
 	// List, including a second account without credentials.
@@ -93,14 +89,18 @@ func TestProviderAccountCRUDFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("updateProviderAccount: %v", err)
 	}
-	if updated.Body.Name != "Renamed" || updated.Body.Config != `{"apiToken":"new"}` {
+	if updated.Body.Name != "Renamed" || !updated.Body.HasCredentials {
 		t.Errorf("updated account = %+v", updated.Body)
+	}
+	secUpdated, err := p.vaultSvc.GetSecret(ctx, 1, updated.Body.VaultItemID)
+	if err != nil || secUpdated.Payload["apiToken"] != "new" {
+		t.Errorf("updated vault secret = %+v, err=%v", secUpdated, err)
 	}
 	if len(auditCalls) != 2 || auditCalls[1] != "provider.update" {
 		t.Errorf("expected provider.update audit, got %v", auditCalls)
 	}
 
-	// Delete.
+	// Delete (shreds Vault secret too).
 	del, err := p.deleteProviderAccount(ctx, &DeleteProviderAccountInput{Ctx: mkAdmin(t, mkCtx), ID: created.Body.ID})
 	if err != nil || !del.Body["ok"] {
 		t.Fatalf("deleteProviderAccount: %v", err)
@@ -112,6 +112,9 @@ func TestProviderAccountCRUDFlow(t *testing.T) {
 	p.db.Model(&ProviderAccount{}).Where("id = ?", created.Body.ID).Count(&n)
 	if n != 0 {
 		t.Errorf("account row still present after delete")
+	}
+	if _, err := p.vaultSvc.GetSecret(ctx, 1, stored.VaultItemID); !errors.Is(err, plugin.ErrSecretNotFound) {
+		t.Errorf("expected vault secret to be deleted, got %v", err)
 	}
 }
 
@@ -206,20 +209,21 @@ func TestDeleteProviderAccountInUseByDomain(t *testing.T) {
 	}
 }
 
-func TestProviderAccountEncryptFailure(t *testing.T) {
+func TestProviderAccountVaultFailure(t *testing.T) {
 	p, mkCtx := setupProviderDB(t)
-	p.encrypt = func([]byte) (string, error) { return "", errBoom }
+	mv := p.vaultSvc.(*mockVaultService)
+	mv.putErr = errBoom
 	ctx := context.Background()
 
 	_, err := p.createProviderAccount(ctx, &CreateProviderAccountInput{
 		Ctx: mkAdmin(t, mkCtx), Body: providerAccountDTO{Name: "n", Type: "t", Config: map[string]any{"k": "v"}},
 	})
 	if got := statusOf(t, err); got != http.StatusInternalServerError {
-		t.Fatalf("encrypt failure: want 500, got %d", got)
+		t.Fatalf("vault failure: want 500, got %d", got)
 	}
 
 	// Empty config maps to no stored credentials at all.
-	p.encrypt = func(b []byte) (string, error) { return string(b), nil }
+	mv.putErr = nil
 	created, err := p.createProviderAccount(ctx, &CreateProviderAccountInput{
 		Ctx: mkAdmin(t, mkCtx), Body: providerAccountDTO{Name: "n", Type: "t"},
 	})
@@ -231,49 +235,31 @@ func TestProviderAccountEncryptFailure(t *testing.T) {
 	}
 }
 
-func TestEncryptConfig(t *testing.T) {
-	p := &Plugin{encrypt: func(b []byte) (string, error) { return "enc[" + string(b) + "]", nil }}
-	if s, err := p.encryptConfig(nil); err != nil || s != "" {
-		t.Errorf("encryptConfig(nil) = %q, %v; want empty", s, err)
-	}
-	s, err := p.encryptConfig(map[string]any{"a": "b"})
-	if err != nil || s != `enc[{"a":"b"}]` {
-		t.Errorf("encryptConfig(map) = %q, %v", s, err)
-	}
-	// An unserializable value surfaces the marshal error.
-	p.encrypt = func(b []byte) (string, error) { return "", errBoom }
-	_, err = p.encryptConfig(map[string]any{"ch": make(chan int)})
-	if err == nil || !strings.Contains(err.Error(), "unsupported type") {
-		t.Errorf("encryptConfig marshal err = %v, want unsupported-type error", err)
-	}
-}
-
-func TestHostSPI_DNSCredentialBridge(t *testing.T) {
+func TestVaultService_DNSCredentialResolution(t *testing.T) {
 	p, _ := setupFreshTestDB(t)
 	p.orgID = func(r *http.Request) uint { return 10 }
+	mv := p.vaultSvc.(*mockVaultService)
 
-	th := &plugin.TestHost{
-		LookupCredentialMock: func(ctx context.Context, orgID uint, query plugin.CredentialQuery) (*plugin.Credential, error) {
-			if orgID == 10 && query.ID == 88 && query.ProviderType == "dns" {
-				return &plugin.Credential{
-					ID:           88,
-					OrgID:        10,
-					ProviderType: "dns",
-					Provider:     "cloudflare",
-					Name:         "Pro CF Account",
-					ConfigJSON:   json.RawMessage(`{"apiToken":"pro-token-xyz"}`),
-				}, nil
-			}
-			return nil, plugin.ErrCredentialNotFound
-		},
+	// Direct Vault integration item (no ProviderAccount row).
+	meta, err := mv.PutSecret(context.Background(), plugin.PutSecretRequest{
+		OrgID:          10,
+		Scope:          plugin.VaultScopeOrg,
+		CollectionSlug: "integrations",
+		ItemType:       "integration",
+		ProviderType:   "dns",
+		Provider:       "cloudflare",
+		Name:           "Vault CF Account",
+		Payload:        map[string]any{"apiToken": "pro-token-xyz"},
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
-	p.host = th
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 
-	// 1. ownsProviderAccount: ID 88 exists in Host SPI -> returns true
-	if owned, err := p.ownsProviderAccount(req, 88); !owned || err != nil {
-		t.Errorf("expected ownsProviderAccount(88) = true via Host SPI, got %v, %v", owned, err)
+	// 1. ownsProviderAccount: Vault item ID exists for org 10 -> returns true
+	if owned, err := p.ownsProviderAccount(req, meta.ID); !owned || err != nil {
+		t.Errorf("expected ownsProviderAccount(%d) = true via Vault, got %v, %v", meta.ID, owned, err)
 	}
 
 	// 2. ownsProviderAccount: ID 999 does not exist anywhere -> returns false
@@ -281,70 +267,54 @@ func TestHostSPI_DNSCredentialBridge(t *testing.T) {
 		t.Errorf("expected ownsProviderAccount(999) = false, got %v, %v", owned, err)
 	}
 
-	// 3. providerFor: resolves cloudflare provider via Host SPI
+	// 3. providerFor: resolves cloudflare provider via Vault
 	prov, err := p.providerFor(Domain{
 		OrgID:             10,
-		ProviderAccountID: 88,
+		ProviderAccountID: meta.ID,
 	})
 	if err != nil {
 		t.Fatalf("providerFor failed: %v", err)
 	}
 	if prov == nil {
-		t.Fatal("expected non-nil provider from Host SPI")
+		t.Fatal("expected non-nil provider from Vault")
 	}
 
-	// 4. A mounted Hub owns the answer: the same-numbered local row is not a
-	// fallback, because the registries number their rows independently.
-	p.decrypt = func(s string) ([]byte, error) { return []byte(s), nil }
-	p.db.Create(&ProviderAccount{
-		ID:     50,
-		OrgID:  10,
-		Name:   "Local OSS Account",
-		Type:   "cloudflare",
-		Config: `{"apiToken":"oss-token-abc"}`,
+	// 4. Missing VaultService fails closed with errProviderCredentials (zero fallback).
+	p.vaultSvc = nil
+	if owned, err := p.ownsProviderAccount(req, meta.ID); owned || !errors.Is(err, errProviderCredentials) {
+		t.Errorf("expected missing Vault to surface as errProviderCredentials, got %v, %v", owned, err)
+	}
+	if _, err := p.providerFor(Domain{OrgID: 10, ProviderAccountID: meta.ID}); !errors.Is(err, errProviderCredentials) {
+		t.Errorf("expected missing Vault to surface as errProviderCredentials, got %v", err)
+	}
+
+	// 5. Vault read error fails closed with errProviderCredentials.
+	mv.getErr = errors.New("database is locked")
+	mv.metaErr = errors.New("database is locked")
+	p.vaultSvc = mv
+	if owned, err := p.ownsProviderAccount(req, meta.ID); owned || !errors.Is(err, errProviderCredentials) {
+		t.Errorf("expected broken Vault to surface as errProviderCredentials, got %v, %v", owned, err)
+	}
+	if _, err := p.providerFor(Domain{OrgID: 10, ProviderAccountID: meta.ID}); !errors.Is(err, errProviderCredentials) {
+		t.Errorf("expected broken Vault to surface as errProviderCredentials, got %v", err)
+	}
+	mv.getErr = nil
+	mv.metaErr = nil
+
+	// 6. An integration with no payload is unusable and says so.
+	emptyMeta, err := mv.PutSecret(context.Background(), plugin.PutSecretRequest{
+		OrgID:        10,
+		Scope:        plugin.VaultScopeOrg,
+		ItemType:     "integration",
+		ProviderType: "dns",
+		Provider:     "cloudflare",
+		Name:         "Empty CF",
+		Payload:      nil,
 	})
-
-	if owned, err := p.ownsProviderAccount(req, 50); owned || err != nil {
-		t.Errorf("a local row must not be owned while the Hub is mounted, got %v, %v", owned, err)
-	}
-	if _, err := p.providerFor(Domain{OrgID: 10, ProviderAccountID: 50}); !errors.Is(err, errProviderAccountNotFound) {
-		t.Errorf("expected no local fallback while the Hub is mounted, got %v", err)
-	}
-
-	// 5. Standalone Core (no resolver) reads the local table.
-	p.host = nil
-	if owned, err := p.ownsProviderAccount(req, 50); !owned || err != nil {
-		t.Errorf("expected ownsProviderAccount(50) = true without a Hub, got %v, %v", owned, err)
-	}
-	provLocal, err := p.providerFor(Domain{OrgID: 10, ProviderAccountID: 50})
 	if err != nil {
-		t.Fatalf("standalone providerFor failed: %v", err)
+		t.Fatal(err)
 	}
-	if provLocal == nil {
-		t.Fatal("expected non-nil provider from the local table")
-	}
-
-	// 6. A Hub that fails for another reason is an error. Neither a local row
-	// nor a silent "no account" is an acceptable answer.
-	p.host = &plugin.TestHost{
-		LookupCredentialMock: func(context.Context, uint, plugin.CredentialQuery) (*plugin.Credential, error) {
-			return nil, errors.New("database is locked")
-		},
-	}
-	if owned, err := p.ownsProviderAccount(req, 50); owned || !errors.Is(err, errProviderCredentials) {
-		t.Errorf("expected a broken Hub to surface as errProviderCredentials, got %v, %v", owned, err)
-	}
-	if _, err := p.providerFor(Domain{OrgID: 10, ProviderAccountID: 50}); !errors.Is(err, errProviderCredentials) {
-		t.Errorf("expected a broken Hub to surface as errProviderCredentials, got %v", err)
-	}
-
-	// 7. An integration with no stored config is unusable and says so.
-	p.host = &plugin.TestHost{
-		LookupCredentialMock: func(_ context.Context, orgID uint, _ plugin.CredentialQuery) (*plugin.Credential, error) {
-			return &plugin.Credential{ID: 88, OrgID: orgID, Provider: "cloudflare"}, nil
-		},
-	}
-	if _, err := p.providerFor(Domain{OrgID: 10, ProviderAccountID: 88}); !errors.Is(err, errProviderCredentials) {
+	if _, err := p.providerFor(Domain{OrgID: 10, ProviderAccountID: emptyMeta.ID}); !errors.Is(err, errProviderCredentials) {
 		t.Errorf("expected an empty integration to surface as errProviderCredentials, got %v", err)
 	}
 }

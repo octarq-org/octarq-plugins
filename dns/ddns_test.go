@@ -133,16 +133,11 @@ func TestDDNSUpdateEndpoint(t *testing.T) {
 		return mockProv, nil
 	})
 
-	_, srv, db := newVerifyHarness(t)
+	p, srv, db := newVerifyHarness(t)
 	const orgID = uint(1)
 
-	acc := ProviderAccount{
-		OrgID:  orgID,
-		Name:   "Mock Provider",
-		Type:   "mock_ddns",
-		Config: "mock_config",
-	}
-	if err := db.Create(&acc).Error; err != nil {
+	acc, err := seedVaultProviderAccount(p, orgID, "Mock Provider", "mock_ddns", map[string]any{"apiToken": "mock_config"})
+	if err != nil {
 		t.Fatalf("failed to create provider account: %v", err)
 	}
 

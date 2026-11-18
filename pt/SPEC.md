@@ -25,14 +25,15 @@ Out of scope for v1: browsers, captcha solving, Cloudflare bypass, 2FA automatio
 
 ## 2. Data Model
 
-Four tables. Every row carries `org_id` directly; the plugin never joins through another tenant table. Models use explicit `ID/CreatedAt/UpdatedAt` and no soft delete: deleting a tracker must remove its ciphertext, and a soft delete would keep it.
+Three tables. Every row carries `org_id` directly; the plugin never joins through another tenant table. Models use explicit `ID/CreatedAt/UpdatedAt` and no soft delete: deleting a tracker must remove its Vault secret, and a soft delete would keep it.
 
 ### 2.1 `pt_trackers`
 
 | Column | Notes |
 |---|---|
 | `org_id`, `name` | Unique pair `idx_pt_tracker_org_name` |
-| `secret_id` | Immutable UUID, unique; the credential subject name |
+| `secret_id` | Immutable UUID, unique; anchors the Vault `KeyName` (`pt.tracker.<secret_id>`) |
+| `vault_item_id` | Foreign ID of the encrypted `tracker_credential` item in `VaultService` |
 | `base_url`, `api_base_url`, `domain` | Domain is indexed; API base is separate because M-Team serves the site and the API on different hosts |
 | `schema_key` | One of the registered adapters (`nexusphp`, `mteam`, `hddolby`, `rousi`) |
 | `username`, `user_agent`, `timezone` | |
@@ -47,24 +48,13 @@ Four tables. Every row carries `org_id` directly; the plugin never joins through
 | `last_notified_outcome` | Notification de-duplication, not exposed |
 | `latest_snapshot_id`, `created_by_user_id` | |
 
-### 2.2 `pt_credentials`
-
-One row per tracker (`idx_pt_cred_org_tracker` unique on `org_id, tracker_id`).
-
-| Column | Notes |
-|---|---|
-| `ciphertext` | Encrypted JSON `{"login","cookie","site_api_token","token"}`; `json:"-"` |
-| `secret_version` | Increments on every write |
-| `has_login_secret`, `has_cookie`, `has_api_key` | Presence flags for the API |
-| `last_login_at`, `login_failures` | |
-
-### 2.3 `pt_snapshots`
+### 2.2 `pt_snapshots`
 
 One row per data refresh. Ordered index `idx_pt_snapshot_org_tracker_time` on `org_id, tracker_id, captured_at`.
 
 Metric columns (`uploaded_bytes`, `downloaded_bytes`, `ratio`, `bonus`, `seeding`, `leeching`, `seeding_size_bytes`, `leeching_size_bytes`, `unread_messages`, `warning_count`, `hit_and_run_count`, `invites`) are pointers. A site that does not report a value stores `NULL`, never `0`. Missing upload or download is a parse error; every other metric is best-effort.
 
-### 2.4 `pt_signin_results`
+### 2.3 `pt_signin_results`
 
 Append-only ledger. Index `idx_pt_signin_org_tracker_time` on `org_id, tracker_id, attempted_at`, plus an index on `outcome`.
 
@@ -78,22 +68,17 @@ Append-only ledger. Index `idx_pt_signin_org_tracker_time` on `org_id, tracker_i
 
 ---
 
-## 3. Credential Encryption
+## 3. Credential Storage (`VaultService`)
 
-```go
-vault, err := host.Crypto().SubjectVault(orgID, "pt.tracker."+tracker.SecretID)
-blob, err := vault.EncryptWithAAD(plaintext, []byte("pt:v1:"+orgID+":"+tracker.SecretID))
-```
+Tracker secrets (`login`, `cookie`, `site_api_token`, `token`) are stored in the core `plugin.VaultService` (`item_type="tracker_credential"`, `provider_type="tracker"`, `KeyName="pt.tracker."+tracker.SecretID`), with `vault_item_id` recorded on `pt_trackers`.
 
-- **Subject key**: one data key per `(orgID, secret_id)`. There is no fallback to the instance key.
-- **AAD**: `pt:v1:<orgID>:<secret_id>`. Both parts are immutable. A domain or schema in the AAD would make a rename destroy the ciphertext.
-- **Cross-binding**: a ciphertext moved to another tracker or workspace fails authentication, because both the key and the AAD differ.
-- **Write order**: insert the tracker first (it carries `secret_id`), then encrypt and write the credential. A credential write failure deletes the tracker and shreds the key.
-- **Delete**: a tenant transaction hard-deletes all four tables' rows, then `ShredSubjectKey`. A shred failure is a health warning only; the ciphertext is already gone.
-- **Rotation**: `CryptoVault` has no DEK rotation primitive. Replacing a secret re-encrypts under the same subject and increments `secret_version`. Do not claim key rotation.
+- **Workspace & item isolation**: `VaultService` seals each item under its own per-item `SubjectVault` DEK and enforces `org_id` scoping on every read/write/delete.
+- **Write order**: insert the tracker first (it carries `secret_id`), then store the secret in `VaultService` and record `vault_item_id`. A credential write failure deletes the tracker and shreds any created secret.
+- **Delete**: a tenant transaction hard-deletes all three tables' rows, then calls `VaultService.DeleteSecret` to shred the DEK.
+- **Presence flags without decryption**: `buildView` and `mcpView` call `VaultService.GetMeta` (`FieldKeys`, `CurrentVersion`) and never decrypt secrets for display.
 - **No read-back**: no endpoint returns the ciphertext or the plaintext. Responses carry presence flags only.
 
-`Validate` fails closed when the vault is missing: storing account secrets in plaintext is not a degraded mode. The host captured at an HTTP mount is the one validated, because it is the one the plugin keeps. Core validates the stdio MCP path against a no-op host, but the plugin does not adopt that stub (see `Mount`), so the real vault still answers. An MCP-only process that never mounted a real host has no vault and refuses to start. `HasEncryptedData` reports true while any non-empty ciphertext exists, so core can refuse to boot after a backup restore that lost the data key.
+`Validate` fails closed when `VaultService` is missing: storing account secrets unencrypted is not a degraded mode. The context captured at an HTTP mount is kept across stdio MCP re-mounts (see `Mount`).
 
 ---
 

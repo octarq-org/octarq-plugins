@@ -21,6 +21,7 @@ func setupMailboxTestDB(t *testing.T) (*gorm.DB, *Plugin) {
 		t.Fatalf("open db: %v", err)
 	}
 	p := New()
+	p.vaultSvc = newMockVaultService()
 	if err := db.AutoMigrate(append(testAllModels(), p.Models()...)...); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}

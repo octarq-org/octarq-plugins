@@ -72,19 +72,21 @@ func TestCreateSMTPSenderEdges(t *testing.T) {
 	if _, err := p.createSMTPSender(ctx, private); err == nil {
 		t.Error("private IP host must fail")
 	}
-	// Encrypt unavailable -> 500.
-	p.encrypt = nil
+	// Vault unavailable -> 500.
+	mv := p.vaultSvc.(*mockVaultService)
+	p.vaultSvc = nil
 	if _, err := p.createSMTPSender(ctx, full()); err == nil {
-		t.Error("missing encrypt seam must fail with 500")
+		t.Error("missing vault seam must fail with 500")
 	}
-	// Encrypt error -> 500.
-	p.encrypt = func([]byte) (string, error) { return "", errBoom }
+	// Vault error -> 500.
+	mv.putErr = errBoom
+	p.vaultSvc = mv
 	if _, err := p.createSMTPSender(ctx, full()); err == nil {
-		t.Error("encrypt failure must fail with 500")
+		t.Error("vault failure must fail with 500")
 	}
 
-	// Success records the seam and exposes PassSet.
-	p.encrypt = func(b []byte) (string, error) { return "enc:" + string(b), nil }
+	// Success records the audit and exposes PassSet.
+	mv.putErr = nil
 	audited := 0
 	p.audit = func(*http.Request, string, string, uint, map[string]any) { audited++ }
 	out, err := p.createSMTPSender(ctx, full())
@@ -151,9 +153,8 @@ func TestUpdateSMTPSenderEdges(t *testing.T) {
 		t.Errorf("update not persisted: %+v", out.Body)
 	}
 
-	// Password rotation re-encrypts.
+	// Password rotation updates Vault secret.
 	newPass := "newpass"
-	p.encrypt = func(b []byte) (string, error) { return "enc:" + string(b), nil }
 	rot, err := p.updateSMTPSender(ctx, &UpdateSMTPSenderInput{
 		Ctx: mkCtx(httptest.NewRequest(http.MethodPut, "/api/smtp-senders/1", nil)),
 		ID:  id,
@@ -169,8 +170,9 @@ func TestUpdateSMTPSenderEdges(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rotate password: %v", err)
 	}
-	if rot.Body.Pass != "enc:newpass" {
-		t.Errorf("password not re-encrypted: %q", rot.Body.Pass)
+	sec, secErr := p.vaultSvc.GetSecret(ctx, 1, rot.Body.VaultItemID)
+	if secErr != nil || sec.Payload["secretKey"] != "newpass" {
+		t.Errorf("password not updated in vault: sec=%+v err=%v", sec, secErr)
 	}
 
 	// Invalid target after update -> 422.
@@ -226,7 +228,6 @@ func TestDeleteSMTPSenderEdges(t *testing.T) {
 func TestListSMTPSendersExposesPassSet(t *testing.T) {
 	p, mkCtx := setupFullMailTestDB(t)
 	wipeMailTables(t, p)
-	p.encrypt = func(b []byte) (string, error) { return "enc:" + string(b), nil }
 	if _, err := p.createSMTPSender(context.Background(), &CreateSMTPSenderInput{
 		Ctx: mkCtx(httptest.NewRequest(http.MethodPost, "/api/smtp-senders", nil)),
 		Body: struct {

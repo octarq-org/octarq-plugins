@@ -50,29 +50,27 @@ func (p *Plugin) resolveSender(ctx context.Context, orgID, id uint, source strin
 
 	switch source {
 	case SenderSourceIntegration:
-		cred, err := p.credentialHost().LookupCredential(ctx, orgID, plugin.CredentialQuery{
-			ID:           id,
-			ProviderType: "communication",
-		})
-		if errors.Is(err, plugin.ErrCredentialResolverUnavailable) {
-			return nil, "", senderErr(errSenderNotFound, "The Integrations Hub is not available on this instance. Select a local SMTP sender.")
+		vs, vErr := p.vault()
+		if vErr != nil {
+			return nil, "", senderErr(errSenderUnavailable, "Credential vault is unavailable. Try again later.")
 		}
+		sec, err := vs.GetSecret(ctx, orgID, id)
 		if err != nil {
-			if errors.Is(err, plugin.ErrCredentialNotFound) {
-				return nil, "", senderErr(errSenderNotFound, "The selected integration does not exist. Select a sender from the Integrations Hub.")
+			if errors.Is(err, plugin.ErrSecretNotFound) {
+				return nil, "", senderErr(errSenderNotFound, "The selected integration does not exist. Select a sender from the Vault.")
 			}
 			return nil, "", senderErr(errSenderUnavailable, "Could not resolve SMTP sender credentials. Try again later.")
 		}
-		if cred == nil || cred.OrgID != orgID {
-			return nil, "", senderErr(errSenderNotFound, "The selected integration does not exist. Select a sender from the Integrations Hub.")
+		if sec == nil || sec.Meta.OrgID != orgID || sec.Meta.ProviderType != "communication" {
+			return nil, "", senderErr(errSenderNotFound, "The selected integration does not exist. Select a sender from the Vault.")
 		}
 		// Only a communication integration that actually carries mail
 		// credentials can send: a Telegram or Slack integration that shares
 		// the numeric ID must not be used as a relay.
-		if cred.Provider != "smtp" && cred.Provider != "resend" {
+		if sec.Meta.Provider != "smtp" && sec.Meta.Provider != "resend" {
 			return nil, "", senderErr(errSenderNotMail, "The selected integration cannot send email. Select an SMTP or Resend integration.")
 		}
-		s, from, sErr := p.senderFromCredential(cred)
+		s, from, sErr := p.senderFromVaultSecret(sec)
 		if sErr != nil {
 			return nil, "", senderErr(errSenderMisconfigured, "The selected SMTP sender is misconfigured: "+sErr.Error())
 		}
@@ -83,14 +81,11 @@ func (p *Plugin) resolveSender(ctx context.Context, orgID, id uint, source strin
 		if err := p.db.WithContext(ctx).Where("id = ? AND owner_id = ?", id, orgID).First(&s).Error; err != nil {
 			return nil, "", senderErr(errSenderNotFound, "Configured SMTP sender could not be found for this workspace.")
 		}
-		if p.decrypt == nil {
-			return nil, "", senderErr(errSenderUnavailable, "Decryption service is unavailable. Verify encryption configuration.")
-		}
-		pass, err := p.decrypt(s.Pass)
+		pass, err := p.resolveSenderPassword(ctx, &s)
 		if err != nil {
-			return nil, "", senderErr(errSenderUnavailable, "Could not decrypt SMTP sender credentials. Update sender credentials.")
+			return nil, "", senderErr(errSenderUnavailable, "Could not resolve SMTP sender credentials. Update sender credentials.")
 		}
-		return mail.NewCustomSender(s.Host, fmt.Sprint(s.Port), s.User, string(pass), s.FromEmail), s.FromEmail, nil
+		return mail.NewCustomSender(s.Host, fmt.Sprint(s.Port), s.User, pass, s.FromEmail), s.FromEmail, nil
 
 	default:
 		return nil, "", senderErr(errSenderSourceRequired, "Sender source is required. Choose a local sender or an integration.")

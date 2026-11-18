@@ -136,52 +136,8 @@ func (p *Plugin) deleteTrackerCascade(ctx context.Context, orgID, trackerID uint
 		if err := tx.Scoped(&PTSigninResult{}).Where("tracker_id = ?", trackerID).Delete(&PTSigninResult{}).Error; err != nil {
 			return err
 		}
-		if err := tx.Scoped(&PTCredential{}).Where("tracker_id = ?", trackerID).Delete(&PTCredential{}).Error; err != nil {
-			return err
-		}
 		return tx.Scoped(&PTTracker{}).Where("id = ?", trackerID).Delete(&PTTracker{}).Error
 	})
-}
-
-func (p *Plugin) credentialFor(ctx context.Context, orgID, trackerID uint) (*PTCredential, error) {
-	tdb, err := p.tenantDB(ctx, orgID)
-	if err != nil {
-		return nil, err
-	}
-	var c PTCredential
-	if err := tdb.Scoped(&PTCredential{}).Where("tracker_id = ?", trackerID).First(&c).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrNotFound
-		}
-		return nil, err
-	}
-	return &c, nil
-}
-
-func (p *Plugin) createCredential(ctx context.Context, c *PTCredential) error {
-	tdb, err := p.tenantDB(ctx, c.OrgID)
-	if err != nil {
-		return err
-	}
-	return tdb.Create(c).Error
-}
-
-func (p *Plugin) saveCredential(ctx context.Context, c *PTCredential) error {
-	tdb, err := p.tenantDB(ctx, c.OrgID)
-	if err != nil {
-		return err
-	}
-	return tdb.Scoped(&PTCredential{}).Where("id = ?", c.ID).Updates(map[string]any{
-		"ciphertext":       c.Ciphertext,
-		"secret_version":   c.SecretVersion,
-		"has_login_secret": c.HasLoginSecret,
-		"has_cookie":       c.HasCookie,
-		"has_api_key":      c.HasAPIKey,
-		"cookie_set_at":    c.CookieSetAt,
-		"last_login_at":    c.LastLoginAt,
-		"login_failures":   c.LoginFailures,
-		"updated_at":       c.UpdatedAt,
-	}).Error
 }
 
 func (p *Plugin) latestSnapshot(ctx context.Context, orgID, trackerID uint) (*PTSnapshot, error) {

@@ -2,26 +2,25 @@ package twofa
 
 import (
 	"time"
-
-	"gorm.io/gorm"
 )
 
-// TwoFAAccount represents a registered 2FA/TOTP credential item in the vault.
-// Sensitive secrets are stored encrypted with AES-256-GCM and never exposed
-// in standard list APIs.
+// TwoFAAccount is the in-memory representation of a 2FA/TOTP account backed
+// by core VaultService (`item_type="twofa_totp"`). Secrets are never stored
+// in a plugin-owned table.
 type TwoFAAccount struct {
-	gorm.Model
-	OrgID           uint   `gorm:"index;not null" json:"org_id"`
-	Name            string `gorm:"size:255;not null;index" json:"name"`
-	Issuer          string `gorm:"size:255" json:"issuer"`
-	Account         string `gorm:"size:255" json:"account"`
-	EncryptedSecret string `gorm:"type:text;not null" json:"-"`
-	Algorithm       string `gorm:"size:32;default:'SHA1'" json:"algorithm"`
-	Digits          int    `gorm:"default:6" json:"digits"`
-	Period          int    `gorm:"default:30" json:"period"`
-	Tags            string `gorm:"size:512" json:"tags"`
-	Notes           string `gorm:"type:text" json:"notes"`
-	Pinned          bool   `gorm:"default:false;index" json:"pinned"`
+	ID        uint      `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	OrgID     uint      `json:"org_id"`
+	Name      string    `json:"name"`
+	Issuer    string    `json:"issuer"`
+	Account   string    `json:"account"`
+	Algorithm string    `json:"algorithm"`
+	Digits    int       `json:"digits"`
+	Period    int       `json:"period"`
+	Tags      string    `json:"tags"`
+	Notes     string    `json:"notes"`
+	Pinned    bool      `json:"pinned"`
 }
 
 // TwoFAAuditLog records every security-sensitive interaction with the 2FA vault,

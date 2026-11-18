@@ -129,8 +129,8 @@ func TestUpdateDDNSRecordFailurePaths(t *testing.T) {
 	_ = mkCtx
 	fake := &fakeDNSProvider{listRecErr: errBoom}
 	provName := registerFakeProvider(t, "ddns-rec-fail-prov", fake)
-	acc := ProviderAccount{OrgID: 1, Name: "acc", Type: provName, Config: "{}"}
-	if err := p.db.Create(&acc).Error; err != nil {
+	acc, err := seedVaultProviderAccount(p, 1, "acc", provName, map[string]any{"apiToken": "tok"})
+	if err != nil {
 		t.Fatal(err)
 	}
 	dom := Domain{OrgID: 1, Name: "rec-fail.com", ProviderAccountID: acc.ID, ZoneID: "z"}

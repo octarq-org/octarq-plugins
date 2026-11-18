@@ -24,12 +24,10 @@ func setupTestPlugin(t *testing.T) (*Plugin, *gorm.DB) {
 	}
 
 	p := &Plugin{
-		db: db,
+		db:       db,
+		vaultSvc: newMockVaultService(),
 		orgID: func(r *http.Request) uint {
 			return 1
-		},
-		decrypt: func(encoded string) ([]byte, error) {
-			return []byte(encoded), nil
 		},
 	}
 
@@ -177,9 +175,11 @@ func TestSendInterceptionForSuppressedAddress(t *testing.T) {
 	})
 
 	// Add SMTP sender for org 1
-	db.Create(&SMTPSender{
-		ID: 10, OrgID: 1, Host: "127.0.0.1", Port: 25, User: "u", Pass: "p", FromEmail: "sender@example.com",
-	})
+	if _, err := seedVaultSMTPSender(p, SMTPSender{
+		ID: 10, OrgID: 1, Name: "sup-relay", Host: "127.0.0.1", Port: 25, User: "u", FromEmail: "sender@example.com",
+	}, "p"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Test direct sendMail function
 	err := p.sendMail(1, "blocked@example.com", "Subject", "HTML", "Text")

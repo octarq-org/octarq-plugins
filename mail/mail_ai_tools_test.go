@@ -299,42 +299,44 @@ func TestMailSendReply_DeclarativeContractAndHITL(t *testing.T) {
 		t.Fatal("expected unauthorized error")
 	}
 
-	// 7. ToAddr comma/semicolon parsing and decryption failures
-	db.Create(&SMTPSender{OrgID: 1, Host: "127.0.0.1", Port: 2525, User: "sender", Pass: "encpass", FromEmail: "sender@example.com"})
+	// 7. ToAddr comma/semicolon parsing and vault failure cases
+	s, err := seedVaultSMTPSender(p, SMTPSender{OrgID: 1, Name: "tool-relay", Host: "127.0.0.1", Port: 2525, User: "sender", FromEmail: "sender@example.com"}, "plainpass")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mv := p.vaultSvc.(*mockVaultService)
+	p.vaultSvc = nil
 	_, errDecAvail := p.handleSendEmail(ctx1, SendEmailToolInput{
 		ToAddr:           "user1@test.com; user2@test.com",
 		Subject:          "Test Parsed Addrs",
 		Body:             "Hello",
-		SMTPSenderID:     1,
+		SMTPSenderID:     s.ID,
 		SMTPSenderSource: SenderSourceLocal,
 	})
 	if errDecAvail == nil {
-		t.Fatal("expected decryption unavailable error")
+		t.Fatal("expected vault unavailable error")
 	}
 
-	p.decrypt = func(encoded string) ([]byte, error) {
-		return nil, errors.New("crypto failure")
-	}
+	p.vaultSvc = mv
+	mv.getErr = errors.New("crypto failure")
 	_, errDecFail := p.handleSendEmail(ctx1, SendEmailToolInput{
 		To:               []string{"valid@example.com"},
 		Subject:          "Test",
 		Body:             "Hello",
-		SMTPSenderID:     1,
+		SMTPSenderID:     s.ID,
 		SMTPSenderSource: SenderSourceLocal,
 	})
 	if errDecFail == nil {
-		t.Fatal("expected decryption failed error")
+		t.Fatal("expected vault read failed error")
 	}
 
 	// 8. Send failed error from network dialer
-	p.decrypt = func(encoded string) ([]byte, error) {
-		return []byte("plainpass"), nil
-	}
+	mv.getErr = nil
 	_, errSendFail := p.handleSendEmail(ctx1, SendEmailToolInput{
 		To:               []string{"valid@example.com"},
 		Subject:          "Test",
 		Body:             "Hello",
-		SMTPSenderID:     1,
+		SMTPSenderID:     s.ID,
 		SMTPSenderSource: SenderSourceLocal,
 	})
 	if errSendFail == nil {
@@ -387,52 +389,48 @@ func TestMailAITools_SendResolvesThroughIntegrationSource(t *testing.T) {
 	p.publishEvent = func(uint, string, any) {}
 
 	host, port, got := captureSMTP(t)
-	p.host = &plugin.TestHost{
-		LookupCredentialMock: func(ctx context.Context, orgID uint, query plugin.CredentialQuery) (*plugin.Credential, error) {
-			if query.ProviderType != "communication" {
-				return nil, plugin.ErrCredentialNotFound
-			}
-			if query.ID == 9 {
-				return nil, errors.New("vault unavailable")
-			}
-			cfg, _ := json.Marshal(map[string]any{
-				"host":      host,
-				"port":      port,
-				"user":      "hub-user",
-				"fromEmail": "hub@example.com",
-			})
-			return &plugin.Credential{
-				ID:           query.ID,
-				OrgID:        orgID,
-				ProviderType: "communication",
-				Provider:     "smtp",
-				ConfigJSON:   cfg,
-			}, nil
+	mv := p.vaultSvc.(*mockVaultService)
+	meta, err := mv.PutSecret(ctx1, plugin.PutSecretRequest{
+		OrgID:        1,
+		Scope:        plugin.VaultScopeOrg,
+		ItemType:     "integration",
+		ProviderType: "communication",
+		Provider:     "smtp",
+		Name:         "Hub SMTP",
+		Payload: map[string]any{
+			"host":      host,
+			"port":      port,
+			"user":      "hub-user",
+			"fromEmail": "hub@example.com",
 		},
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	if _, err := p.handleSendEmail(ctx1, SendEmailToolInput{
 		To:               []string{"valid@example.com"},
 		Subject:          "Hub send",
 		Body:             "Hello",
-		SMTPSenderID:     7,
+		SMTPSenderID:     meta.ID,
 		SMTPSenderSource: SenderSourceIntegration,
 	}); err != nil {
-		t.Fatalf("send through the hub: %v", err)
+		t.Fatalf("send through vault: %v", err)
 	}
 	if !strings.Contains(got(), "hub@example.com") {
-		t.Errorf("hub relay did not receive the message:\n%s", got())
+		t.Errorf("vault relay did not receive the message:\n%s", got())
 	}
 
-	// A resolver failure is not "no such sender"; it must surface as a 500.
-	_, err := p.handleSendEmail(ctx1, SendEmailToolInput{
+	// Vault failure is not "no such sender"; it must surface as an error.
+	mv.getErr = errors.New("vault unavailable")
+	_, err = p.handleSendEmail(ctx1, SendEmailToolInput{
 		To:               []string{"valid@example.com"},
 		Subject:          "Hub send",
 		Body:             "Hello",
-		SMTPSenderID:     9,
+		SMTPSenderID:     meta.ID,
 		SMTPSenderSource: SenderSourceIntegration,
 	})
 	if err == nil {
-		t.Fatal("expected an error when the hub lookup fails")
+		t.Fatal("expected an error when the vault lookup fails")
 	}
 }

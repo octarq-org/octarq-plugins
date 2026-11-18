@@ -118,16 +118,18 @@ func TestMailRecordUsageSuccessAndFailure(t *testing.T) {
 		},
 	})
 
-	s := SMTPSender{
+	p.vaultSvc = newMockVaultService()
+	if _, err := seedVaultSMTPSender(p, SMTPSender{
 		ID:        1,
 		OrgID:     100,
+		Name:      "usage-relay",
 		Host:      host,
 		Port:      port,
 		User:      "test",
-		Pass:      "",
 		FromEmail: "noreply@example.com",
+	}, "pw"); err != nil {
+		t.Fatal(err)
 	}
-	db.Create(&s)
 
 	// 1. sendMail path success
 	err = p.sendMail(100, "user@example.com", "hello", "body", "body")
@@ -160,16 +162,17 @@ func TestMailRecordUsageSuccessAndFailure(t *testing.T) {
 	}
 
 	// 3. Send failure path: bad port
-	sFail := SMTPSender{
+	if _, err := seedVaultSMTPSender(p, SMTPSender{
 		ID:        2,
 		OrgID:     200,
+		Name:      "fail-relay",
 		Host:      "127.0.0.1",
 		Port:      1, // unreachable port
 		User:      "test",
-		Pass:      "",
 		FromEmail: "noreply@example.com",
+	}, "pw"); err != nil {
+		t.Fatal(err)
 	}
-	db.Create(&sFail)
 
 	_ = p.sendMail(200, "user@example.com", "hello", "body", "body")
 

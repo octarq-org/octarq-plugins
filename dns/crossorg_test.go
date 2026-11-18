@@ -19,8 +19,8 @@ func setupCrossOrgDNSDB(t *testing.T) (*Plugin, *gorm.DB) {
 	db := freshMemDB(t)
 	p := New()
 	p.db = db
+	p.vaultSvc = newMockVaultService()
 	p.audit = func(r *http.Request, action, targetType string, targetID uint, meta map[string]any) {}
-	p.decrypt = func(s string) ([]byte, error) { return []byte(s), nil }
 	p.orgID = func(r *http.Request) uint {
 		if val := r.Header.Get("X-Org-ID"); val != "" {
 			var id uint
@@ -58,8 +58,10 @@ func TestDNSCrossOrgIsolation(t *testing.T) {
 	provName := registerFakeProvider(t, "crossorg-dns-prov", fake)
 
 	// Org 1 resources
-	acc1 := ProviderAccount{OrgID: org1, Name: "org1-cf", Type: provName, Config: "{}"}
-	db.Create(&acc1)
+	acc1, err := seedVaultProviderAccount(p, org1, "org1-cf", provName, map[string]any{"apiToken": "t1"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	dom1 := Domain{OrgID: org1, Name: "org1.example.com", ProviderAccountID: acc1.ID, ZoneID: "zone-1", Note: "Org1 Domain"}
 	db.Create(&dom1)
 	tok1 := DDNSToken{
@@ -69,8 +71,10 @@ func TestDNSCrossOrgIsolation(t *testing.T) {
 	db.Create(&tok1)
 
 	// Org 2 resources
-	acc2 := ProviderAccount{OrgID: org2, Name: "org2-cf", Type: provName, Config: "{}"}
-	db.Create(&acc2)
+	acc2, err := seedVaultProviderAccount(p, org2, "org2-cf", provName, map[string]any{"apiToken": "t2"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	dom2 := Domain{OrgID: org2, Name: "org2.example.com", ProviderAccountID: acc2.ID, ZoneID: "zone-2", Note: "Org2 Domain"}
 	db.Create(&dom2)
 	tok2 := DDNSToken{

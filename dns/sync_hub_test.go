@@ -2,54 +2,44 @@ package dns
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/octarq-org/octarq/server/plugin"
 )
 
-// TestSyncDomains_ResolvesThroughTheHubOnly pins the reason sync reads the
-// shared resolver: a hub-backed account must sync, and a same-numbered local
-// row must not answer for it. Before this, every hub account returned 404.
-func TestSyncDomains_ResolvesThroughTheHubOnly(t *testing.T) {
+// TestSyncDomains_ResolvesThroughVaultOnly pins that sync resolves credentials
+// solely through VaultService and fails closed when the Vault item is missing
+// or invalid.
+func TestSyncDomains_ResolvesThroughVaultOnly(t *testing.T) {
 	p, mkCtx := setupFreshTestDB(t)
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
 	ctx := mkCtx(req)
 
-	// A local row with a usable config exists under the same id the caller sends.
-	if err := p.db.Create(&ProviderAccount{
-		ID: 50, OrgID: 1, Name: "Local account", Type: "cloudflare",
-		Config: `{"apiToken":"local"}`,
-	}).Error; err != nil {
-		t.Fatalf("seed local account: %v", err)
-	}
-
 	input := &SyncDomainsInput{Ctx: ctx}
 	input.Body.ProviderAccountID = 50
 
-	// The hub is mounted and owns DNS credentials, but has no such account.
-	p.host = &plugin.TestHost{
-		LookupCredentialMock: func(context.Context, uint, plugin.CredentialQuery) (*plugin.Credential, error) {
-			return nil, plugin.ErrCredentialNotFound
-		},
-	}
+	// Account 50 does not exist in local table or Vault -> 404.
 	if _, err := p.syncDomains(context.Background(), input); err == nil {
-		t.Fatal("expected the hub's answer to stand: no local fallback during sync")
+		t.Fatal("expected 404 for unknown account")
 	} else if status := statusOf(t, err); status != http.StatusNotFound {
-		t.Fatalf("expected 404 for an account the hub does not know, got %d (%v)", status, err)
+		t.Fatalf("expected 404 for unknown account, got %d (%v)", status, err)
 	}
 
-	// The hub knows the account but hands over a provider that cannot be built.
-	p.host = &plugin.TestHost{
-		LookupCredentialMock: func(_ context.Context, orgID uint, _ plugin.CredentialQuery) (*plugin.Credential, error) {
-			return &plugin.Credential{
-				ID: 50, OrgID: orgID, Provider: "not-a-provider",
-				ConfigJSON: []byte(`{}`),
-			}, nil
-		},
+	// Vault item exists directly (no ProviderAccount row) with an invalid provider -> error.
+	mv := p.vaultSvc.(*mockVaultService)
+	acc, err := seedVaultProviderAccount(p, 1, "Invalid prov", "not-a-provider", map[string]any{"apiToken": "tok"})
+	if err != nil {
+		t.Fatalf("seed: %v", err)
 	}
+	input.Body.ProviderAccountID = acc.ID
 	if _, err := p.syncDomains(context.Background(), input); err == nil {
-		t.Fatal("expected an unusable hub credential to fail the sync")
+		t.Fatal("expected an unusable vault credential to fail the sync")
+	}
+
+	// Vault read error -> 500 fail closed.
+	mv.getErr = errors.New("vault locked")
+	if _, err := p.syncDomains(context.Background(), input); err == nil || statusOf(t, err) != http.StatusInternalServerError {
+		t.Fatalf("expected 500 on vault read error, got %v", err)
 	}
 }

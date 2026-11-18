@@ -2,16 +2,11 @@ package pt
 
 import (
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -23,118 +18,6 @@ import (
 
 	"github.com/octarq-org/octarq-plugins/pt/adapter"
 )
-
-// ---------- fake credential vault ----------
-
-// fakeVault is an in-memory CryptoVault. A subject key is derived from the
-// subject name and removed by ShredSubjectKey, so a shredded subject fails
-// closed exactly like the real vault.
-type fakeVault struct {
-	keys map[string][]byte
-}
-
-func newFakeVault() *fakeVault { return &fakeVault{keys: map[string][]byte{}} }
-
-func subjectKey(owner uint, subject string) string {
-	return fmt.Sprintf("%d/%s", owner, subject)
-}
-
-func deriveKey(seed string) []byte {
-	sum := sha256.Sum256([]byte(seed))
-	return sum[:]
-}
-
-func (v *fakeVault) seal(key, plaintext, aad []byte) (string, error) {
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return "", err
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", err
-	}
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return "", err
-	}
-	out := gcm.Seal(nonce, nonce, plaintext, aad)
-	return base64.StdEncoding.EncodeToString(out), nil
-}
-
-func (v *fakeVault) open(key []byte, encoded string, aad []byte) ([]byte, error) {
-	raw, err := base64.StdEncoding.DecodeString(encoded)
-	if err != nil {
-		return nil, err
-	}
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, err
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, err
-	}
-	if len(raw) < gcm.NonceSize() {
-		return nil, errors.New("ciphertext too short")
-	}
-	nonce, body := raw[:gcm.NonceSize()], raw[gcm.NonceSize():]
-	return gcm.Open(nil, nonce, body, aad)
-}
-
-func (v *fakeVault) Encrypt(plaintext []byte) (string, error) {
-	return v.seal(deriveKey("instance"), plaintext, nil)
-}
-
-func (v *fakeVault) Decrypt(encoded string) ([]byte, error) {
-	return v.open(deriveKey("instance"), encoded, nil)
-}
-
-func (v *fakeVault) EncryptWithAAD(plaintext, aad []byte) (string, error) {
-	return v.seal(deriveKey("instance"), plaintext, aad)
-}
-
-func (v *fakeVault) DecryptWithAAD(encoded string, aad []byte) ([]byte, error) {
-	return v.open(deriveKey("instance"), encoded, aad)
-}
-
-func (v *fakeVault) SubjectVault(ownerID uint, subject string) (plugin.CryptoVault, error) {
-	key, ok := v.keys[subjectKey(ownerID, subject)]
-	if !ok {
-		return nil, errors.New("subject key is not available")
-	}
-	return &subjectVault{vault: v, key: key}, nil
-}
-
-func (v *fakeVault) ShredSubjectKey(ownerID uint, subject string) error {
-	delete(v.keys, subjectKey(ownerID, subject))
-	return nil
-}
-
-type subjectVault struct {
-	vault *fakeVault
-	key   []byte
-}
-
-func (s *subjectVault) Encrypt(plaintext []byte) (string, error) {
-	return s.vault.seal(s.key, plaintext, nil)
-}
-
-func (s *subjectVault) Decrypt(encoded string) ([]byte, error) {
-	return s.vault.open(s.key, encoded, nil)
-}
-
-func (s *subjectVault) EncryptWithAAD(plaintext, aad []byte) (string, error) {
-	return s.vault.seal(s.key, plaintext, aad)
-}
-
-func (s *subjectVault) DecryptWithAAD(encoded string, aad []byte) ([]byte, error) {
-	return s.vault.open(s.key, encoded, aad)
-}
-
-func (s *subjectVault) SubjectVault(uint, string) (plugin.CryptoVault, error) {
-	return nil, errors.New("no nested vaults")
-}
-func (s *subjectVault) ShredSubjectKey(uint, string) error { return nil }
 
 // ---------- fake host ----------
 
@@ -151,12 +34,10 @@ func (fakeSession) RevokeUserOrgSessions(uint, uint) int           { return 0 }
 // fakeHost embeds the interface so only the methods a test needs are real.
 type fakeHost struct {
 	plugin.Host
-	db     *gorm.DB
-	crypto plugin.CryptoVault
+	db *gorm.DB
 }
 
 func (h *fakeHost) Session() plugin.HostSession { return fakeSession{} }
-func (h *fakeHost) Crypto() plugin.CryptoVault  { return h.crypto }
 
 func (h *fakeHost) TenantDB(orgID uint) *plugin.TenantDB {
 	tdb, err := plugin.NewTenantDB(h.db, orgID)
@@ -245,7 +126,7 @@ func newFakeSite(t *testing.T) *fakeSite {
 type fixture struct {
 	plugin *Plugin
 	db     *gorm.DB
-	vault  *fakeVault
+	vault  *mockVaultService
 	site   *fakeSite
 	now    time.Time
 }
@@ -258,22 +139,19 @@ func newFixture(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
-	if err := db.AutoMigrate(&PTTracker{}, &PTCredential{}, &PTSnapshot{}, &PTSigninResult{}); err != nil {
+	if err := db.AutoMigrate(&PTTracker{}, &PTSnapshot{}, &PTSigninResult{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 
-	vault := newFakeVault()
-	for _, orgID := range []uint{1, 2} {
-		vault.keys[subjectKey(orgID, credentialSubject("seed"))] = deriveKey("seed")
-	}
-
+	vault := newMockVaultService()
 	site := newFakeSite(t)
-	host := &fakeHost{db: db, crypto: vault}
+	host := &fakeHost{db: db}
 	f := &fixture{db: db, vault: vault, site: site, now: time.Date(2026, 11, 15, 9, 0, 0, 0, time.UTC)}
 
 	f.plugin = &Plugin{
-		db:   db,
-		host: host,
+		db:       db,
+		host:     host,
+		vaultSvc: vault,
 		newClient: func(time.Duration) *http.Client {
 			return site.server.Client()
 		},
@@ -282,7 +160,7 @@ func newFixture(t *testing.T) *fixture {
 	return f
 }
 
-// createTracker inserts a tracker row and its encrypted credential.
+// createTracker inserts a tracker row and its Vault-backed credential.
 func (f *fixture) createTracker(t *testing.T, orgID uint, name string, secret storedSecret) *PTTracker {
 	t.Helper()
 	ctx := context.Background()
@@ -291,7 +169,6 @@ func (f *fixture) createTracker(t *testing.T, orgID uint, name string, secret st
 	if err != nil {
 		t.Fatalf("secret id: %v", err)
 	}
-	f.vault.keys[subjectKey(orgID, credentialSubject(secretID))] = deriveKey(secretID)
 
 	tracker := &PTTracker{
 		OrgID:                orgID,
@@ -338,26 +215,23 @@ func TestLoginStoresEncryptedCookie(t *testing.T) {
 		t.Fatalf("logins = %d", f.site.logins.Load())
 	}
 
-	cred, err := f.plugin.credentialFor(ctx, 1, tracker.ID)
+	if tracker.VaultItemID == 0 {
+		t.Fatal("no vault item id stored")
+	}
+	meta, err := f.vault.GetMeta(ctx, 1, tracker.VaultItemID)
 	if err != nil {
-		t.Fatalf("credential: %v", err)
+		t.Fatalf("vault meta: %v", err)
 	}
-	if cred.Ciphertext == "" {
-		t.Fatal("no ciphertext stored")
+	if meta.CurrentVersion != 2 {
+		t.Fatalf("secret version = %d", meta.CurrentVersion)
 	}
-	if strings.Contains(cred.Ciphertext, "c_secure_uid") {
-		t.Fatal("ciphertext contains a cookie name in plaintext")
-	}
-	if cred.SecretVersion != 2 {
-		t.Fatalf("secret version = %d", cred.SecretVersion)
-	}
-	if !cred.HasCookie {
-		t.Fatal("has_cookie flag not set")
+	if !slices.Contains(meta.FieldKeys, "cookie") {
+		t.Fatal("cookie field key not recorded in vault meta")
 	}
 
-	secret, err := f.plugin.decryptSecret(1, tracker.SecretID, cred.Ciphertext)
+	secret, err := f.plugin.readSecrets(ctx, tracker)
 	if err != nil {
-		t.Fatalf("decrypt: %v", err)
+		t.Fatalf("read secrets: %v", err)
 	}
 	if !strings.Contains(secret.Cookie, "c_secure_uid") {
 		t.Fatalf("stored cookie = %q", secret.Cookie)
@@ -431,18 +305,18 @@ func TestCredentialIsBoundToWorkspaceAndTracker(t *testing.T) {
 	first := f.createTracker(t, 1, "first", storedSecret{Login: "secret"})
 	second := f.createTracker(t, 1, "second", storedSecret{Login: "other"})
 
-	cred, err := f.plugin.credentialFor(ctx, 1, first.ID)
-	if err != nil {
-		t.Fatalf("credential: %v", err)
+	// First tracker's Vault item belongs only to org 1 and returns "secret".
+	sec1, err := f.vault.GetSecret(ctx, 1, first.VaultItemID)
+	if err != nil || sec1.Payload["login"] != "secret" {
+		t.Fatalf("org 1 read first: %+v, %v", sec1, err)
 	}
-
-	// Move the ciphertext to the other tracker: the AAD no longer matches.
-	if _, err := f.plugin.decryptSecret(1, second.SecretID, cred.Ciphertext); err == nil {
-		t.Fatal("ciphertext decrypted under another tracker")
+	// Second tracker has a distinct VaultItemID.
+	if first.VaultItemID == second.VaultItemID {
+		t.Fatal("trackers share the same VaultItemID")
 	}
-	// Same tracker in another workspace: the AAD and the subject key differ.
-	if _, err := f.plugin.decryptSecret(2, first.SecretID, cred.Ciphertext); err == nil {
-		t.Fatal("ciphertext decrypted in another workspace")
+	// Cross-workspace read fails closed.
+	if _, err := f.vault.GetSecret(ctx, 2, first.VaultItemID); !errors.Is(err, plugin.ErrSecretNotFound) {
+		t.Fatalf("expected ErrSecretNotFound across workspaces, got %v", err)
 	}
 }
 
@@ -451,15 +325,11 @@ func TestShredMakesCiphertextUnreadable(t *testing.T) {
 	ctx := context.Background()
 	tracker := f.createTracker(t, 1, "demo", storedSecret{Login: "secret"})
 
-	cred, err := f.plugin.credentialFor(ctx, 1, tracker.ID)
-	if err != nil {
-		t.Fatalf("credential: %v", err)
-	}
-	if err := f.plugin.shredSecret(1, tracker.SecretID); err != nil {
+	if err := f.plugin.shredSecret(ctx, 1, tracker.VaultItemID); err != nil {
 		t.Fatalf("shred: %v", err)
 	}
-	if _, err := f.plugin.decryptSecret(1, tracker.SecretID, cred.Ciphertext); err == nil {
-		t.Fatal("ciphertext decrypted after the key was destroyed")
+	if _, err := f.vault.GetSecret(ctx, 1, tracker.VaultItemID); !errors.Is(err, plugin.ErrSecretNotFound) {
+		t.Fatalf("expected ErrSecretNotFound after shred, got %v", err)
 	}
 }
 
@@ -498,7 +368,7 @@ func TestDeleteCascadeLeavesNoRows(t *testing.T) {
 	if err := f.plugin.deleteTrackerCascade(ctx, 1, tracker.ID); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	for _, model := range []any{&PTTracker{}, &PTCredential{}, &PTSnapshot{}, &PTSigninResult{}} {
+	for _, model := range []any{&PTTracker{}, &PTSnapshot{}, &PTSigninResult{}} {
 		var count int64
 		if err := f.db.Model(model).Count(&count).Error; err != nil {
 			t.Fatalf("count: %v", err)
@@ -513,26 +383,6 @@ func TestValidateRefusesWithoutVault(t *testing.T) {
 	p := &Plugin{}
 	if err := p.Validate(context.Background(), &fakeHost{}); err == nil {
 		t.Fatal("a host without a vault must be refused")
-	}
-}
-
-func TestHasEncryptedData(t *testing.T) {
-	f := newFixture(t)
-	has, err := f.plugin.HasEncryptedData()
-	if err != nil {
-		t.Fatalf("has encrypted data: %v", err)
-	}
-	if has {
-		t.Fatal("an empty database reported encrypted data")
-	}
-
-	f.createTracker(t, 1, "demo", storedSecret{Login: "secret"})
-	has, err = f.plugin.HasEncryptedData()
-	if err != nil {
-		t.Fatalf("has encrypted data: %v", err)
-	}
-	if !has {
-		t.Fatal("a stored credential was not reported")
 	}
 }
 

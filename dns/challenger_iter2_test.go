@@ -2,6 +2,7 @@ package dns
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -34,9 +35,20 @@ func (p *Plugin) patchedSyncDomains(ctx context.Context, input *SyncDomainsInput
 		return nil, huma.Error404NotFound("provider account not found")
 	}
 
-	creds, err := p.decrypt(acc.Config)
+	if acc.VaultItemID == 0 {
+		return nil, huma.Error500InternalServerError("stored API token is missing")
+	}
+	vs, vErr := p.vault()
+	if vErr != nil {
+		return nil, huma.Error500InternalServerError("credential vault unavailable")
+	}
+	sec, err := vs.GetSecret(ctx, p.orgID(r), acc.VaultItemID)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("stored API token could not be decrypted")
+	}
+	creds, err := json.Marshal(sec.Payload)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("stored API token could not be encoded")
 	}
 
 	prov, err := provider.New(acc.Type, creds)
@@ -123,8 +135,8 @@ func TestVerification_RES02_Remediation(t *testing.T) {
 		},
 	}
 	provName := registerFakeProvider(t, "sync-res02-prov", fake)
-	accOrg1 := ProviderAccount{OrgID: 1, Name: "org1-acc", Type: provName, Config: "{}"}
-	if err := p.db.Create(&accOrg1).Error; err != nil {
+	accOrg1, err := seedVaultProviderAccount(p, 1, "org1-acc", provName, map[string]any{"apiToken": "tok"})
+	if err != nil {
 		t.Fatalf("setup Org 1 provider: %v", err)
 	}
 

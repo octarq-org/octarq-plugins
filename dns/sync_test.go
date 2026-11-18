@@ -33,8 +33,8 @@ func freshBenchDB(b *testing.B) *gorm.DB {
 func BenchmarkSyncDomains(b *testing.B) {
 	p := New()
 	p.db = freshBenchDB(b)
+	p.vaultSvc = newMockVaultService()
 	p.audit = func(r *http.Request, action, targetType string, targetID uint, meta map[string]any) {}
-	p.decrypt = func(s string) ([]byte, error) { return []byte(s), nil }
 	p.orgID = func(r *http.Request) uint { return 1 }
 	p.requireRole = func(r *http.Request, role string) bool { return true }
 
@@ -47,8 +47,10 @@ func BenchmarkSyncDomains(b *testing.B) {
 		return fake, nil
 	})
 
-	acc := &ProviderAccount{OrgID: 1, Name: "bench", Type: provName, Config: "{}"}
-	p.db.Create(acc)
+	acc, err := seedVaultProviderAccount(p, 1, "bench", provName, map[string]any{"apiToken": "bench"})
+	if err != nil {
+		b.Fatal(err)
+	}
 
 	for i := 0; i < 500; i++ {
 		p.db.Create(&Domain{OrgID: 1, Name: fmt.Sprintf("bench%d.com", i), ProviderAccountID: acc.ID, ZoneID: "old-z"})

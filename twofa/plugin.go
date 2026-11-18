@@ -21,9 +21,9 @@ var docsFS embed.FS
 
 // Plugin is the 2FA Vault plugin struct composed into Octarq via app.Use(&twofa.Plugin{}).
 type Plugin struct {
-	ctx  *plugin.Context
-	host plugin.Host
-	key  []byte
+	ctx      *plugin.Context
+	host     plugin.Host
+	vaultSvc plugin.VaultService
 }
 
 func (*Plugin) Name() string { return "twofa" }
@@ -37,7 +37,6 @@ func (*Plugin) Describe() plugin.Info {
 
 func (*Plugin) Models() []any {
 	return []any{
-		&TwoFAAccount{},
 		&TwoFAAuditLog{},
 	}
 }
@@ -45,9 +44,6 @@ func (*Plugin) Models() []any {
 func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 	p.ctx = ctx
 	p.host = plugin.EnsureHost(ctx)
-	if len(p.key) == 0 {
-		p.key = GetVaultKey("")
-	}
 
 	// Register cross-plugin machine contract
 	if ctx != nil && ctx.Provide != nil {
@@ -91,7 +87,23 @@ func (*Plugin) HelpDocsFS() fs.FS {
 	return docsFS
 }
 
+func (p *Plugin) vault() (plugin.VaultService, error) {
+	if p.vaultSvc != nil {
+		return p.vaultSvc, nil
+	}
+	if svc, ok := plugin.LookupAs[plugin.VaultService](p.ctx, plugin.ServiceVault); ok && svc != nil {
+		return svc, nil
+	}
+	return nil, plugin.ErrVaultUnavailable
+}
+
 func (p *Plugin) Check(ctx context.Context) plugin.HealthResult {
+	if _, err := p.vault(); err != nil {
+		return plugin.HealthResult{
+			Status:  plugin.HealthError,
+			Message: "credential vault service is unavailable",
+		}
+	}
 	if p.ctx == nil || p.ctx.DB == nil {
 		return plugin.HealthResult{
 			Status:  plugin.HealthError,
@@ -99,17 +111,17 @@ func (p *Plugin) Check(ctx context.Context) plugin.HealthResult {
 		}
 	}
 	var count int64
-	if err := p.ctx.DB.WithContext(ctx).Model(&TwoFAAccount{}).Count(&count).Error; err != nil {
+	if err := p.ctx.DB.WithContext(ctx).Model(&TwoFAAuditLog{}).Count(&count).Error; err != nil {
 		return plugin.HealthResult{
 			Status:  plugin.HealthError,
-			Message: fmt.Sprintf("failed to query accounts: %v", err),
+			Message: fmt.Sprintf("failed to query audit logs: %v", err),
 		}
 	}
 	return plugin.HealthResult{
 		Status:  plugin.HealthOK,
 		Message: "2FA vault operational",
 		Metrics: map[string]any{
-			"total_accounts": count,
+			"audit_logs": count,
 		},
 	}
 }
@@ -125,33 +137,10 @@ func (p *Plugin) Validate(ctx context.Context, host plugin.Host) error {
 	if host == nil {
 		return errors.New("twofa: host runtime is required")
 	}
-	if host.Crypto() == nil && len(GetVaultKey("")) == 0 {
-		return errors.New("twofa: encryption unavailable: neither Host.Crypto nor OCTARQ_TWOFA_KEY/OCTARQ_SECRET_KEY is configured")
+	if _, err := p.vault(); err != nil {
+		return errors.New("twofa: VaultService unavailable (ServiceVault not provided)")
 	}
 	return nil
-}
-
-func (p *Plugin) encrypt(plaintext string) (string, error) {
-	if p.host != nil && p.host.Crypto() != nil {
-		return p.host.Crypto().Encrypt([]byte(plaintext))
-	}
-	if len(p.key) == 32 {
-		return EncryptSecret(plaintext, p.key)
-	}
-	return "", errors.New("twofa: encryption unavailable: missing key and Host.Crypto")
-}
-
-func (p *Plugin) decrypt(ciphertext string) (string, error) {
-	if p.host != nil && p.host.Crypto() != nil {
-		b, err := p.host.Crypto().Decrypt(ciphertext)
-		if err == nil {
-			return string(b), nil
-		}
-	}
-	if len(p.key) == 32 {
-		return DecryptSecret(ciphertext, p.key)
-	}
-	return "", errors.New("twofa: decryption failed or unavailable")
 }
 
 func (p *Plugin) tenantDB(ctx context.Context, orgID uint) *plugin.TenantDB {
@@ -166,56 +155,59 @@ func (p *Plugin) tenantDB(ctx context.Context, orgID uint) *plugin.TenantDB {
 
 // GetCode implements the Provider contract for cross-plugin retrieval.
 func (p *Plugin) GetCode(ctx context.Context, orgID uint, accountName string) (string, int, error) {
-	tdb := p.tenantDB(ctx, orgID)
-	if tdb == nil {
-		return "", 0, errors.New("database not available or unauthorized org")
+	if orgID == 0 {
+		return "", 0, errors.New("unauthorized org")
 	}
-
-	var acc TwoFAAccount
-	name := strings.TrimSpace(accountName)
-	err := tdb.Model(&acc).
-		Where("LOWER(name) = LOWER(?) OR LOWER(issuer) = LOWER(?)", name, name).
-		First(&acc).Error
-	if err != nil {
-		return "", 0, fmt.Errorf("account %q not found in workspace %d", accountName, orgID)
-	}
-
-	secret, err := p.decrypt(acc.EncryptedSecret)
-	if err != nil {
-		return "", 0, fmt.Errorf("failed to decrypt secret: %w", err)
-	}
-
-	now := time.Now()
-	code, err := GenerateCode(secret, now, acc.Period, acc.Digits, acc.Algorithm)
+	vs, err := p.vault()
 	if err != nil {
 		return "", 0, err
 	}
-
-	return code, SecondsRemaining(now, acc.Period), nil
+	items, err := vs.ListItems(ctx, orgID, plugin.VaultFilter{
+		Scope:    plugin.VaultScopeOrg,
+		ItemType: "twofa_totp",
+	})
+	if err != nil {
+		return "", 0, err
+	}
+	name := strings.TrimSpace(accountName)
+	for _, it := range items {
+		acc := metaToAccount(it)
+		if strings.EqualFold(acc.Name, name) || strings.EqualFold(acc.Issuer, name) {
+			return vs.ComputeTOTP(ctx, orgID, it.ID)
+		}
+	}
+	return "", 0, fmt.Errorf("account %q not found in workspace %d", accountName, orgID)
 }
 
 // VerifyCode implements the Provider contract for cross-plugin verification.
 func (p *Plugin) VerifyCode(ctx context.Context, orgID uint, accountName string, code string) (bool, error) {
-	tdb := p.tenantDB(ctx, orgID)
-	if tdb == nil {
-		return false, errors.New("database not available or unauthorized org")
+	if orgID == 0 {
+		return false, errors.New("unauthorized org")
 	}
-
-	var acc TwoFAAccount
+	vs, err := p.vault()
+	if err != nil {
+		return false, err
+	}
+	items, err := vs.ListItems(ctx, orgID, plugin.VaultFilter{
+		Scope:    plugin.VaultScopeOrg,
+		ItemType: "twofa_totp",
+	})
+	if err != nil {
+		return false, err
+	}
 	name := strings.TrimSpace(accountName)
-	err := tdb.Model(&acc).
-		Where("LOWER(name) = LOWER(?) OR LOWER(issuer) = LOWER(?)", name, name).
-		First(&acc).Error
-	if err != nil {
-		return false, fmt.Errorf("account %q not found in workspace %d", accountName, orgID)
+	for _, it := range items {
+		acc := metaToAccount(it)
+		if strings.EqualFold(acc.Name, name) || strings.EqualFold(acc.Issuer, name) {
+			sec, sErr := vs.GetSecret(ctx, orgID, it.ID)
+			if sErr != nil {
+				return false, fmt.Errorf("failed to resolve secret: %w", sErr)
+			}
+			secret := extractSecretFromPayload(sec.Payload)
+			return VerifyCode(secret, code, time.Now(), acc.Period, acc.Digits, acc.Algorithm, 1), nil
+		}
 	}
-
-	secret, err := p.decrypt(acc.EncryptedSecret)
-	if err != nil {
-		return false, fmt.Errorf("failed to decrypt secret: %w", err)
-	}
-
-	return VerifyCode(secret, code, time.Now(), acc.Period, acc.Digits, acc.Algorithm, 1), nil
+	return false, fmt.Errorf("account %q not found in workspace %d", accountName, orgID)
 }
 
 // Compile-time assertions for contracts

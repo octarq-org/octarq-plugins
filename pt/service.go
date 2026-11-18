@@ -65,34 +65,38 @@ func siteOf(t *PTTracker) adapter.Site {
 	}
 }
 
-// sessionFor builds an adapter session, decrypting the credential first. A
-// decryption failure is surfaced as an infrastructure error, never as "no
-// credential": the two need different reactions.
-func (p *Plugin) sessionFor(ctx context.Context, t *PTTracker) (*adapter.Session, adapter.Adapter, *PTCredential, storedSecret, error) {
+// sessionFor builds an adapter session, resolving the credential from VaultService first.
+func (p *Plugin) sessionFor(ctx context.Context, t *PTTracker) (*adapter.Session, adapter.Adapter, storedSecret, error) {
 	var zero storedSecret
 
 	ad, err := p.registry().Get(adapter.Schema(t.SchemaKey))
 	if err != nil {
-		return nil, nil, nil, zero, err
+		return nil, nil, zero, err
 	}
 
-	cred, err := p.credentialFor(ctx, t.OrgID, t.ID)
+	if t.VaultItemID == 0 {
+		return nil, ad, zero, errNoCredential
+	}
+	vs, err := p.vault()
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return nil, ad, nil, zero, errNoCredential
+		return nil, ad, zero, err
+	}
+	sec, err := vs.GetSecret(ctx, t.OrgID, t.VaultItemID)
+	if err != nil {
+		if errors.Is(err, plugin.ErrSecretNotFound) {
+			return nil, ad, zero, errNoCredential
 		}
-		return nil, ad, nil, zero, err
+		return nil, ad, zero, err
 	}
-
-	secret, err := p.decryptSecret(t.OrgID, t.SecretID, cred.Ciphertext)
-	if err != nil {
-		return nil, ad, cred, zero, err
+	secret := secretFromPayload(sec.Payload)
+	if secret.empty() {
+		return nil, ad, zero, errNoCredential
 	}
 
 	site := siteOf(t)
 	client, err := adapter.NewClient(p.client(site.Timeout), site, secret.Cookie)
 	if err != nil {
-		return nil, ad, cred, zero, err
+		return nil, ad, zero, err
 	}
 
 	return &adapter.Session{
@@ -105,12 +109,12 @@ func (p *Plugin) sessionFor(ctx context.Context, t *PTTracker) (*adapter.Session
 		},
 		Client: client,
 		Now:    p.clock(),
-	}, ad, cred, secret, nil
+	}, ad, secret, nil
 }
 
 // ensureSession proves the stored session works, and signs in again when the
 // dialect can do so without a human.
-func (p *Plugin) ensureSession(ctx context.Context, t *PTTracker, s *adapter.Session, ad adapter.Adapter, cred *PTCredential, secret storedSecret) error {
+func (p *Plugin) ensureSession(ctx context.Context, t *PTTracker, s *adapter.Session, ad adapter.Adapter, secret storedSecret) error {
 	res, err := ad.CheckSession(ctx, s)
 	switch {
 	case err == nil && res != nil && res.LoggedIn:
@@ -138,17 +142,8 @@ func (p *Plugin) ensureSession(ctx context.Context, t *PTTracker, s *adapter.Ses
 	if loginRes.Cookie != "" && loginRes.Cookie != secret.Cookie {
 		secret.Cookie = loginRes.Cookie
 		now := p.clock()
-		cipher, encErr := p.encryptSecret(t.OrgID, t.SecretID, secret)
-		if encErr != nil {
-			return encErr
-		}
-		cred.Ciphertext = cipher
-		cred.HasCookie = true
-		cred.CookieSetAt = &now
-		cred.LastLoginAt = &now
-		cred.LoginFailures = 0
-		cred.SecretVersion++
-		if saveErr := p.saveCredential(ctx, cred); saveErr != nil {
+		t.LastLoginAt = &now
+		if saveErr := p.storeVaultSecret(ctx, t, secret); saveErr != nil {
 			return saveErr
 		}
 	}
@@ -157,7 +152,7 @@ func (p *Plugin) ensureSession(ctx context.Context, t *PTTracker, s *adapter.Ses
 
 // login refreshes the session on request.
 func (p *Plugin) login(ctx context.Context, t *PTTracker) (*actionOutcome, error) {
-	s, ad, cred, secret, err := p.sessionFor(ctx, t)
+	s, ad, secret, err := p.sessionFor(ctx, t)
 	if err != nil {
 		return nil, err
 	}
@@ -189,17 +184,8 @@ func (p *Plugin) login(ctx context.Context, t *PTTracker) (*actionOutcome, error
 			cookie = s.Client.Cookies()
 		}
 		secret.Cookie = cookie
-		cipher, encErr := p.encryptSecret(t.OrgID, t.SecretID, secret)
-		if encErr != nil {
-			return nil, encErr
-		}
-		cred.Ciphertext = cipher
-		cred.HasCookie = cookie != ""
-		cred.CookieSetAt = &now
-		cred.LastLoginAt = &now
-		cred.LoginFailures = 0
-		cred.SecretVersion++
-		if saveErr := p.saveCredential(ctx, cred); saveErr != nil {
+		t.LastLoginAt = &now
+		if saveErr := p.storeVaultSecret(ctx, t, secret); saveErr != nil {
 			return nil, saveErr
 		}
 		out.Outcome = string(adapter.OutcomeSuccess)
@@ -218,13 +204,13 @@ func (p *Plugin) login(ctx context.Context, t *PTTracker) (*actionOutcome, error
 
 // refresh reads statistics and stores a snapshot.
 func (p *Plugin) refresh(ctx context.Context, t *PTTracker, trigger string) (*PTSnapshot, error) {
-	s, ad, cred, secret, err := p.sessionFor(ctx, t)
+	s, ad, secret, err := p.sessionFor(ctx, t)
 	if err != nil {
 		return nil, err
 	}
 	now := p.clock()
 
-	if err := p.ensureSession(ctx, t, s, ad, cred, secret); err != nil {
+	if err := p.ensureSession(ctx, t, s, ad, secret); err != nil {
 		p.recordSessionError(ctx, t, err, now)
 		return nil, err
 	}
@@ -301,12 +287,12 @@ func (p *Plugin) signin(ctx context.Context, t *PTTracker, trigger string, force
 		}
 	}
 
-	s, ad, cred, secret, err := p.sessionFor(ctx, t)
+	s, ad, secret, err := p.sessionFor(ctx, t)
 	if err != nil {
 		return p.recordSigninFailure(ctx, t, trigger, err, now), nil
 	}
 
-	if err := p.ensureSession(ctx, t, s, ad, cred, secret); err != nil {
+	if err := p.ensureSession(ctx, t, s, ad, secret); err != nil {
 		return p.recordSigninFailure(ctx, t, trigger, err, now), nil
 	}
 
@@ -457,7 +443,7 @@ func (p *Plugin) recordSigninFailure(ctx context.Context, t *PTTracker, trigger 
 // gateRequest applies the per-domain limiter and the DB-backed minimum-gap
 // claim before any request that the site would notice.
 func (p *Plugin) gateRequest(ctx context.Context, t *PTTracker, now time.Time) error {
-	_, ad, _, _, err := p.sessionFor(ctx, t)
+	_, ad, _, err := p.sessionFor(ctx, t)
 	if err != nil {
 		return err
 	}

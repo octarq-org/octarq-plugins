@@ -32,6 +32,7 @@ func newVerifyHarness(t *testing.T) (*Plugin, http.Handler, *gorm.DB) {
 	api := humago.New(mux, huma.DefaultConfig("t", "1.0"))
 	p := New()
 	reg := plugin.NewRegistry()
+	reg.Provide(plugin.ServiceVault, plugin.VaultService(newMockVaultService()))
 	p.Mount(nil, &plugin.Context{
 		Huma: api, DB: db,
 		Audit:   func(*http.Request, string, string, uint, map[string]any) {},

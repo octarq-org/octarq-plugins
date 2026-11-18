@@ -134,8 +134,10 @@ func TestSendEmailPublishesFailureEvent(t *testing.T) {
 	wipeMailTables(t, p)
 	ctx := context.Background()
 
-	deadSender := SMTPSender{OrgID: 1, Name: "dead", Host: "127.0.0.1", Port: 1, User: "u", Pass: "pw", FromEmail: "noreply@example.com"}
-	p.db.Create(&deadSender)
+	deadSender, err := seedVaultSMTPSender(p, SMTPSender{OrgID: 1, Name: "dead", Host: "127.0.0.1", Port: 1, User: "u", FromEmail: "noreply@example.com"}, "pw")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	var failed int
 	p.publishEvent = func(orgID uint, event string, data any) {

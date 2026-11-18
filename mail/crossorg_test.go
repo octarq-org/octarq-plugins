@@ -45,8 +45,7 @@ func setupCrossOrgMailDB(t *testing.T) (*Plugin, *gorm.DB) {
 			CryptoMock: &plugin.TestCrypto{},
 		},
 	})
-	p.encrypt = func(b []byte) (string, error) { return string(b), nil }
-	p.decrypt = func(s string) ([]byte, error) { return []byte(s), nil }
+	p.vaultSvc = newMockVaultService()
 	return p, db
 }
 

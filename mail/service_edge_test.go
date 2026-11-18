@@ -254,7 +254,7 @@ func (*fakeStorageProvider) Stat(context.Context, string) (int64, error) {
 func TestSendMailErrorPaths(t *testing.T) {
 	p, _ := newBouncePlugin(t)
 	db := p.db
-	p.decrypt = func(encoded string) ([]byte, error) { return []byte(encoded), nil }
+	mv := p.vaultSvc.(*mockVaultService)
 
 	// Suppressed recipient refused before any sender lookup.
 	db.Create(&MailSuppression{OrgID: 1, Address: "blocked@example.com", Reason: "manual"})
@@ -267,19 +267,19 @@ func TestSendMailErrorPaths(t *testing.T) {
 		t.Error("sendMail with no sender for org must fail")
 	}
 
-	// Decrypt failure is surfaced.
-	s := SMTPSender{OrgID: 1, Name: "relay", Host: "smtp.example.com", Port: 587, User: "u", Pass: "enc"}
-	db.Create(&s)
-	p.decrypt = func(encoded string) ([]byte, error) { return nil, errors.New("cannot decrypt") }
+	// Vault read failure is surfaced.
+	if _, err := seedVaultSMTPSender(p, SMTPSender{OrgID: 1, Name: "relay", Host: "smtp.example.com", Port: 587, User: "u", FromEmail: "noreply@example.com"}, "enc"); err != nil {
+		t.Fatal(err)
+	}
+	mv.getErr = errors.New("cannot decrypt")
 	if err := p.sendMail(1, "ok@example.com", "s", "b", "b"); err == nil {
 		t.Error("sendMail must fail when the stored password cannot be decrypted")
 	}
+	mv.getErr = nil
 }
 
 func TestSendSystemMailFailurePublishesEvent(t *testing.T) {
 	p, _ := newBouncePlugin(t)
-	db := p.db
-	p.decrypt = func(encoded string) ([]byte, error) { return []byte(encoded), nil }
 
 	var failed *int
 	p.publishEvent = func(orgID uint, event string, data any) {
@@ -290,8 +290,10 @@ func TestSendSystemMailFailurePublishesEvent(t *testing.T) {
 	}
 
 	// A sender pointing at an unreachable port: the send fails and the event fires.
-	deadSender := SMTPSender{OrgID: 1, Name: "dead", Host: "127.0.0.1", Port: 1, User: "u", Pass: "p", FromEmail: "noreply@example.com"}
-	db.Create(&deadSender)
+	deadSender, err := seedVaultSMTPSender(p, SMTPSender{OrgID: 1, Name: "dead", Host: "127.0.0.1", Port: 1, User: "u", FromEmail: "noreply@example.com"}, "p")
+	if err != nil {
+		t.Fatal(err)
+	}
 	p.getGlobalSetting = func(k string) string {
 		if k == "mail_system_sender_id" {
 			return fmt.Sprint(deadSender.ID)
@@ -309,12 +311,12 @@ func TestSendSystemMailFailurePublishesEvent(t *testing.T) {
 
 func TestSendSystemMailSuccessRecordsUsage(t *testing.T) {
 	p, _ := newBouncePlugin(t)
-	db := p.db
-	p.decrypt = func(encoded string) ([]byte, error) { return []byte(encoded), nil }
 
 	host, port, _ := captureSMTP(t)
-	relaySender := SMTPSender{OrgID: 3, Name: "relay", Host: host, Port: port, User: "u", Pass: "p", FromEmail: "noreply@example.com"}
-	db.Create(&relaySender)
+	relaySender, err := seedVaultSMTPSender(p, SMTPSender{OrgID: 3, Name: "relay", Host: host, Port: port, User: "u", FromEmail: "noreply@example.com"}, "p")
+	if err != nil {
+		t.Fatal(err)
+	}
 	p.getGlobalSetting = func(k string) string {
 		if k == "mail_system_sender_id" {
 			return fmt.Sprint(relaySender.ID)

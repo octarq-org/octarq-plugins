@@ -79,6 +79,13 @@ func (p *Plugin) purge(orgID uint) error {
 	}
 
 	tdb.Where("1 = 1").Delete(&Mailbox{})
+	var senders []SMTPSender
+	tdb.Where("vault_item_id > 0").Find(&senders)
+	if vs, err := p.vault(); err == nil {
+		for _, s := range senders {
+			_ = vs.DeleteSecret(ctx, orgID, s.VaultItemID)
+		}
+	}
 	tdb.Where("1 = 1").Delete(&SMTPSender{})
 	tdb.Where("1 = 1").Delete(&MailSuppression{})
 	return nil

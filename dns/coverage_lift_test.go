@@ -373,16 +373,20 @@ func TestCoverageLift_DNS_DDNSAndRecords(t *testing.T) {
 		t.Fatalf("expected validation error for invalid record type")
 	}
 
-	// syncDomains decrypt failure & Resolve
-	accBadKey := ProviderAccount{OrgID: 1, Name: "BadKey", Type: "cloudflare", Config: "bad_secret"}
-	p.db.Create(&accBadKey)
-	p.decrypt = func(string) ([]byte, error) { return nil, errors.New("decrypt error") }
+	// syncDomains vault failure & Resolve
+	accBadKey, err := seedVaultProviderAccount(p, 1, "BadKey", "cloudflare", map[string]any{"apiToken": "tok"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mv := p.vaultSvc.(*mockVaultService)
+	mv.getErr = errors.New("vault error")
 	syncIn := &SyncDomainsInput{Ctx: ctxAdmin}
 	syncIn.Body.ProviderAccountID = accBadKey.ID
 	if errs := syncIn.Resolve(ctxAdmin); len(errs) > 0 {
 		t.Fatalf("syncDomains Resolve failed: %v", errs)
 	}
 	if _, err := p.syncDomains(ctx, syncIn); err == nil {
-		t.Fatalf("expected decrypt error in syncDomains")
+		t.Fatalf("expected vault error in syncDomains")
 	}
+	mv.getErr = nil
 }

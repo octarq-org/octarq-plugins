@@ -238,8 +238,8 @@ func TestDeleteDomainAndSyncGates(t *testing.T) {
 
 func TestUpdateDDNSMissingIP(t *testing.T) {
 	p, _ := setupFreshTestDB(t)
-	acc := ProviderAccount{OrgID: 1, Name: "acc", Type: "cloudflare", Config: "{}"}
-	if err := p.db.Create(&acc).Error; err != nil {
+	acc, err := seedVaultProviderAccount(p, 1, "acc", "cloudflare", map[string]any{"apiToken": "tok"})
+	if err != nil {
 		t.Fatal(err)
 	}
 	dom := Domain{OrgID: 1, Name: "noip.com", ProviderAccountID: acc.ID, ZoneID: "z"}
@@ -256,7 +256,7 @@ func TestUpdateDDNSMissingIP(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/dns/ddns/update?token="+secret, nil)
 	req.RemoteAddr = ""
 	rec := httptest.NewRecorder()
-	_, err := p.updateDDNS(context.Background(), &updateDDNSInput{Token: secret, Ctx: humago.NewContext(nil, req, rec)})
+	_, err = p.updateDDNS(context.Background(), &updateDDNSInput{Token: secret, Ctx: humago.NewContext(nil, req, rec)})
 	if err != nil || strings.TrimSpace(rec.Body.String()) != "dnserr" {
 		t.Fatalf("missing-ip: err=%v body=%q", err, rec.Body.String())
 	}
