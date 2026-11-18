@@ -7,6 +7,7 @@ import {
   Textarea,
   Tabs,
   Alert,
+  Skeleton,
   useToast,
   req,
 } from "@octarq/plugin-sdk";
@@ -103,7 +104,17 @@ export function ImportExportModal({ onClose, onImported, t }: Props) {
       </Alert>
 
       {loading ? (
-        <div className="py-8 text-center text-muted-foreground">{t("twofa.exporting", "Exporting accounts...")}</div>
+        <div
+          role="status"
+          aria-busy="true"
+          aria-label={t("twofa.exporting", "Exporting accounts...")}
+          className="space-y-3"
+        >
+          <Skeleton className="h-44 w-full rounded-[var(--radius)]" />
+          <div className="flex justify-end gap-2">
+            <Skeleton className="h-10 w-28 rounded-[var(--radius)]" />
+          </div>
+        </div>
       ) : (
         <>
           <Textarea

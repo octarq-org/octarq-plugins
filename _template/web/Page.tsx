@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import {
   PageShell,
   PageCard,
+  Skeleton,
   LockedFallback,
   useTranslation,
 } from "@octarq/plugin-sdk";
@@ -64,7 +65,15 @@ export default function MyPluginPage() {
             <p className="text-muted-foreground">{ping.time}</p>
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">{t("myplugin.loading", "Loading…")}</p>
+          <div
+            role="status"
+            aria-busy="true"
+            aria-label={t("myplugin.loading", "Loading…")}
+            className="space-y-1"
+          >
+            <Skeleton className="h-5 w-48" />
+            <Skeleton className="h-5 w-32" />
+          </div>
         )}
       </PageCard>
     </PageShell>

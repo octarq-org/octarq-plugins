@@ -136,10 +136,58 @@ export default function PTPage() {
         eyebrow="PT"
         action={headerAction}
       >
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-64 w-full rounded-lg" />
-          ))}
+        <div
+          role="status"
+          aria-busy="true"
+          aria-label={t("loading", "Loading accounts…")}
+        >
+          <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="rounded-lg border border-border bg-card p-5">
+                <Skeleton className="mb-3 h-4 w-20" />
+                <Skeleton className="h-6 w-16" />
+              </div>
+            ))}
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="flex h-full flex-col rounded-lg border border-border bg-card p-5">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <Skeleton className="h-5 w-32" />
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      <Skeleton className="h-5 w-16 rounded-md" />
+                      <Skeleton className="h-5 w-20 rounded-md" />
+                      <Skeleton className="h-5 w-20 rounded-md" />
+                    </div>
+                  </div>
+                  <Skeleton className="h-8 w-8 shrink-0 rounded-[var(--radius)]" />
+                </div>
+
+                <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {Array.from({ length: 6 }).map((_, m) => (
+                    <div key={m} className="space-y-1">
+                      <Skeleton className="h-3 w-12" />
+                      <Skeleton className="h-4 w-16" />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mb-4 space-y-1.5">
+                  <Skeleton className="h-3.5 w-44" />
+                  <Skeleton className="h-3.5 w-40" />
+                </div>
+
+                <div className="mt-auto flex flex-wrap items-center gap-2">
+                  <Skeleton className="h-8 w-24 rounded-[var(--radius)]" />
+                  <Skeleton className="h-8 w-24 rounded-[var(--radius)]" />
+                  <Skeleton className="h-8 w-16 rounded-[var(--radius)]" />
+                  <Skeleton className="ml-auto h-8 w-8 rounded-[var(--radius)]" />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </PageShell>
     );

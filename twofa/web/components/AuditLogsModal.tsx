@@ -38,14 +38,14 @@ export function AuditLogsModal({ onClose, t }: Props) {
     switch (action) {
       case "view_secret":
       case "export_accounts":
-        return "red" as const;
+        return "danger" as const;
       case "create_account":
       case "update_account":
-        return "cyan" as const;
+        return "info" as const;
       case "generate_code":
-        return "green" as const;
+        return "success" as const;
       default:
-        return "neutral" as const;
+        return "default" as const;
     }
   };
 
