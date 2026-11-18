@@ -141,7 +141,7 @@ export default function PTPage() {
           aria-busy="true"
           aria-label={t("loading", "Loading accounts…")}
         >
-          <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="rounded-lg border border-border bg-card p-5">
                 <Skeleton className="mb-3 h-4 w-20" />
@@ -233,7 +233,7 @@ export default function PTPage() {
         </div>
       ) : null}
 
-      <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         <StatCard label={t("statTrackers", "Sites")} value={summary?.tracker_count ?? trackers.length} index={0} />
         <StatCard label={t("statUploaded", "Total upload")} value={formatBytes(summary?.uploaded_bytes, unknown)} index={1} />
         <StatCard label={t("statDownloaded", "Total download")} value={formatBytes(summary?.downloaded_bytes, unknown)} index={2} />

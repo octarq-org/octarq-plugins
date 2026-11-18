@@ -140,7 +140,7 @@ export function DomainDetailWorkspace({
       </div>
 
       <TabBar
-        className="mb-6"
+        className="mb-6 flex-wrap"
         value={activeSubTab}
         onValueChange={(v) => setActiveSubTab(v as DomainSubTab)}
         items={[

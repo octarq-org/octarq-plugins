@@ -20,6 +20,7 @@ export function FolderNav({ currentFolder, onSelectFolder }: FolderNavProps) {
 
   return (
     <TabBar
+      className="flex-wrap"
       size="sm"
       value={currentFolder}
       onValueChange={(v) => onSelectFolder(v as MailFolder)}

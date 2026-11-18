@@ -12,7 +12,7 @@ export function MailTabs({ tab, onTabChange }: MailTabsProps) {
 
   return (
     <TabBar
-      className="mb-6"
+      className="mb-6 flex-wrap"
       value={tab}
       onValueChange={(v) => onTabChange(v as MailTab)}
       items={[
