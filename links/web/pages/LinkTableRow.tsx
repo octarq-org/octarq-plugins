@@ -1,4 +1,4 @@
-import { Badge, Button, TD, TR, useTranslation } from "@octarq/plugin-sdk";
+import { Badge, Button, StatusBadge, TD, TR, useTranslation } from "@octarq/plugin-sdk";
 import { Link } from "../api";
 import { Copy, Check, Archive, Trash2, QrCode, ExternalLink, Lock, Bot, Clock, Tag, BarChart3, Edit3 } from "lucide-react";
 
@@ -119,16 +119,16 @@ export function LinkTableRow({
 
       {/* Clicks */}
       <TD className="text-center font-mono">
-        <Badge tone="neutral" className="text-xs font-semibold">
+        <Badge tone="default" className="text-xs font-semibold">
           {l.clicks || 0}
         </Badge>
       </TD>
 
       {/* Status */}
       <TD className="text-center">
-        <Badge tone={l.archived ? "neutral" : "info"} className="text-[10px]">
+        <StatusBadge status={l.archived ? "paused" : "success"} className="text-[10px]">
           {l.archived ? t("links.archived") : t("links.active")}
-        </Badge>
+        </StatusBadge>
       </TD>
 
       {/* Actions */}

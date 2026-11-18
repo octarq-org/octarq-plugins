@@ -1,4 +1,4 @@
-import { Button, Modal, Field, Input, Badge, Empty, Panel, confirmDialog, timeAgo, Table, THead, TBody, TR, TH, TD, FormError, useTranslation } from "@octarq/plugin-sdk";
+import { Button, Modal, Field, Input, Badge, Empty, Panel, confirmDialog, timeAgo, Table, THead, TBody, TR, TH, TD, TableSkeleton, FormError, useTranslation } from "@octarq/plugin-sdk";
 import { useEffect, useState } from "react";
 import { mailApi, MailSuppression } from "../api";
 import { Plus, Trash2, ShieldAlert } from "lucide-react";
@@ -76,7 +76,9 @@ export function SuppressionList() {
     >
 
       {loading && items.length === 0 ? (
-        <div className="p-8 text-center text-xs text-muted-foreground">{t("mail.loading")}</div>
+        <div className="overflow-x-auto border border-border rounded-lg">
+          <TableSkeleton columnsCount={5} rowsCount={5} ariaLabel={t("mail.loading")} />
+        </div>
       ) : items.length === 0 ? (
         <Empty reason={t("mail.noSuppressions")}>
           <ShieldAlert />

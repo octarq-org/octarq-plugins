@@ -1,4 +1,4 @@
-import { StatCard, useTranslation } from "@octarq/plugin-sdk";
+import { Skeleton, StatCard, useTranslation } from "@octarq/plugin-sdk";
 import { useEffect, useState } from "react";
 import { linksApi, Link, LinkStats } from "../api";
 import { Link2, Eye, ExternalLink, Tag, Globe, Settings, Share2, Filter, Target } from "lucide-react";
@@ -13,7 +13,49 @@ export function StatsView({ link }: { link: Link }) {
     linksApi.linkStats(link.id, 30, metric).then(setStats);
   }, [link.id, metric]);
   
-  if (!stats) return <div className="text-muted-foreground p-4 text-xs">{t("links.loadingAnalytics")}</div>;
+  if (!stats) {
+    return (
+      <div
+        role="status"
+        aria-busy="true"
+        aria-label={t("links.loadingAnalytics")}
+        className="space-y-5 min-w-0"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3 min-w-0">
+          <Skeleton className="h-5 w-48" />
+          <div className="flex items-center gap-2 shrink-0">
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-7 w-24 rounded-lg" />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 min-w-0">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="rounded-lg border border-border bg-card p-5 space-y-3">
+              <Skeleton className="h-3.5 w-24" />
+              <Skeleton className="h-7 w-16" />
+            </div>
+          ))}
+        </div>
+        <div className="rounded-lg bg-well border border-border flex h-24 items-end gap-1.5 p-3 min-w-0 overflow-hidden">
+          {Array.from({ length: 14 }).map((_, i) => (
+            <Skeleton key={i} className="flex-1 rounded-t-md" style={{ height: `${30 + ((i * 19) % 60)}%` }} />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 pt-2 border-t border-border min-w-0">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="space-y-2 min-w-0">
+              <Skeleton className="h-3 w-24" />
+              <div className="space-y-1.5">
+                <Skeleton className="h-3.5 w-full" />
+                <Skeleton className="h-3.5 w-5/6" />
+                <Skeleton className="h-3.5 w-2/3" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
   
   return (
     <div className="space-y-5 min-w-0">
@@ -30,10 +72,10 @@ export function StatsView({ link }: { link: Link }) {
             <button
               type="button"
               onClick={() => setMetric("uv")}
-              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+              className={`px-2.5 py-1 text-xs font-medium rounded-md border transition-colors ${
                 metric === "uv"
-                  ? "bg-accent text-accent-fg shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
+                  ? "bg-card text-foreground border-border"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
               {t("links.uvShort")}
@@ -41,10 +83,10 @@ export function StatsView({ link }: { link: Link }) {
             <button
               type="button"
               onClick={() => setMetric("pv")}
-              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+              className={`px-2.5 py-1 text-xs font-medium rounded-md border transition-colors ${
                 metric === "pv"
-                  ? "bg-accent text-accent-fg shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
+                  ? "bg-card text-foreground border-border"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
               {t("links.pvShort")}
@@ -81,7 +123,7 @@ function Spark({ series }: { series: { key: string; count: number }[] }) {
   if (!series || !series.length) return <p className="text-xs text-muted-foreground italic">{t("links.noClickData")}</p>;
   const max = Math.max(...series.map((s) => s.count), 1);
   return (
-    <div className="rounded-xl bg-well border border-border flex h-24 items-end gap-1 p-3 min-w-0 overflow-hidden">
+    <div className="rounded-lg bg-well border border-border flex h-24 items-end gap-1 p-3 min-w-0 overflow-hidden">
       {series.map((s) => (
         <div
           key={s.key}
