@@ -146,7 +146,7 @@ describe("DNS Health & Deliverability Reputation", () => {
       expect(result).not.toBeNull();
       expect(result!.score).toBe(100);
       expect(result!.grade).toBe("excellent");
-      expect(result!.tone).toBe("green");
+      expect(result!.tone).toBe("success");
       expect(result!.passedCount).toBe(3);
       expect(result!.warningCount).toBe(0);
       expect(result!.missingCount).toBe(0);
@@ -160,7 +160,7 @@ describe("DNS Health & Deliverability Reputation", () => {
       // SPF (15) + DKIM (0) + DMARC (30) = 45
       expect(result!.score).toBe(45);
       expect(result!.grade).toBe("fair");
-      expect(result!.tone).toBe("amber");
+      expect(result!.tone).toBe("warning");
       expect(result!.passedCount).toBe(1);
       expect(result!.warningCount).toBe(1);
       expect(result!.missingCount).toBe(1);
@@ -182,7 +182,7 @@ describe("DNS Health & Deliverability Reputation", () => {
       expect(result).not.toBeNull();
       expect(result!.score).toBe(0);
       expect(result!.grade).toBe("poor");
-      expect(result!.tone).toBe("red");
+      expect(result!.tone).toBe("danger");
       expect(result!.missingCount).toBe(3);
       expect(result!.hasIssues).toBe(true);
       expect(result!.issues.length).toBe(3);
@@ -201,7 +201,7 @@ describe("DNS Health & Deliverability Reputation", () => {
       // (100 + 45) / 2 = 72.5 -> 73 -> good
       expect(result!.score).toBe(73);
       expect(result!.grade).toBe("good");
-      expect(result!.tone).toBe("cyan");
+      expect(result!.tone).toBe("info");
       expect(result!.totalChecks).toBe(6);
     });
   });

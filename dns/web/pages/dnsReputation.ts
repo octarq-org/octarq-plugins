@@ -16,7 +16,7 @@ export interface DnsDiagnosticIssue {
 export interface DnsReputationScore {
   score: number;
   grade: "excellent" | "good" | "fair" | "poor";
-  tone: "green" | "cyan" | "amber" | "red";
+  tone: "success" | "info" | "warning" | "danger";
   passedCount: number;
   warningCount: number;
   missingCount: number;
@@ -150,8 +150,8 @@ export function calculateReputationScore(
   const score = Math.round(totalScoreSum / mailHosts.length);
   const grade: "excellent" | "good" | "fair" | "poor" =
     score === 100 ? "excellent" : score >= 70 ? "good" : score >= 40 ? "fair" : "poor";
-  const tone: "green" | "cyan" | "amber" | "red" =
-    grade === "excellent" ? "green" : grade === "good" ? "cyan" : grade === "fair" ? "amber" : "red";
+  const tone: "success" | "info" | "warning" | "danger" =
+    grade === "excellent" ? "success" : grade === "good" ? "info" : grade === "fair" ? "warning" : "danger";
 
   return {
     score,

@@ -186,7 +186,7 @@ function AddHostRow({ domain, busy, onAdd }: { domain: Domain; busy: boolean; on
   }
 
   return (
-    <div className="flex items-center gap-2 flex-wrap bg-well p-2.5 rounded-xl border border-border">
+    <div className="flex items-center gap-2 flex-wrap bg-well p-2.5 rounded-lg border border-border">
       <div className="relative flex-1 min-w-[150px]">
         <Input
           className="h-9 text-xs py-1.5 w-full"
@@ -220,7 +220,7 @@ function AddHostRow({ domain, busy, onAdd }: { domain: Domain; busy: boolean; on
               type="button"
               disabled={busy}
               onClick={() => { setDraft(s); }}
-              className="text-[10px] text-muted-foreground hover:text-muted-foreground border border-border hover:border-border-strong bg-well hover:bg-well rounded-lg px-2 py-0.5 transition-colors cursor-pointer"
+              className="text-[10px] text-muted-foreground hover:text-foreground border border-border hover:border-border-strong bg-card hover:bg-surface-hover rounded-lg px-2 py-0.5 transition-colors cursor-pointer"
             >
               {s}
             </button>

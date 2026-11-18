@@ -1,5 +1,5 @@
-import { Modal, Button, Alert, Badge, FormError, useTranslation, roleSatisfies, useCurrentRole } from "@octarq/plugin-sdk";
-import { useState } from "react";
+import { Modal, Button, Alert, Badge, FormError, PageRows, Separator, Skeleton, useTranslation, roleSatisfies, useCurrentRole } from "@octarq/plugin-sdk";
+import { Fragment, useState } from "react";
 import { dnsApi, EmailBlueprintRecord, BlueprintStatus } from "../api";
 import { CheckCircle2, XCircle, AlertCircle, Copy, Check, Zap } from "lucide-react";
 
@@ -100,7 +100,27 @@ export function EmailBlueprintPanel({
         <p className="text-xs text-muted-foreground">{t("domains.emailBlueprintDesc")}</p>
 
         {loading && (
-          <p className="text-muted-foreground text-xs text-center py-4">{t("domains.emailBlueprintLoading")}</p>
+          <div role="status" aria-busy="true" aria-label={t("domains.emailBlueprintLoading")}>
+            <PageRows className="mt-0">
+              {[0, 1, 2, 3].map((i) => (
+                <Fragment key={i}>
+                  {i > 0 && <Separator />}
+                  <div className="flex min-h-[var(--row-height,3.5rem)] items-center gap-3 px-3 py-2.5">
+                    <Skeleton className="h-4 w-4 rounded-full shrink-0" />
+                    <div className="flex-1 min-w-0 space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <Skeleton className="h-4 w-10" />
+                        <Skeleton className="h-3.5 w-20" />
+                        <Skeleton className="h-4 w-14 rounded-full" />
+                      </div>
+                      <Skeleton className="h-3 w-3/4" />
+                    </div>
+                    <Skeleton className="h-5 w-5 shrink-0" />
+                  </div>
+                </Fragment>
+              ))}
+            </PageRows>
+          </div>
         )}
 
         {err && <FormError err={err} />}
@@ -112,7 +132,7 @@ export function EmailBlueprintPanel({
         )}
 
         {records !== null && (
-          <div className="rounded-xl border border-border overflow-hidden">
+          <div className="rounded-lg border border-border overflow-hidden">
             {records.map((rec, i) => (
               <div
                 key={i}
