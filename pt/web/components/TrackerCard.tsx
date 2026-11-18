@@ -66,11 +66,11 @@ export function TrackerCard({
           </h3>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             <Badge tone="secondary">{tracker.schema_label || tracker.schema}</Badge>
-            {tracker.enabled ? null : <StatusBadge status="paused">{t("disabled", "Paused")}</StatusBadge>}
+            {tracker.enabled ? null : <StatusBadge tone="paused">{t("disabled", "Paused")}</StatusBadge>}
             {tracker.cookie_valid ? (
-              <StatusBadge status="success">{t("cookieValid", "Login valid")}</StatusBadge>
+              <StatusBadge tone="success">{t("cookieValid", "Login valid")}</StatusBadge>
             ) : (
-              <StatusBadge status="error">{t("cookieInvalid", "Login expired")}</StatusBadge>
+              <StatusBadge tone="error">{t("cookieInvalid", "Login expired")}</StatusBadge>
             )}
             {tracker.last_signin_outcome ? (
               <Badge tone={outcomeTone(tracker.last_signin_outcome)} shape="square">

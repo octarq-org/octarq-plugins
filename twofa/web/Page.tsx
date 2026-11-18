@@ -158,7 +158,6 @@ export default function TwoFAPage() {
 
   return (
     <PageShell
-      width="full"
       title={t("twofa.pageTitle", "2FA Vault")}
       description={t(
         "twofa.pageDesc",

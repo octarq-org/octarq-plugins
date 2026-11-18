@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Badge, Button, confirmDialog, PageColumn, Panel, Skeleton, TabBar, toast, useTranslation } from "@octarq/plugin-sdk";
+import { Badge, Button, confirmDialog, Panel, Skeleton, TabBar, toast, useTranslation } from "@octarq/plugin-sdk";
 import { dnsApi, Domain, ProviderAccount, DNSVerifyResult } from "../api";
 import {
   Globe,
@@ -291,21 +291,19 @@ export function DomainDetailWorkspace({
 
       {/* Sub-tab 4: Domain Settings */}
       {activeSubTab === "settings" && (
-        <PageColumn className="pb-0">
-          <Panel title={t("domains.domainSettings")}>
-            <DomainEditorForm
-              key={domain.id}
-              domain={domain}
-              accounts={accounts}
-              onCancel={onBack}
-              onSaved={(d) => {
-                if (d) onUpdated(d);
-                onReloadDomains(true);
-                toast.success(t("domains.saveBasicInfo"));
-              }}
-            />
-          </Panel>
-        </PageColumn>
+        <Panel title={t("domains.domainSettings")}>
+          <DomainEditorForm
+            key={domain.id}
+            domain={domain}
+            accounts={accounts}
+            onCancel={onBack}
+            onSaved={(d) => {
+              if (d) onUpdated(d);
+              onReloadDomains(true);
+              toast.success(t("domains.saveBasicInfo"));
+            }}
+          />
+        </Panel>
       )}
 
       {showBlueprintModal && (

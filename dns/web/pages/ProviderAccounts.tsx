@@ -160,12 +160,12 @@ export function ProviderAccounts({ embed }: { embed?: boolean }) {
                           {providerType}
                         </Badge>
                         {isConfigured ? (
-                          <StatusBadge status="success" className="text-[10px]">
+                          <StatusBadge tone="success" className="text-[10px]">
                             <KeyRound className="h-2.5 w-2.5 inline" />
                             {t("settings.credentialsSet")}
                           </StatusBadge>
                         ) : (
-                          <StatusBadge status="warning" className="text-[10px]">
+                          <StatusBadge tone="warning" className="text-[10px]">
                             {t("settings.noCredentials")}
                           </StatusBadge>
                         )}
