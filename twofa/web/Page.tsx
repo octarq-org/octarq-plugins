@@ -221,9 +221,44 @@ export default function TwoFAPage() {
 
       {/* Account Cards Grid */}
       {loading ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div
+          role="status"
+          aria-busy="true"
+          aria-label={t("twofa.loadingAccounts", "Loading 2FA vault accounts...")}
+          className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+        >
           {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-44 rounded-xl" />
+            <div
+              key={i}
+              className="flex flex-col justify-between rounded-lg border border-border bg-card p-5"
+            >
+              <div>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <Skeleton className="h-5 w-32" />
+                    <Skeleton className="h-3.5 w-24" />
+                  </div>
+                  <Skeleton className="h-7 w-7 shrink-0 rounded-[var(--radius)]" />
+                </div>
+
+                <div className="my-5 flex items-center justify-between rounded-lg border border-border bg-well px-4 py-3">
+                  <Skeleton className="h-8 w-28" />
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-8 w-8 rounded-full" />
+                    <Skeleton className="h-8 w-16 rounded-[var(--radius)]" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between border-t border-border pt-3">
+                <Skeleton className="h-3.5 w-24" />
+                <div className="flex items-center gap-1">
+                  <Skeleton className="h-7 w-8 rounded-[var(--radius)]" />
+                  <Skeleton className="h-7 w-8 rounded-[var(--radius)]" />
+                  <Skeleton className="h-7 w-8 rounded-[var(--radius)]" />
+                </div>
+              </div>
+            </div>
           ))}
         </div>
       ) : filteredAccounts.length === 0 ? (

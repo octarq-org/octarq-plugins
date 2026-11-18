@@ -1,5 +1,5 @@
-import { Empty, Field, Input, Modal, Badge, Button, Panel, toast, confirmDialog, FormError, useTranslation, roleSatisfies, useCurrentRole } from "@octarq/plugin-sdk";
-import { useEffect, useState } from "react";
+import { Empty, Field, Input, Modal, Badge, StatusBadge, Button, PageColumn, PageSection, PageRows, Separator, Skeleton, toast, confirmDialog, FormError, useTranslation, roleSatisfies, useCurrentRole } from "@octarq/plugin-sdk";
+import { Fragment, useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { mailApi, SMTPSender } from "../api";
 import { KeyRound, Send, Blocks } from "lucide-react";
@@ -88,119 +88,152 @@ export function SMTPSenders() {
   }
 
   return (
-    <Panel
-      title={t("settings.smtpOutgoingGateways")}
-      description={t("settings.smtpOutgoingGatewaysDesc")}
-      action={
-        canManageSMTP && mode === "local" ? (
-          <Button variant="primary" className="text-xs py-1 px-2.5" onClick={() => setCreating(true)}>
-            {t("settings.addSmtp")}
-          </Button>
-        ) : canManageSMTP && mode === "integration" ? (
-          <NavLink to="/settings/integrations?category=communication">
-            <Button variant="primary" className="text-xs py-1 px-2.5">
-              {t("settings.openIntegrationsHub")}
+    <PageColumn className="pb-0">
+      <PageSection
+        className="mt-0"
+        title={t("settings.smtpOutgoingGateways")}
+        description={t("settings.smtpOutgoingGatewaysDesc")}
+        action={
+          canManageSMTP && mode === "local" ? (
+            <Button variant="primary" className="text-xs py-1 px-2.5" onClick={() => setCreating(true)}>
+              {t("settings.addSmtp")}
             </Button>
-          </NavLink>
-        ) : null
-      }
-    >
+          ) : canManageSMTP && mode === "integration" ? (
+            <NavLink to="/settings/integrations?category=communication">
+              <Button variant="primary" className="text-xs py-1 px-2.5">
+                {t("settings.openIntegrationsHub")}
+              </Button>
+            </NavLink>
+          ) : null
+        }
+      >
 
-      {mode === "integration" && (
-        <div className="flex items-center justify-between p-3 rounded-lg border border-primary/20 bg-accent-soft text-xs text-foreground">
-          <div className="flex items-center gap-2">
-            <Blocks className="h-4 w-4 text-accent-fg shrink-0" />
-            <span>{t("settings.integrationsHubBanner")}</span>
-          </div>
-          <NavLink
-            to="/settings/integrations?category=communication"
-            className="ml-3 inline-flex min-h-8 items-center whitespace-nowrap text-xs font-medium text-accent-fg hover:underline"
-          >
-            {t("settings.openIntegrationsHub")} →
-          </NavLink>
-        </div>
-      )}
-
-      {loading ? (
-        <div className="text-muted-foreground text-sm py-6 text-center">{t("settings.loadingLower")}</div>
-      ) : senders.length === 0 ? (
-        // The heading carries the add/open control, so the empty state states
-        // the fact and adds no second button.
-        <Empty reason={t("settings.noSmtpSenders")}>
-          <Send />
-        </Empty>
-      ) : (
-        <div className="divide-y divide-border border border-border rounded-xl bg-well overflow-hidden">
-          {senders.map(s => (
-            <div key={s.id} className="flex items-center justify-between p-4 group">
-              <div>
-                <div className="font-semibold text-sm text-foreground flex items-center gap-1.5">
-                  {s.name}
-                  {mode === "integration" ? (
-                    <>
-                      <Badge tone={s.provider === "resend" ? "indigo" : "cyan"} className="uppercase tracking-wider text-[10px]">
-                        {s.provider}
-                      </Badge>
-                      {s.configured ?? true
-                        ? <Badge tone="green" className="text-[10px]"><KeyRound className="h-2.5 w-2.5 mr-0.5 inline" />{t("settings.smtpPasswordSet")}</Badge>
-                        : <Badge tone="amber" className="text-[10px]">{t("settings.smtpNoPassword")}</Badge>}
-                    </>
-                  ) : (
-                    s.passSet
-                      ? <Badge tone="green" className="text-[10px]"><KeyRound className="h-2.5 w-2.5 mr-0.5 inline" />{t("settings.smtpPasswordSet")}</Badge>
-                      : <Badge tone="amber" className="text-[10px]">{t("settings.smtpNoPassword")}</Badge>
-                  )}
-                </div>
-                <div className="text-xs text-muted-foreground mt-1 font-mono">
-                  {mode === "integration"
-                    ? (s.summary || `${s.fromEmail} via ${s.host}:${s.port || 587}`)
-                    : `${s.fromEmail} via ${s.host}:${s.port}`}
-                </div>
-              </div>
-              {canManageSMTP && (
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="subtle"
-                    onClick={() => test(s)}
-                    disabled={testingId === s.id}
-                    className="text-xs py-1 px-2.5"
-                  >
-                    {testingId === s.id ? t("settings.testing") : t("settings.test")}
-                  </Button>
-                  {mode === "integration" ? (
-                    <NavLink to="/settings/integrations?category=communication">
-                      <Button variant="subtle" className="text-xs py-1 px-2.5">
-                        {t("settings.openIntegrationsHub")}
-                      </Button>
-                    </NavLink>
-                  ) : (
-                    <>
-                      <Button variant="subtle" onClick={() => setEditing(s)} className="text-xs py-1 px-2.5">
-                        {t("settings.editSmtp")}
-                      </Button>
-                      <Button
-                        variant="danger"
-                        onClick={() => remove(s.id)}
-                        className="text-xs py-1 px-2.5 border-0"
-                      >
-                        {t("settings.remove")}
-                      </Button>
-                    </>
-                  )}
-                </div>
-              )}
+        {mode === "integration" && (
+          <div className="mt-3 flex items-center justify-between p-3 rounded-lg border border-primary/20 bg-accent-soft text-xs text-foreground">
+            <div className="flex items-center gap-2">
+              <Blocks className="h-4 w-4 text-accent-fg shrink-0" />
+              <span>{t("settings.integrationsHubBanner")}</span>
             </div>
-          ))}
-        </div>
-      )}
-      {(creating || editing) && (
-        <SMTPSenderModal
-          sender={editing}
-          onClose={() => { setCreating(false); setEditing(null); }}
-          onSaved={() => { setCreating(false); setEditing(null); load(); }}
-        />
-      )}
-    </Panel>
+            <NavLink
+              to="/settings/integrations?category=communication"
+              className="ml-3 inline-flex min-h-8 items-center whitespace-nowrap text-xs font-medium text-accent-fg hover:underline"
+            >
+              {t("settings.openIntegrationsHub")} →
+            </NavLink>
+          </div>
+        )}
+
+        {loading ? (
+          <div role="status" aria-busy="true" aria-label={t("settings.loadingLower")}>
+            <PageRows>
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Fragment key={i}>
+                  {i > 0 && <Separator />}
+                  <div
+                    data-slot="page-row"
+                    className="flex min-h-[var(--row-height,3.5rem)] items-center justify-between gap-4 px-4 py-3"
+                  >
+                    <div className="flex-1 space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <Skeleton className="h-4 w-36" />
+                        <Skeleton className="h-4 w-16 rounded-full" />
+                      </div>
+                      <Skeleton className="h-3 w-56" />
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Skeleton className="h-7 w-14 rounded-lg" />
+                      <Skeleton className="h-7 w-20 rounded-lg" />
+                    </div>
+                  </div>
+                </Fragment>
+              ))}
+            </PageRows>
+          </div>
+        ) : senders.length === 0 ? (
+          // The heading carries the add/open control, so the empty state states
+          // the fact and adds no second button.
+          <Empty reason={t("settings.noSmtpSenders")} className="mt-3">
+            <Send />
+          </Empty>
+        ) : (
+          <PageRows>
+            {senders.map((s, idx) => (
+              <Fragment key={s.id}>
+                {idx > 0 && <Separator />}
+                <div
+                  data-slot="page-row"
+                  className="flex min-h-[var(--row-height,3.5rem)] items-center justify-between gap-4 px-4 py-3 group"
+                >
+                  <div className="min-w-0">
+                    <div className="font-semibold text-sm text-foreground flex flex-wrap items-center gap-1.5">
+                      {s.name}
+                      {mode === "integration" ? (
+                        <>
+                          <Badge tone={s.provider === "resend" ? "secondary" : "info"} className="uppercase tracking-wider text-[10px]">
+                            {s.provider}
+                          </Badge>
+                          {s.configured ?? true
+                            ? <StatusBadge status="success" className="text-[10px]"><KeyRound className="h-2.5 w-2.5 mr-0.5 inline" />{t("settings.smtpPasswordSet")}</StatusBadge>
+                            : <StatusBadge status="warning" className="text-[10px]">{t("settings.smtpNoPassword")}</StatusBadge>}
+                        </>
+                      ) : (
+                        s.passSet
+                          ? <StatusBadge status="success" className="text-[10px]"><KeyRound className="h-2.5 w-2.5 mr-0.5 inline" />{t("settings.smtpPasswordSet")}</StatusBadge>
+                          : <StatusBadge status="warning" className="text-[10px]">{t("settings.smtpNoPassword")}</StatusBadge>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1 font-mono">
+                      {mode === "integration"
+                        ? (s.summary || `${s.fromEmail} via ${s.host}:${s.port || 587}`)
+                        : `${s.fromEmail} via ${s.host}:${s.port}`}
+                    </div>
+                  </div>
+                  {canManageSMTP && (
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Button
+                        variant="subtle"
+                        onClick={() => test(s)}
+                        disabled={testingId === s.id}
+                        className="text-xs py-1 px-2.5"
+                      >
+                        {testingId === s.id ? t("settings.testing") : t("settings.test")}
+                      </Button>
+                      {mode === "integration" ? (
+                        <NavLink to="/settings/integrations?category=communication">
+                          <Button variant="subtle" className="text-xs py-1 px-2.5">
+                            {t("settings.openIntegrationsHub")}
+                          </Button>
+                        </NavLink>
+                      ) : (
+                        <>
+                          <Button variant="subtle" onClick={() => setEditing(s)} className="text-xs py-1 px-2.5">
+                            {t("settings.editSmtp")}
+                          </Button>
+                          <Button
+                            variant="danger"
+                            onClick={() => remove(s.id)}
+                            className="text-xs py-1 px-2.5 border-0"
+                          >
+                            {t("settings.remove")}
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </Fragment>
+            ))}
+          </PageRows>
+        )}
+        {(creating || editing) && (
+          <SMTPSenderModal
+            sender={editing}
+            onClose={() => { setCreating(false); setEditing(null); }}
+            onSaved={() => { setCreating(false); setEditing(null); load(); }}
+          />
+        )}
+      </PageSection>
+    </PageColumn>
   );
 }
 

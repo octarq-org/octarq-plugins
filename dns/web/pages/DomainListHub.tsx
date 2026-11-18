@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { Button, Empty, PageCard, Input, Badge, useTranslation, ListSkeleton } from "@octarq/plugin-sdk";
+import { Fragment, useMemo } from "react";
+import { Button, Empty, PageCard, PageRows, Separator, Skeleton, Input, Badge, useTranslation } from "@octarq/plugin-sdk";
 import { Domain, ProviderAccount } from "../api";
 import { Globe, RefreshCw, Plus, Mail, Link as LinkIcon, Settings, Layers, ShieldCheck } from "lucide-react";
 import type { DomainSubTab } from "./DomainDetailWorkspace";
@@ -117,7 +117,33 @@ export function DomainListHub({
       </div>
 
       {loading && domains.length === 0 ? (
-        <ListSkeleton rows={6} ariaLabel={t("domains.loading")} />
+        <div role="status" aria-busy="true" aria-label={t("domains.loading")}>
+          <PageRows className="mt-0">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <Fragment key={i}>
+                {i > 0 && <Separator />}
+                <div className="flex min-h-[var(--row-height,3.5rem)] flex-wrap items-center justify-between gap-4 px-4 py-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Skeleton className="h-10 w-10 rounded-lg shrink-0" />
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <Skeleton className="h-4 w-36" />
+                        <Skeleton className="h-4 w-20 rounded-full" />
+                      </div>
+                      <Skeleton className="h-3 w-48" />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <Skeleton className="h-8 w-28 rounded-lg" />
+                    <Skeleton className="h-8 w-24 rounded-lg" />
+                    <Skeleton className="h-8 w-9 rounded-lg" />
+                    <Skeleton className="h-8 w-9 rounded-lg" />
+                  </div>
+                </div>
+              </Fragment>
+            ))}
+          </PageRows>
+        </div>
       ) : domains.length === 0 && q ? (
         <PageCard className="mt-0 flex flex-col items-center gap-3 p-8 text-center">
           <p className="text-sm text-muted-foreground">
@@ -128,118 +154,136 @@ export function DomainListHub({
           </Button>
         </PageCard>
       ) : (
-        <div className="grid grid-cols-1 gap-3">
-          {domains.map((d) => (
-            <div
-              key={d.id}
-              role="button"
-              tabIndex={0}
-              className="rounded-lg border border-border bg-card p-4 hover:border-border-strong transition-colors cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={() => {
-                onSelectDomain(d, "records");
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
+        <PageRows className="mt-0">
+          {domains.map((d, i) => (
+            <Fragment key={d.id}>
+              {i > 0 && <Separator />}
+              <div
+                role="button"
+                tabIndex={0}
+                className="min-h-[var(--row-height,3.5rem)] px-4 py-3 hover:bg-surface-hover transition-colors cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                onClick={() => {
                   onSelectDomain(d, "records");
-                }
-              }}
-            >
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="h-10 w-10 rounded-xl bg-accent-soft flex items-center justify-center text-accent-fg shrink-0 group-hover:scale-105 transition-transform">
-                    <Globe className="h-5 w-5" aria-hidden="true" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-base text-foreground truncate">{d.name}</span>
-                      <Badge tone="neutral" className="text-[11px] font-mono shrink-0">
-                        {getProviderName(d)}
-                      </Badge>
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onSelectDomain(d, "records");
+                  }
+                }}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="h-10 w-10 rounded-lg bg-accent-soft flex items-center justify-center text-accent-fg shrink-0">
+                      <Globe className="h-5 w-5" aria-hidden="true" />
                     </div>
-                    {d.note && (
-                      <div className="truncate text-xs text-muted-foreground mt-1">{d.note}</div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 shrink-0">
-                  {/* Service Toggles */}
-                  <div className="flex items-center gap-2 bg-well px-3 py-1.5 rounded-xl border border-border">
-                    <button
-                      type="button"
-                      className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
-                        d.forLink
-                          ? "bg-accent text-accent-fg font-medium"
-                          : "text-muted-foreground hover:text-muted-foreground"
-                      }`}
-                      title={t("domains.toggleLinkRouting")}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onToggleService(d, "forLink");
-                      }}
-                    >
-                      <LinkIcon className="h-3 w-3" />
-                      <span>{t("domains.thLink")}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
-                        d.forMail
-                          ? "bg-success-bg text-success-fg border border-success-border font-medium"
-                          : "text-muted-foreground hover:text-muted-foreground"
-                      }`}
-                      title={t("domains.toggleMailRouting")}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onToggleService(d, "forMail");
-                      }}
-                    >
-                      <Mail className="h-3 w-3" />
-                      <span>{t("domains.thMail")}</span>
-                    </button>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-base text-foreground truncate">{d.name}</span>
+                        <Badge tone="default" className="text-[11px] font-mono shrink-0">
+                          {getProviderName(d)}
+                        </Badge>
+                      </div>
+                      {d.note && (
+                        <div className="truncate text-xs text-muted-foreground mt-1">{d.note}</div>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Quick Actions */}
-                  <Button
-                    variant="primary"
-                    className="text-xs py-1.5 px-3 gap-1.5"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelectDomain(d, "records");
-                    }}
-                  >
-                    <Layers className="h-3.5 w-3.5" />
-                    {t("domains.manageZone")}
-                  </Button>
-                  <Button
-                    variant="subtle"
-                    className="text-xs py-1.5 px-2.5"
-                    title={t("domains.domainHealth")}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelectDomain(d, "verification");
-                    }}
-                  >
-                    <ShieldCheck className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="subtle"
-                    className="text-xs py-1.5 px-2.5"
-                    title={t("domains.domainSettings")}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelectDomain(d, "settings");
-                    }}
-                  >
-                    <Settings className="h-3.5 w-3.5" />
-                  </Button>
+                  <div className="flex items-center gap-3 shrink-0">
+                    {/* Service Toggles */}
+                    <div className="flex items-center gap-2 bg-well px-3 py-1.5 rounded-lg border border-border">
+                      <button
+                        type="button"
+                        className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
+                          d.forLink
+                            ? "bg-accent text-accent-fg font-medium"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                        title={t("domains.toggleLinkRouting")}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleService(d, "forLink");
+                        }}
+                      >
+                        <LinkIcon className="h-3 w-3" />
+                        <span>{t("domains.thLink")}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
+                          d.forMail
+                            ? "bg-success-bg text-success-fg border border-success-border font-medium"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                        title={t("domains.toggleMailRouting")}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleService(d, "forMail");
+                        }}
+                      >
+                        <Mail className="h-3 w-3" />
+                        <span>{t("domains.thMail")}</span>
+                      </button>
+                    </div>
+
+                    {/* Quick Actions */}
+                    <Button
+                      variant="primary"
+                      className="text-xs py-1.5 px-3 gap-1.5"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectDomain(d, "records");
+                      }}
+                    >
+                      <Layers className="h-3.5 w-3.5" />
+                      {t("domains.manageZone")}
+                    </Button>
+                    <Button
+                      variant="subtle"
+                      className="text-xs py-1.5 px-2.5"
+                      title={t("domains.domainHealth")}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectDomain(d, "verification");
+                      }}
+                    >
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="subtle"
+                      className="text-xs py-1.5 px-2.5"
+                      title={t("domains.domainSettings")}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectDomain(d, "settings");
+                      }}
+                    >
+                      <Settings className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
+            </Fragment>
           ))}
-          {loading && <div className="p-3 text-center text-xs text-muted-foreground">{t("domains.loading")}</div>}
-        </div>
+          {loading && (
+            <>
+              <Separator />
+              <div
+                role="status"
+                aria-busy="true"
+                aria-label={t("domains.loading")}
+                className="flex min-h-[var(--row-height,3.5rem)] items-center justify-between gap-4 px-4 py-3"
+              >
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-10 w-10 rounded-lg shrink-0" />
+                  <Skeleton className="h-4 w-36" />
+                </div>
+                <Skeleton className="h-8 w-32 rounded-lg" />
+              </div>
+            </>
+          )}
+        </PageRows>
       )}
     </div>
   );

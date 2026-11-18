@@ -41,6 +41,7 @@ export function MailboxBar({
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="min-w-0 flex-1">
         <TabBar
+          className="flex-wrap"
           size="sm"
           value={active === undefined ? "all" : String(active)}
           onValueChange={(v) => onSelect(v === "all" ? undefined : Number(v))}

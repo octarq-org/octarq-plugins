@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Button, PageCard, PageShell, Panel, TabBar, toast, useTranslation, usePluginGate, roleSatisfies, useCurrentRole } from "@octarq/plugin-sdk";
+import { Button, PageColumn, PageShell, Panel, TabBar, toast, useTranslation, usePluginGate, roleSatisfies, useCurrentRole } from "@octarq/plugin-sdk";
 import { dnsApi, Domain, ProviderAccount } from "../api";
 import { Globe, RefreshCw, Plus, ArrowLeft } from "lucide-react";
 import { ProviderAccounts } from "./ProviderAccounts";
@@ -189,29 +189,31 @@ export default function DomainsPage() {
       {tab === "domains" && (
         <>
           {active === "new" ? (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" onClick={() => setActive(null)}>
-                  <ArrowLeft className="h-4 w-4" />
-                  {t("domains.backToDomains")}
-                </Button>
+            <PageColumn className="pb-0">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => setActive(null)}>
+                    <ArrowLeft className="h-4 w-4" />
+                    {t("domains.backToDomains")}
+                  </Button>
+                </div>
+                <Panel
+                  title={t("domains.addDomainZone")}
+                  icon={<Globe className="h-5 w-5 text-accent-fg" />}
+                >
+                  <DomainEditorForm
+                    domain={null}
+                    accounts={accounts}
+                    onCancel={() => setActive(null)}
+                    onSaved={(savedDomain) => {
+                      loadMore(true);
+                      setActive(savedDomain || null);
+                      setActiveSubTab("records");
+                    }}
+                  />
+                </Panel>
               </div>
-              <Panel
-                title={t("domains.addDomainZone")}
-                icon={<Globe className="h-5 w-5 text-accent-fg" />}
-              >
-                <DomainEditorForm
-                  domain={null}
-                  accounts={accounts}
-                  onCancel={() => setActive(null)}
-                  onSaved={(savedDomain) => {
-                    loadMore(true);
-                    setActive(savedDomain || null);
-                    setActiveSubTab("records");
-                  }}
-                />
-              </Panel>
-            </div>
+            </PageColumn>
           ) : active ? (
             <DomainDetailWorkspace
               domain={active}
@@ -251,12 +253,16 @@ export default function DomainsPage() {
         </>
       )}
 
-      {tab === "ddns" && <DDNSView domains={domains} />}
+      {tab === "ddns" && (
+        <PageColumn className="pb-0">
+          <DDNSView domains={domains} />
+        </PageColumn>
+      )}
 
       {tab === "settings" && (
-        <PageCard className="mt-0 p-6">
+        <PageColumn className="pb-0">
           <ProviderAccounts />
-        </PageCard>
+        </PageColumn>
       )}
 
       {syncing && (

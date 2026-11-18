@@ -1,4 +1,4 @@
-import { Field, Switch, Button, Select, FormError, Input, Textarea, Alert, Badge, useTranslation } from "@octarq/plugin-sdk";
+import { Field, Switch, Button, Select, FormError, Input, Textarea, Alert, StatusBadge, useTranslation } from "@octarq/plugin-sdk";
 import { useEffect, useState } from "react";
 import { useNavigate, useInRouterContext } from "react-router-dom";
 import { api, linksApi, Link, LinksCapabilities } from "../api";
@@ -318,7 +318,7 @@ function UtmBuilder({ target, onApply }: { target: string; onApply: (url: string
     ["content", "content"],
   ];
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 p-4 bg-well border border-border rounded-xl min-w-0">
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 p-4 bg-well border border-border rounded-lg min-w-0">
       {fields.map(([k, label]) => (
         <Input
           key={k}
@@ -404,13 +404,13 @@ function RoutingRulesEditor({ rules, onChange, geoReady }: { rules: any[]; onCha
             {rule.type === "geo" && (
               <div className="flex items-center gap-2 pt-0.5">
                 {geoReady ? (
-                  <Badge tone="green" shape="dot">
+                  <StatusBadge status="success" shape="dot">
                     {t("links.geoReady", "GeoIP Active")}
-                  </Badge>
+                  </StatusBadge>
                 ) : (
-                  <Badge tone="amber" shape="dash" title={t("links.geoUnavailableDesc", "Server lacks GeoIP database. Country routing is bypassed.")}>
+                  <StatusBadge status="warning" shape="dash" title={t("links.geoUnavailableDesc", "Server lacks GeoIP database. Country routing is bypassed.")}>
                     {t("links.geoUnavailable", "GeoIP Unavailable (bypassed)")}
-                  </Badge>
+                  </StatusBadge>
                 )}
                 {!geoReady && (
                   <span className="text-[11px] text-warning-fg">

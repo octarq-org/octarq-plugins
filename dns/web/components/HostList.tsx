@@ -38,7 +38,7 @@ export function HostList({
   const freshSuggestions = suggestions.filter((s) => !hosts.some((x) => x.host === s));
 
   return (
-    <div className="rounded-xl border border-border bg-well p-2.5">
+    <div className="rounded-lg border border-border bg-well p-2.5">
       <div className="mb-2 flex flex-wrap gap-1.5">
         {hosts.length === 0 ? (
           <span className="text-xs text-muted-foreground">{emptyText ?? t("uiCommon.hostListEmpty")}</span>

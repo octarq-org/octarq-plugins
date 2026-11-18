@@ -1,4 +1,4 @@
-import { PageCard, Empty, Button, Input, ListSkeleton, useTranslation } from "@octarq/plugin-sdk";
+import { PageCard, Empty, Button, Input, Skeleton, useTranslation } from "@octarq/plugin-sdk";
 import { Search, X, Mail as MailIcon, Inbox } from "lucide-react";
 import { Email, Mailbox } from "../api";
 import { MailFolder } from "./types";
@@ -58,13 +58,29 @@ export function EmailListPane({
 
       <PageCard className="mt-0 flex-1 overflow-hidden p-0">
         {emails.length === 0 && loading ? (
-          <ListSkeleton rows={7} ariaLabel={t("mail.loading")} />
+          <div
+            role="status"
+            aria-busy="true"
+            aria-label={t("mail.loading")}
+            className="divide-y divide-border"
+          >
+            {Array.from({ length: 7 }).map((_, i) => (
+              <div key={i} className="flex flex-col gap-1.5 p-3.5">
+                <div className="flex items-center justify-between gap-2">
+                  <Skeleton className="h-3.5 w-36" />
+                  <Skeleton className="h-3 w-12" />
+                </div>
+                <Skeleton className="h-3.5 w-4/5" />
+                <Skeleton className="h-3 w-3/5" />
+              </div>
+            ))}
+          </div>
         ) : (
           <div className="max-h-[650px] divide-y divide-border overflow-y-auto" onScroll={onScroll}>
             {emails.length === 0 ? (
               q ? (
                 <div className="flex flex-col items-center gap-2.5 px-6 py-10 text-center">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
                     <Search className="h-4 w-4" />
                   </div>
                   <p className="text-[13px] text-muted-foreground">
@@ -112,7 +128,20 @@ export function EmailListPane({
                     onSelect={() => onOpenEmail(e)}
                   />
                 ))}
-                {loading && <div className="p-3 text-center text-xs text-muted-foreground">{t("mail.loading")}</div>}
+                {loading && (
+                  <div
+                    role="status"
+                    aria-busy="true"
+                    aria-label={t("mail.loading")}
+                    className="flex flex-col gap-1.5 p-3.5"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <Skeleton className="h-3.5 w-32" />
+                      <Skeleton className="h-3 w-12" />
+                    </div>
+                    <Skeleton className="h-3.5 w-3/4" />
+                  </div>
+                )}
               </>
             )}
           </div>

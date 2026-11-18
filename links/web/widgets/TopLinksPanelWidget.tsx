@@ -27,7 +27,7 @@ export default function TopLinksPanelWidget() {
               <button
                 key={l.id}
                 onClick={() => nav("/links")}
-                className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm hover:bg-surface-hover transition-colors"
+                className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm hover:bg-surface-hover transition-colors"
               >
                 <div className="min-w-0 flex-1 pr-2">
                   <div className="flex items-center gap-1.5 min-w-0">

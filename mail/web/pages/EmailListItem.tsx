@@ -10,11 +10,11 @@ interface EmailListItemProps {
   onSelect: () => void;
 }
 
-const CATEGORY_META: Record<string, { tone: "amber" | "cyan" | "red" | "neutral"; label: string }> = {
-  bill: { tone: "amber", label: "Bill" },
-  otp: { tone: "cyan", label: "OTP" },
-  marketing: { tone: "neutral", label: "Marketing" },
-  important: { tone: "red", label: "Important" },
+const CATEGORY_META: Record<string, { tone: "warning" | "info" | "danger" | "default"; label: string }> = {
+  bill: { tone: "warning", label: "Bill" },
+  otp: { tone: "info", label: "OTP" },
+  marketing: { tone: "default", label: "Marketing" },
+  important: { tone: "danger", label: "Important" },
 };
 
 function renderImportanceDots(n?: number) {

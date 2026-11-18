@@ -70,10 +70,30 @@ export function SecretQrModal({ onClose, account, t }: Props) {
     >
       <div className="space-y-4 text-sm">
         {loading ? (
-          <div className="space-y-3">
-            <Skeleton className="h-48 rounded-lg" />
-            <Skeleton className="h-9 rounded-lg" />
-            <Skeleton className="h-9 rounded-lg" />
+          <div
+            role="status"
+            aria-busy="true"
+            aria-label={t("twofa.loadingSecret", "Loading secret and QR code...")}
+            className="space-y-4"
+          >
+            <div className="flex flex-col items-center justify-center rounded-lg border border-border bg-well p-4">
+              <Skeleton className="h-48 w-48 rounded-md" />
+              <Skeleton className="mt-2 h-3.5 w-64" />
+            </div>
+            <div className="space-y-1.5">
+              <Skeleton className="h-3.5 w-32" />
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-10 flex-1 rounded-[var(--radius)]" />
+                <Skeleton className="h-10 w-20 rounded-[var(--radius)]" />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Skeleton className="h-3.5 w-28" />
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-10 flex-1 rounded-[var(--radius)]" />
+                <Skeleton className="h-10 w-20 rounded-[var(--radius)]" />
+              </div>
+            </div>
           </div>
         ) : error ? (
           <FormError err={error} />

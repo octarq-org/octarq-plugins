@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Badge, Button, confirmDialog, Panel, TabBar, toast, useTranslation } from "@octarq/plugin-sdk";
+import { Badge, Button, confirmDialog, PageColumn, Panel, Skeleton, TabBar, toast, useTranslation } from "@octarq/plugin-sdk";
 import { dnsApi, Domain, ProviderAccount, DNSVerifyResult } from "../api";
 import {
   Globe,
@@ -114,7 +114,7 @@ export function DomainDetailWorkspace({
           <div className="flex items-center gap-2">
             <Globe className="h-5 w-5 text-accent-fg" />
             <h2 className="font-mono text-xl font-bold text-foreground">{domain.name}</h2>
-            <Badge tone="neutral" className="text-xs font-mono ml-1">
+            <Badge tone="default" className="text-xs font-mono ml-1">
               {getProviderName(domain)}
             </Badge>
           </div>
@@ -140,7 +140,7 @@ export function DomainDetailWorkspace({
       </div>
 
       <TabBar
-        className="mb-6"
+        className="mb-6 flex-wrap"
         value={activeSubTab}
         onValueChange={(v) => setActiveSubTab(v as DomainSubTab)}
         items={[
@@ -197,16 +197,47 @@ export function DomainDetailWorkspace({
           >
 
             {verifying && dnsStatus === null ? (
-              <div className="flex flex-col items-center justify-center p-10 rounded-lg bg-well border border-border space-y-3">
-                <RefreshCw className="h-6 w-6 text-accent-fg animate-spin" />
-                <span className="text-xs text-muted-foreground">{t("domains.verifying")}</span>
+              <div role="status" aria-busy="true" aria-label={t("domains.verifying")} className="space-y-6 pt-2">
+                <div className="rounded-lg bg-well border border-border p-5 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-start gap-4 flex-1">
+                      <Skeleton className="h-16 w-16 rounded-lg shrink-0" />
+                      <div className="space-y-2 flex-1">
+                        <div className="flex items-center gap-2">
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-4 w-16 rounded-full" />
+                        </div>
+                        <Skeleton className="h-3 w-full max-w-md" />
+                      </div>
+                    </div>
+                    <Skeleton className="h-5 w-28 rounded-full shrink-0" />
+                  </div>
+                  <Skeleton className="h-2 w-full rounded-full" />
+                </div>
+                <div className="space-y-3">
+                  <Skeleton className="h-3.5 w-24" />
+                  <div className="rounded-lg bg-well border border-border p-3 space-y-2.5">
+                    <div className="flex items-center gap-2 px-1">
+                      <Skeleton className="h-3.5 w-3.5 rounded-full" />
+                      <Skeleton className="h-3.5 w-36" />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      {[0, 1, 2].map((col) => (
+                        <div key={col} className="flex flex-col items-center gap-2 p-3 rounded-lg border border-border bg-card">
+                          <Skeleton className="h-3 w-12" />
+                          <Skeleton className="h-5 w-20 rounded-full" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
             ) : dnsStatus === null ? (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
                 {(["SPF", "DKIM", "DMARC"] as const).map((label) => (
-                  <div key={label} className="flex flex-col items-center p-4 rounded-xl bg-well border border-border">
+                  <div key={label} className="flex flex-col items-center p-4 rounded-lg bg-well border border-border">
                     <span className="text-xs uppercase font-bold text-muted-foreground tracking-wider">{t("domains.statusLabel", { label })}</span>
-                    <div className="mt-2"><Badge tone="neutral">{t("domains.unknown")}</Badge></div>
+                    <div className="mt-2"><Badge tone="default">{t("domains.unknown")}</Badge></div>
                   </div>
                 ))}
               </div>
@@ -260,19 +291,21 @@ export function DomainDetailWorkspace({
 
       {/* Sub-tab 4: Domain Settings */}
       {activeSubTab === "settings" && (
-        <Panel title={t("domains.domainSettings")}>
-          <DomainEditorForm
-            key={domain.id}
-            domain={domain}
-            accounts={accounts}
-            onCancel={onBack}
-            onSaved={(d) => {
-              if (d) onUpdated(d);
-              onReloadDomains(true);
-              toast.success(t("domains.saveBasicInfo"));
-            }}
-          />
-        </Panel>
+        <PageColumn className="pb-0">
+          <Panel title={t("domains.domainSettings")}>
+            <DomainEditorForm
+              key={domain.id}
+              domain={domain}
+              accounts={accounts}
+              onCancel={onBack}
+              onSaved={(d) => {
+                if (d) onUpdated(d);
+                onReloadDomains(true);
+                toast.success(t("domains.saveBasicInfo"));
+              }}
+            />
+          </Panel>
+        </PageColumn>
       )}
 
       {showBlueprintModal && (

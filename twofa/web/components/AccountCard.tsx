@@ -52,11 +52,11 @@ export function AccountCard({
   const strokeDashoffset = circumference * (1 - progress);
 
   // Dynamic progress color based on remaining urgency
-  let strokeColor = "var(--success-fg, #10b981)";
+  let strokeColor = "var(--success-fg)";
   if (rem <= 5) {
-    strokeColor = "var(--danger-fg, #ef4444)";
+    strokeColor = "var(--danger-fg)";
   } else if (rem <= 10) {
-    strokeColor = "var(--warning-fg, #f59e0b)";
+    strokeColor = "var(--warning-fg)";
   }
 
   const tags = account.tags
@@ -153,7 +153,7 @@ export function AccountCard({
         {tags.length > 0 && (
           <div className="mb-3 flex flex-wrap gap-1">
             {tags.map((tg) => (
-              <Badge key={tg} tone="neutral" className="px-1.5 py-0.5 text-[10px]">
+              <Badge key={tg} tone="default" className="px-1.5 py-0.5 text-[10px]">
                 {tg}
               </Badge>
             ))}

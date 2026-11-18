@@ -1,7 +1,7 @@
-import { PageCard, Button, Modal, Field, Input, Select, Badge, Empty, timeAgo, toast, Alert, confirmDialog, useTranslation, roleSatisfies, useCurrentRole } from "@octarq/plugin-sdk";
-import { useEffect, useState } from "react";
+import { PageSection, PageRows, Separator, Skeleton, Button, Modal, Field, Input, Select, Badge, Empty, timeAgo, toast, Alert, confirmDialog, useTranslation, roleSatisfies, useCurrentRole } from "@octarq/plugin-sdk";
+import { Fragment, useEffect, useState } from "react";
 import { Domain, dnsApi, DDNSToken, CreateDDNSTokenResult } from "../api";
-import { KeyRound, Plus, Trash2, Copy, Check, AlertTriangle } from "lucide-react";
+import { KeyRound, Plus, Trash2, Copy, Check } from "lucide-react";
 
 export function DDNSView({ domains }: { domains: Domain[] }) {
   const { t } = useTranslation();
@@ -132,66 +132,90 @@ export function DDNSView({ domains }: { domains: Domain[] }) {
       </div>
 
       {loading ? (
-        <div className="py-8 text-center text-xs text-muted-foreground">
-          {t("domains.loadingTokens")}
-        </div>
+        <PageSection className="mt-0">
+          <div role="status" aria-busy="true" aria-label={t("domains.loadingTokens")}>
+            <PageRows className="mt-0">
+              {[0, 1, 2].map((i) => (
+                <Fragment key={i}>
+                  {i > 0 && <Separator />}
+                  <div className="flex min-h-[var(--row-height,3.5rem)] items-center justify-between gap-4 px-4 py-3">
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Skeleton className="h-4 w-28" />
+                        <Skeleton className="h-4 w-10 rounded-full" />
+                        <Skeleton className="h-3.5 w-36" />
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <Skeleton className="h-3 w-24" />
+                        <Skeleton className="h-3 w-24" />
+                      </div>
+                    </div>
+                    <Skeleton className="h-7 w-24 shrink-0" />
+                  </div>
+                </Fragment>
+              ))}
+            </PageRows>
+          </div>
+        </PageSection>
       ) : tokens.length === 0 ? (
         <Empty reason={t("domains.noDdnsTokens")}>
           <KeyRound />
         </Empty>
       ) : (
-        <div className="space-y-3">
-          {tokens.map((tok) => {
-            const dom = domains.find((d) => d.id === tok.domainId);
-            return (
-              <PageCard
-                key={tok.id}
-                className="mt-0 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-              >
-                <div className="space-y-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-sm text-foreground">
-                      {tok.label || tok.recordName}
-                    </span>
-                    <Badge tone="cyan" className="font-mono text-[10px]">
-                      {tok.recordType}
-                    </Badge>
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {tok.recordName}
-                    </span>
-                  </div>
+        <PageSection className="mt-0">
+          <PageRows className="mt-0">
+            {tokens.map((tok, i) => {
+              const dom = domains.find((d) => d.id === tok.domainId);
+              return (
+                <Fragment key={tok.id}>
+                  {i > 0 && <Separator />}
+                  <div className="flex min-h-[var(--row-height,3.5rem)] flex-col sm:flex-row sm:items-center justify-between gap-4 px-4 py-3">
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-sm text-foreground">
+                          {tok.label || tok.recordName}
+                        </span>
+                        <Badge tone="info" className="font-mono text-[10px]">
+                          {tok.recordType}
+                        </Badge>
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {tok.recordName}
+                        </span>
+                      </div>
 
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
-                    <span>
-                      {t("domains.lastIp")}:{" "}
-                      <span className="font-mono text-foreground font-medium">
-                        {tok.lastIp || "—"}
-                      </span>
-                    </span>
-                    <span>
-                      {t("domains.lastSeen")}:{" "}
-                      <span className="text-foreground">
-                        {tok.lastSeenAt ? timeAgo(tok.lastSeenAt) : t("domains.never")}
-                      </span>
-                    </span>
-                    {dom && <span className="text-muted-foreground/70">{t("domains.zonePrefix")} {dom.name}</span>}
-                  </div>
-                </div>
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
+                        <span>
+                          {t("domains.lastIp")}:{" "}
+                          <span className="font-mono text-foreground font-medium">
+                            {tok.lastIp || "—"}
+                          </span>
+                        </span>
+                        <span>
+                          {t("domains.lastSeen")}:{" "}
+                          <span className="text-foreground">
+                            {tok.lastSeenAt ? timeAgo(tok.lastSeenAt) : t("domains.never")}
+                          </span>
+                        </span>
+                        {dom && <span className="text-muted-foreground/70">{t("domains.zonePrefix")} {dom.name}</span>}
+                      </div>
+                    </div>
 
-                {canManageDDNS && (
-                  <Button
-                    variant="danger"
-                    onClick={() => handleDeleteToken(tok.id)}
-                    className="gap-1.5 py-1 text-xs shrink-0 self-start sm:self-center"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    {t("domains.revokeToken")}
-                  </Button>
-                )}
-              </PageCard>
-            );
-          })}
-        </div>
+                    {canManageDDNS && (
+                      <Button
+                        variant="danger"
+                        onClick={() => handleDeleteToken(tok.id)}
+                        className="gap-1.5 py-1 text-xs shrink-0 self-start sm:self-center"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        {t("domains.revokeToken")}
+                      </Button>
+                    )}
+                  </div>
+                </Fragment>
+              );
+            })}
+          </PageRows>
+        </PageSection>
       )}
 
       {/* Create Token Modal */}
@@ -262,7 +286,7 @@ export function DDNSView({ domains }: { domains: Domain[] }) {
           onClose={() => setCreatedResult(null)}
         >
           <div className="space-y-4 pt-2">
-            <Alert variant="warning" className="text-xs p-3 rounded-xl">
+            <Alert variant="warning" className="text-xs p-3 rounded-lg">
               <span>
                 {t("domains.ddnsCreatedWarning")}
               </span>

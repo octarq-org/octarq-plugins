@@ -1,4 +1,4 @@
-import { Code, Guide, Badge, Button, BadgeTone, useTranslation } from "@octarq/plugin-sdk";
+import { Code, Guide, Badge, StatusBadge, Button, useTranslation } from "@octarq/plugin-sdk";
 import { useState } from "react";
 import { HostDNSStatus, LinkHostStatus, DNSRecordStatus } from "../api";
 import { ShieldCheck, ShieldAlert, AlertTriangle, Zap, Copy, Check, ListChecks, Mail, Link as LinkIcon } from "lucide-react";
@@ -54,7 +54,7 @@ export function DnsReputationScoreCard({ repScore }: { repScore: DnsReputationSc
     <div className="rounded-lg bg-well border border-border p-5 space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-start gap-4">
-          <div className="flex flex-col items-center justify-center h-16 w-16 rounded-lg bg-well border border-border shrink-0">
+          <div className="flex flex-col items-center justify-center h-16 w-16 rounded-lg bg-card border border-border shrink-0">
             <span className="text-2xl font-black font-mono tracking-tight text-foreground">
               {repScore.score}
             </span>
@@ -71,7 +71,7 @@ export function DnsReputationScoreCard({ repScore }: { repScore: DnsReputationSc
         </div>
 
         <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
-          <Badge tone="neutral" className="text-[11px] px-2.5 py-0.5">
+          <Badge tone="default" className="text-[11px] px-2.5 py-0.5">
             {t("domains.checksSummary", {
               passed: repScore.passedCount,
               warning: repScore.warningCount,
@@ -82,14 +82,14 @@ export function DnsReputationScoreCard({ repScore }: { repScore: DnsReputationSc
       </div>
 
       {/* Visual score progress bar */}
-      <div className="w-full bg-well h-2 rounded-full overflow-hidden">
+      <div className="w-full bg-card border border-border/50 h-2 rounded-full overflow-hidden">
         <div
           className={`h-full rounded-full transition-all duration-500 ${
-            repScore.tone === "green"
+            repScore.tone === "success"
               ? "bg-success-fg"
-              : repScore.tone === "cyan"
+              : repScore.tone === "info"
               ? "bg-info-fg"
-              : repScore.tone === "amber"
+              : repScore.tone === "warning"
               ? "bg-warning-fg"
               : "bg-danger-fg"
           }`}
@@ -175,28 +175,28 @@ export function DnsTroubleshootingGuide({ issues }: { issues: DnsDiagnosticIssue
 
       <div className="space-y-3">
         {issues.map((issue, idx) => {
-          const tone: BadgeTone = issue.issueType === "misconfigured" ? "amber" : "red";
+          const badgeStatus = issue.issueType === "misconfigured" ? "warning" : "error";
           return (
             <div
               key={`${issue.host}-${issue.protocol}-${idx}`}
-              className="rounded-xl border border-border bg-well p-4 space-y-3"
+              className="rounded-lg border border-border bg-well p-4 space-y-3"
             >
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-2">
-                  <Badge tone="neutral" className="font-mono text-xs font-bold">
+                  <Badge tone="default" className="font-mono text-xs font-bold">
                     {issue.protocol}
                   </Badge>
                   <span className="text-xs font-mono text-foreground font-medium">{issue.host}</span>
                 </div>
-                <Badge tone={tone}>
+                <StatusBadge status={badgeStatus}>
                   {issue.issueType === "misconfigured" ? t("domains.misconfigured") : t("domains.missing")}
-                </Badge>
+                </StatusBadge>
               </div>
 
               <p className="text-xs text-muted-foreground leading-relaxed">{t(issue.rationaleKey)}</p>
 
               {issue.observedValue && (
-                <div className="p-2.5 rounded-lg bg-well border border-border space-y-1">
+                <div className="p-2.5 rounded-lg bg-card border border-border space-y-1">
                   <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
                     {t("domains.issueObserved")}
                   </span>
@@ -207,7 +207,7 @@ export function DnsTroubleshootingGuide({ issues }: { issues: DnsDiagnosticIssue
                 </div>
               )}
 
-              <div className="p-3 rounded-xl bg-well border border-border space-y-2">
+              <div className="space-y-2 pt-1">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">
                     {t("domains.issueRecommended")}
@@ -216,18 +216,18 @@ export function DnsTroubleshootingGuide({ issues }: { issues: DnsDiagnosticIssue
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs font-mono">
-                  <div className="p-2 rounded bg-well border border-border">
+                  <div className="p-2 rounded-lg bg-card border border-border">
                     <span className="text-[10px] text-muted-foreground block font-sans">{t("domains.issueRecordType")}</span>
                     <span className="font-semibold text-foreground">{issue.recordType}</span>
                   </div>
-                  <div className="p-2 rounded bg-well border border-border">
+                  <div className="p-2 rounded-lg bg-card border border-border">
                     <span className="text-[10px] text-muted-foreground block font-sans">{t("domains.issueHost")}</span>
                     <div className="flex items-center justify-between gap-1">
                       <span className="truncate text-foreground">{issue.recordName}</span>
                       <CopyButton text={issue.recordName} />
                     </div>
                   </div>
-                  <div className="p-2 rounded bg-well border border-border sm:col-span-1">
+                  <div className="p-2 rounded-lg bg-card border border-border sm:col-span-1">
                     <span className="text-[10px] text-muted-foreground block font-sans">{t("domains.issueRecommended")}</span>
                     <div className="flex items-center justify-between gap-1">
                       <span className="truncate text-foreground">{issue.recommendedValue}</span>
@@ -246,12 +246,12 @@ export function DnsTroubleshootingGuide({ issues }: { issues: DnsDiagnosticIssue
 
 function DnsStatusBadge({ status, label }: { status: DNSRecordStatus; label: string }) {
   const { t } = useTranslation();
-  const tone: BadgeTone = status.healthy ? "green" : status.set ? "amber" : "red";
+  const badgeStatus = status.healthy ? "success" : status.set ? "warning" : "error";
   const text = status.healthy ? t("domains.configured") : status.set ? t("domains.misconfigured") : t("domains.missing");
   return (
-    <div className="flex flex-col items-center p-3 rounded-xl bg-well border border-border">
+    <div className="flex flex-col items-center p-3 rounded-lg bg-card border border-border">
       <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">{label}</span>
-      <div className="mt-2"><Badge tone={tone}>{text}</Badge></div>
+      <div className="mt-2"><StatusBadge status={badgeStatus}>{text}</StatusBadge></div>
     </div>
   );
 }
@@ -259,7 +259,7 @@ function DnsStatusBadge({ status, label }: { status: DNSRecordStatus; label: str
 export function DnsHostRow({ host }: { host: HostDNSStatus }) {
   const dkimLabel = host.dkim.selector ? `DKIM (${host.dkim.selector})` : "DKIM";
   return (
-    <div className="rounded-xl bg-well border border-border p-3">
+    <div className="rounded-lg bg-well border border-border p-3">
       <div className="flex items-center gap-2 mb-2.5 px-1">
         <Mail className="h-3.5 w-3.5 text-accent-fg/70 shrink-0" />
         <span className="text-xs font-mono text-muted-foreground truncate">{host.host}</span>
@@ -273,11 +273,11 @@ export function DnsHostRow({ host }: { host: HostDNSStatus }) {
   );
 }
 
-// Short-link host: CNAME confirmed into zone (green), resolves but target
-// unverified — e.g. proxied/A-record (amber), or not resolving (red).
+// Short-link host: CNAME confirmed into zone (success), resolves but target
+// unverified — e.g. proxied/A-record (warning), or not resolving (error).
 export function LinkHostRow({ link }: { link: LinkHostStatus }) {
   const { t } = useTranslation();
-  const tone: BadgeTone = link.healthy ? "green" : link.set ? "amber" : "red";
+  const badgeStatus = link.healthy ? "success" : link.set ? "warning" : "error";
   const text = link.healthy ? t("domains.pointsToZone") : link.set ? t("domains.unverified") : t("domains.notResolving");
   const detail = link.healthy
     ? `CNAME → ${link.cname}`
@@ -285,13 +285,13 @@ export function LinkHostRow({ link }: { link: LinkHostStatus }) {
       ? (link.cname ? `CNAME → ${link.cname}` : t("domains.resolvesNoCname", { target: link.target }))
       : t("domains.addCname", { target: link.target });
   return (
-    <div className="flex items-center gap-3 rounded-xl bg-well border border-border p-3">
+    <div className="flex items-center gap-3 rounded-lg bg-well border border-border p-3">
       <LinkIcon className="h-3.5 w-3.5 text-accent-fg/70 shrink-0" />
       <div className="min-w-0 flex-1">
         <div className="text-xs font-mono text-muted-foreground truncate">{link.host}</div>
         <div className="text-[10px] text-muted-foreground truncate font-mono">{detail}</div>
       </div>
-      <Badge tone={tone}>{text}</Badge>
+      <StatusBadge status={badgeStatus}>{text}</StatusBadge>
     </div>
   );
 }

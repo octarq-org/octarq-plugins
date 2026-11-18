@@ -1,5 +1,18 @@
 import { useEffect, useState } from "react";
-import { AreaChart, Badge, Modal, Skeleton } from "@octarq/plugin-sdk";
+import {
+  AreaChart,
+  Badge,
+  Modal,
+  Skeleton,
+  TabBar,
+  Table,
+  TBody,
+  TD,
+  TH,
+  THead,
+  TR,
+  TableSkeleton,
+} from "@octarq/plugin-sdk";
 import type { TFunc } from "@octarq/plugin-sdk";
 import { apiGet } from "../api";
 import type { SigninResult, Snapshot, Tracker } from "../types";
@@ -50,26 +63,17 @@ export function TrackerDetail({ tracker, onClose, t, lang }: TrackerDetailProps)
 
   return (
     <Modal title={tracker.name} onClose={onClose} wide>
-      <div className="mb-4 flex gap-1 rounded-lg border border-border p-1">
-        {(["overview", "traffic", "signins"] as Tab[]).map((key) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setTab(key)}
-            className={
-              tab === key
-                ? "flex-1 rounded-md bg-muted px-3 py-1.5 text-[12.5px] font-semibold text-foreground"
-                : "flex-1 rounded-md px-3 py-1.5 text-[12.5px] text-muted-foreground hover:text-foreground"
-            }
-          >
-            {key === "overview"
-              ? t("tabOverview", "Overview")
-              : key === "traffic"
-                ? t("tabTraffic", "Traffic")
-                : t("tabSignins", "Sign-ins")}
-          </button>
-        ))}
-      </div>
+      <TabBar
+        value={tab}
+        onValueChange={(value) => setTab(value as Tab)}
+        size="sm"
+        className="mb-4"
+        items={[
+          { value: "overview", label: t("tabOverview", "Overview") },
+          { value: "traffic", label: t("tabTraffic", "Traffic") },
+          { value: "signins", label: t("tabSignins", "Sign-ins") },
+        ]}
+      />
 
       {failed ? (
         <p className="py-6 text-center text-[13px] text-muted-foreground">{t("errorGeneric", "The action failed.")}</p>
@@ -114,7 +118,19 @@ export function TrackerDetail({ tracker, onClose, t, lang }: TrackerDetailProps)
 
       {!failed && tab === "traffic" ? (
         snapshots === null ? (
-          <Skeleton className="h-32 w-full" />
+          <div
+            role="status"
+            aria-busy="true"
+            aria-label={t("loading", "Loading accounts…")}
+            className="space-y-4"
+          >
+            {[0, 1].map((i) => (
+              <div key={i}>
+                <Skeleton className="mb-1 h-4 w-20" />
+                <Skeleton className="h-[120px] w-full rounded-lg" />
+              </div>
+            ))}
+          </div>
         ) : snapshots.length === 0 ? (
           <p className="py-6 text-center text-[13px] text-muted-foreground">{t("historyEmpty", "No history yet.")}</p>
         ) : (
@@ -143,35 +159,39 @@ export function TrackerDetail({ tracker, onClose, t, lang }: TrackerDetailProps)
 
       {!failed && tab === "signins" ? (
         signins === null ? (
-          <Skeleton className="h-32 w-full" />
+          <TableSkeleton
+            columnsCount={3}
+            rowsCount={4}
+            ariaLabel={t("loading", "Loading accounts…")}
+          />
         ) : signins.length === 0 ? (
           <p className="py-6 text-center text-[13px] text-muted-foreground">{t("historyEmpty", "No history yet.")}</p>
         ) : (
-          <div className="max-h-[50vh] overflow-y-auto">
-            <table className="w-full text-left text-[12.5px]">
-              <thead className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                <tr>
-                  <th className="pb-2 pr-3 font-medium">{t("tableTime", "Time")}</th>
-                  <th className="pb-2 pr-3 font-medium">{t("tableOutcome", "Result")}</th>
-                  <th className="pb-2 font-medium">{t("tableMessage", "Message")}</th>
-                </tr>
-              </thead>
-              <tbody>
+          <div className="max-h-[50vh] overflow-y-auto rounded-lg border border-border">
+            <Table>
+              <THead>
+                <TR>
+                  <TH>{t("tableTime", "Time")}</TH>
+                  <TH>{t("tableOutcome", "Result")}</TH>
+                  <TH>{t("tableMessage", "Message")}</TH>
+                </TR>
+              </THead>
+              <TBody>
                 {signins.map((row) => (
-                  <tr key={row.id} className="border-t border-border align-top">
-                    <td className="py-2 pr-3 whitespace-nowrap text-muted-foreground">
+                  <TR key={row.id} className="align-top">
+                    <TD className="whitespace-nowrap text-xs text-muted-foreground">
                       {formatDateTime(row.attempted_at, unknown, lang)}
-                    </td>
-                    <td className="py-2 pr-3">
+                    </TD>
+                    <TD>
                       <Badge tone={outcomeTone(row.outcome)} shape="square">
                         {outcomeLabel(t, row.outcome)}
                       </Badge>
-                    </td>
-                    <td className="py-2 text-foreground">{row.message || row.reason || unknown}</td>
-                  </tr>
+                    </TD>
+                    <TD className="text-xs text-foreground">{row.message || row.reason || unknown}</TD>
+                  </TR>
                 ))}
-              </tbody>
-            </table>
+              </TBody>
+            </Table>
           </div>
         )
       ) : null}

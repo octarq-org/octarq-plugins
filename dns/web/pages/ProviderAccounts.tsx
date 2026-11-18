@@ -1,5 +1,5 @@
-import { Empty, Field, Input, Modal, Badge, Button, Select, toast, confirmDialog, FormError, useTranslation, roleSatisfies, useCurrentRole } from "@octarq/plugin-sdk";
-import { useEffect, useState } from "react";
+import { Empty, Field, Input, Modal, Badge, StatusBadge, Button, Select, PageSection, PageRows, Separator, Skeleton, toast, confirmDialog, FormError, useTranslation, roleSatisfies, useCurrentRole } from "@octarq/plugin-sdk";
+import { Fragment, useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { dnsApi, ProviderAccount } from "../api";
 import { Cloud, KeyRound, Blocks } from "lucide-react";
@@ -95,7 +95,28 @@ export function ProviderAccounts({ embed }: { embed?: boolean }) {
       )}
 
       {loading ? (
-        <div className="text-muted-foreground text-sm py-4 text-center">{t("settings.loadingLower")}</div>
+        <div role="status" aria-busy="true" aria-label={t("settings.loadingLower")}>
+          <PageRows className="mt-0">
+            {[0, 1, 2].map((i) => (
+              <Fragment key={i}>
+                {i > 0 && <Separator />}
+                <div className="flex min-h-[var(--row-height,3.5rem)] items-center justify-between gap-4 px-4 py-3">
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <Skeleton className="h-4 w-36" />
+                    <div className="flex items-center gap-1.5">
+                      <Skeleton className="h-4 w-20 rounded-full" />
+                      <Skeleton className="h-4 w-24 rounded-full" />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Skeleton className="h-7 w-14" />
+                    <Skeleton className="h-7 w-16" />
+                  </div>
+                </div>
+              </Fragment>
+            ))}
+          </PageRows>
+        </div>
       ) : mode === null ? (
         <Empty reason={t("settings.dnsProvidersUnavailable")}>
           <Cloud />
@@ -120,51 +141,63 @@ export function ProviderAccounts({ embed }: { embed?: boolean }) {
           <Cloud />
         </Empty>
       ) : (
-        <div className="divide-y divide-border border border-border rounded-xl bg-well overflow-hidden">
-          {accounts.map(a => {
-            const providerType = a.provider || a.type || "cloudflare";
-            const isConfigured = a.configured ?? a.hasCredentials ?? true;
-            return (
-              <div key={a.id} className="flex items-center justify-between p-4">
-                <div>
-                  <div className="font-semibold text-sm text-foreground">{a.name}</div>
-                  <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
-                    <Badge
-                      tone={providerType === "cloudflare" ? "indigo" : providerType === "dnspod" ? "cyan" : "amber"}
-                      className="uppercase tracking-wider text-[10px]"
-                    >
-                      {providerType}
-                    </Badge>
-                    {isConfigured
-                      ? <Badge tone="green" className="text-[10px]"><KeyRound className="h-2.5 w-2.5 mr-0.5 inline" />{t("settings.credentialsSet")}</Badge>
-                      : <Badge tone="amber" className="text-[10px]">{t("settings.noCredentials")}</Badge>}
+        <PageSection className="mt-0">
+          <PageRows className="mt-0">
+            {accounts.map((a, i) => {
+              const providerType = a.provider || a.type || "cloudflare";
+              const isConfigured = a.configured ?? a.hasCredentials ?? true;
+              return (
+                <Fragment key={a.id}>
+                  {i > 0 && <Separator />}
+                  <div className="flex min-h-[var(--row-height,3.5rem)] items-center justify-between gap-4 px-4 py-3">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-sm text-foreground">{a.name}</div>
+                      <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5 flex-wrap">
+                        <Badge
+                          tone={providerType === "cloudflare" || providerType === "dnspod" ? "info" : "default"}
+                          className="uppercase tracking-wider text-[10px]"
+                        >
+                          {providerType}
+                        </Badge>
+                        {isConfigured ? (
+                          <StatusBadge status="success" className="text-[10px]">
+                            <KeyRound className="h-2.5 w-2.5 inline" />
+                            {t("settings.credentialsSet")}
+                          </StatusBadge>
+                        ) : (
+                          <StatusBadge status="warning" className="text-[10px]">
+                            {t("settings.noCredentials")}
+                          </StatusBadge>
+                        )}
+                      </div>
+                    </div>
+                    {canManageProviders && mode === "integration" && (
+                      <NavLink to="/settings/integrations?category=dns">
+                        <Button variant="subtle" className="text-xs py-1 px-2.5">
+                          {t("settings.openIntegrationsHub")}
+                        </Button>
+                      </NavLink>
+                    )}
+                    {canManageProviders && mode === "local" && (
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Button variant="subtle" onClick={() => setEditing(a)} className="text-xs py-1 px-2.5">
+                          {t("settings.edit")}
+                        </Button>
+                        <Button
+                          variant="danger"
+                          onClick={() => remove(a.id)}
+                          className="text-xs py-1 px-2.5 border-0"
+                        >
+                          {t("settings.remove")}
+                        </Button>
+                      </div>
+                    )}
                   </div>
-                </div>
-                {canManageProviders && mode === "integration" && (
-                  <NavLink to="/settings/integrations?category=dns">
-                    <Button variant="subtle" className="text-xs py-1 px-2.5">
-                      {t("settings.openIntegrationsHub")}
-                    </Button>
-                  </NavLink>
-                )}
-                {canManageProviders && mode === "local" && (
-                  <div className="flex items-center gap-2">
-                    <Button variant="subtle" onClick={() => setEditing(a)} className="text-xs py-1 px-2.5">
-                      {t("settings.edit")}
-                    </Button>
-                    <Button
-                      variant="danger"
-                      onClick={() => remove(a.id)}
-                      className="text-xs py-1 px-2.5 border-0"
-                    >
-                      {t("settings.remove")}
-                    </Button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                </Fragment>
+              );
+            })}
+          </PageRows>
+        </PageSection>
       )}
       {(creating || editing) && (
         <ProviderAccountModal

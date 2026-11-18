@@ -1,26 +1,30 @@
 import {
   Alert,
-  Badge,
   Empty,
   PageShell,
+  PageColumn,
   PageCard,
   Panel,
   Button,
   Input,
+  Skeleton,
+  StatCard,
+  StatusBadge,
   Table,
   THead,
   TBody,
   TR,
   TH,
+  TD,
   TabBar,
   TableError,
+  TableSkeleton,
   confirmDialog,
   toast,
   useTranslation,
   roleSatisfies,
   useCurrentRole,
   usePluginGate,
-  ListSkeleton,
 } from "@octarq/plugin-sdk";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams, NavLink } from "react-router-dom";
@@ -254,7 +258,9 @@ export default function LinksPage() {
           {error && links.length === 0 ? (
             <TableError errorText={error.detail} onRetry={() => loadMore(true)} />
           ) : loading && links.length === 0 ? (
-            <ListSkeleton rows={8} ariaLabel={t("links.loading")} />
+            <PageCard className="mt-0 overflow-hidden p-0">
+              <TableSkeleton columnsCount={5} rowsCount={8} ariaLabel={t("links.loading")} />
+            </PageCard>
           ) : links.length === 0 ? (
             q ? (
               <PageCard className="mt-0 flex flex-col items-center gap-3 px-4 py-12 text-center">
@@ -322,9 +328,30 @@ export default function LinksPage() {
                         linkURL={linkURL}
                       />
                     ))}
+                    {loading && (
+                      <TR className="h-14" role="status" aria-busy="true" aria-label={t("links.loading")}>
+                        <TD>
+                          <div className="space-y-1.5">
+                            <Skeleton className="h-4 w-36" />
+                            <Skeleton className="h-3 w-24" />
+                          </div>
+                        </TD>
+                        <TD>
+                          <Skeleton className="h-3.5 w-48" />
+                        </TD>
+                        <TD className="text-center">
+                          <Skeleton className="mx-auto h-5 w-10 rounded-full" />
+                        </TD>
+                        <TD className="text-center">
+                          <Skeleton className="mx-auto h-5 w-16 rounded-full" />
+                        </TD>
+                        <TD className="text-right">
+                          <Skeleton className="ml-auto h-4 w-28" />
+                        </TD>
+                      </TR>
+                    )}
                   </TBody>
                 </Table>
-                {loading && <div className="p-3 text-center text-xs text-muted-foreground">{t("links.loading")}</div>}
               </div>
             </PageCard>
             {error && (
@@ -350,48 +377,46 @@ export default function LinksPage() {
         <div className="space-y-6" data-testid="anomalies-projection-view">
           {/* Overview Stat Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <PageCard className="mt-0 p-4 space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">{t("links.anomalyTraffic", "Traffic Anomalies")}</span>
-                <Activity className="h-4 w-4 text-success-fg" />
-              </div>
-              <div className="text-xl font-semibold text-foreground">0</div>
-              <div className="text-[11px] text-success-fg font-medium">{t("links.anomalyHealthySpikes", "Healthy · No spikes")}</div>
-            </PageCard>
+            <StatCard
+              label={t("links.anomalyTraffic", "Traffic Anomalies")}
+              value={0}
+              delta={t("links.anomalyHealthySpikes", "Healthy · No spikes")}
+              positive
+              icon={<Activity className="h-4 w-4 text-success-fg" />}
+              index={0}
+            />
 
-            <PageCard className="mt-0 p-4 space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">{t("links.anomalyBot", "Bot Filtering")}</span>
-                <ShieldCheck className="h-4 w-4 text-accent-fg" />
-              </div>
-              <div className="text-xl font-semibold text-foreground">{t("links.anomalyActive", "Active")}</div>
-              <div className="text-[11px] text-muted-foreground">{t("links.anomalyRateLimitActive", "Rate limiting active")}</div>
-            </PageCard>
+            <StatCard
+              label={t("links.anomalyBot", "Bot Filtering")}
+              value={t("links.anomalyActive", "Active")}
+              delta={t("links.anomalyRateLimitActive", "Rate limiting active")}
+              icon={<ShieldCheck className="h-4 w-4 text-accent-fg" />}
+              index={1}
+            />
 
-            <PageCard className="mt-0 p-4 space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">{t("links.anomalyLatency", "Redirect Latency")}</span>
-                <Activity className="h-4 w-4 text-info-fg" />
-              </div>
-              <div className="text-xl font-semibold text-foreground">{t("links.anomalyLatencyValue", "< 35ms")}</div>
-              <div className="text-[11px] text-success-fg font-medium">{t("links.anomalyP99Latency", "p99 edge redirect")}</div>
-            </PageCard>
+            <StatCard
+              label={t("links.anomalyLatency", "Redirect Latency")}
+              value={t("links.anomalyLatencyValue", "< 35ms")}
+              delta={t("links.anomalyP99Latency", "p99 edge redirect")}
+              positive
+              icon={<Activity className="h-4 w-4 text-info-fg" />}
+              index={2}
+            />
 
-            <PageCard className="mt-0 p-4 space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">{t("links.anomalyLoops", "Redirect Loops")}</span>
-                <AlertTriangle className="h-4 w-4 text-warning-fg" />
-              </div>
-              <div className="text-xl font-semibold text-foreground">0</div>
-              <div className="text-[11px] text-muted-foreground">{t("links.anomalyLoopClear", "Loop detector clear")}</div>
-            </PageCard>
+            <StatCard
+              label={t("links.anomalyLoops", "Redirect Loops")}
+              value={0}
+              delta={t("links.anomalyLoopClear", "Loop detector clear")}
+              icon={<AlertTriangle className="h-4 w-4 text-warning-fg" />}
+              index={3}
+            />
           </div>
 
           {/* Anomaly Real-Time Monitor Card */}
           <Panel
             title={t("links.tabAnomalies", "Anomaly Monitoring")}
             description={t("links.anomalyDesc", "Real-time monitors track 404 floods, redirect loops, and abnormal traffic spikes.")}
-            action={<Badge variant="success" className="text-xs">{t("links.anomalyOperational", "Operational")}</Badge>}
+            action={<StatusBadge status="success" className="text-xs">{t("links.anomalyOperational", "Operational")}</StatusBadge>}
           >
 
             <div className="py-8 text-center space-y-2">
@@ -406,39 +431,40 @@ export default function LinksPage() {
       )}
 
       {tab === "reserved" && (
-        <div className="space-y-6" data-testid="reserved-projection-view">
-          {/* Guidance Banner */}
-          <div className="flex items-center justify-between p-3 rounded-lg border border-primary/20 bg-accent-soft text-xs text-foreground">
-            <div className="flex items-center gap-2">
-              <Blocks className="h-4 w-4 text-accent-fg shrink-0" />
-              <span>{t("links.reservedInstanceNotice", "Configure custom instance-level reserved slugs in Instance Settings.")}</span>
+        <PageColumn className="pb-0">
+          <div className="space-y-6" data-testid="reserved-projection-view">
+            {/* Guidance Banner */}
+            <div className="flex items-center justify-between p-3 rounded-lg border border-primary/20 bg-accent-soft text-xs text-foreground">
+              <div className="flex items-center gap-2">
+                <Blocks className="h-4 w-4 text-accent-fg shrink-0" />
+                <span>{t("links.reservedInstanceNotice", "Configure custom instance-level reserved slugs in Instance Settings.")}</span>
+              </div>
+              <NavLink
+                to="/instance/settings"
+                className="text-accent-fg hover:underline font-medium text-xs whitespace-nowrap ml-3"
+              >
+                {t("links.reservedInstanceAction", "Configure Instance Settings →")}
+              </NavLink>
             </div>
-            <NavLink
-              to="/instance/settings"
-              className="text-accent-fg hover:underline font-medium text-xs whitespace-nowrap ml-3"
+
+            <Panel
+              title={t("links.reservedTitle", "System Reserved Words")}
+              description={t("links.reservedDesc", "Reserved words prevent short links from colliding with system routes and administrative endpoints.")}
             >
-              {t("links.reservedInstanceAction", "Configure Instance Settings →")}
-            </NavLink>
+
+              <div className="flex flex-wrap gap-2 pt-2">
+                {SYSTEM_RESERVED_SLUGS.map((slug) => (
+                  <span
+                    key={slug}
+                    className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-mono bg-well border border-border text-foreground"
+                  >
+                    /{slug}
+                  </span>
+                ))}
+              </div>
+            </Panel>
           </div>
-
-          {/* Reserved Words GlassCard */}
-          <Panel
-            title={t("links.reservedTitle", "System Reserved Words")}
-            description={t("links.reservedDesc", "Reserved words prevent short links from colliding with system routes and administrative endpoints.")}
-          >
-
-            <div className="flex flex-wrap gap-2 pt-2">
-              {SYSTEM_RESERVED_SLUGS.map((slug) => (
-                <span
-                  key={slug}
-                  className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-mono bg-well border border-border text-foreground"
-                >
-                  /{slug}
-                </span>
-              ))}
-            </div>
-          </Panel>
-        </div>
+        </PageColumn>
       )}
 
       <LinkModals

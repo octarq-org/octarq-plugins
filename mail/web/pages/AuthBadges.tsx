@@ -17,9 +17,9 @@ export function AuthBadges({
     const warn = result === "softfail" || result === "neutral";
     if (compact && pass) return null; // only show problems in list view
 
-    let tone: "green" | "amber" | "red" = "red";
-    if (pass) tone = "green";
-    else if (warn) tone = "amber";
+    let tone: "success" | "warning" | "danger" = "danger";
+    if (pass) tone = "success";
+    else if (warn) tone = "warning";
 
     return (
       <Badge key={label} tone={tone} className="font-mono text-[10px] uppercase tracking-wider">

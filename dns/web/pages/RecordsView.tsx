@@ -1,4 +1,4 @@
-import { Code, Empty, Field, Input, Guide, Modal, Switch, timeAgo, Badge, Button, Select, Alert, confirmDialog, Table, THead, TBody, TR, TH, TD, FormError, useTranslation, roleSatisfies, useCurrentRole } from "@octarq/plugin-sdk";
+import { Code, Empty, Field, Input, Guide, Modal, Switch, timeAgo, Badge, Button, Select, Alert, confirmDialog, Table, THead, TBody, TR, TH, TD, TableSkeleton, FormError, useTranslation, roleSatisfies, useCurrentRole } from "@octarq/plugin-sdk";
 import { HostList } from "../components/HostList";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -83,11 +83,13 @@ export function RecordsView({ domain }: { domain: Domain }) {
       {err && <Alert variant="danger" className="p-3 text-xs font-medium">{typeof err === "string" ? err : err.message}</Alert>}
       
       {records === null ? (
-        <p className="text-muted-foreground p-6 text-center text-xs">{t("domains.loadingRecords")}</p>
+        <div className="rounded-lg border border-border bg-card overflow-hidden">
+          <TableSkeleton columnsCount={5} rowsCount={5} ariaLabel={t("domains.loadingRecords")} />
+        </div>
       ) : filtered.length === 0 ? (
         <p className="text-muted-foreground p-6 text-center text-xs">{t("domains.noRecordsMatching")}</p>
       ) : (
-        <div className="bg-well rounded-lg border border-border overflow-hidden">
+        <div className="bg-card rounded-lg border border-border overflow-hidden">
           <Table>
             <THead className="border-b border-border bg-well">
               <TR>

@@ -16,11 +16,11 @@ function parseAttachments(json: string): Attachment[] {
   }
 }
 
-const CATEGORY_META: Record<string, { tone: "amber" | "cyan" | "red" | "neutral"; label: string }> = {
-  bill: { tone: "amber", label: "Bill" },
-  otp: { tone: "cyan", label: "OTP" },
-  marketing: { tone: "neutral", label: "Marketing" },
-  important: { tone: "red", label: "Important" },
+const CATEGORY_META: Record<string, { tone: "warning" | "info" | "danger" | "default"; label: string }> = {
+  bill: { tone: "warning", label: "Bill" },
+  otp: { tone: "info", label: "OTP" },
+  marketing: { tone: "default", label: "Marketing" },
+  important: { tone: "danger", label: "Important" },
 };
 
 function renderImportanceDots(n?: number) {
@@ -116,7 +116,7 @@ export function EmailViewForm({
       {(email.otp || (email.category === "otp" && email.subject.match(/\b([A-Z0-9]{4,8})\b/i)?.[1])) && (
         <div
           data-testid="otp-copy-bar"
-          className="mx-5 mt-3 flex items-center justify-between gap-3 px-4 py-2.5 bg-accent-soft border border-primary/20 rounded-xl text-xs shrink-0"
+          className="mx-5 mt-3 flex items-center justify-between gap-3 px-4 py-2.5 bg-accent-soft border border-primary/20 rounded-lg text-xs shrink-0"
         >
           <div className="flex items-center gap-2.5">
             <KeyRound className="h-4 w-4 text-accent-fg shrink-0" />
@@ -142,7 +142,7 @@ export function EmailViewForm({
       )}
 
       {email.unsubscribeUrl && (
-        <div className="mx-5 mt-3 flex items-center justify-between gap-3 px-3.5 py-2 bg-warning-bg border border-warning-border rounded-xl text-xs shrink-0">
+        <div className="mx-5 mt-3 flex items-center justify-between gap-3 px-3.5 py-2 bg-warning-bg border border-warning-border rounded-lg text-xs shrink-0">
           <span className="text-warning-fg font-medium truncate">{t("mail.unsubscribe")}</span>
           <Button
             variant="outline"
@@ -159,7 +159,7 @@ export function EmailViewForm({
       )}
 
       {(summary || email.summary) && (
-        <div className="mx-5 mt-4 rounded-xl bg-info-bg border border-info-border p-3.5 shrink-0" data-testid="email-summary-box">
+        <div className="mx-5 mt-4 rounded-lg bg-info-bg border border-info-border p-3.5 shrink-0" data-testid="email-summary-box">
           <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-accent-fg mb-1.5">
             <Sparkles className="h-3 w-3" />
             {t("mail.aiSummaryTitle")}
@@ -185,7 +185,7 @@ export function EmailViewForm({
                 <Paperclip className="h-3 w-3 text-accent-fg" />
                 {a.filename || t("mail.attachmentFallback")} <span className="font-mono tnum">({Math.max(1, Math.round(a.size / 1024))} KB)</span>
                 {a.truncated && (
-                  <Badge tone="amber" className="font-mono text-[10px] uppercase tracking-wider ml-1">
+                  <Badge tone="warning" className="font-mono text-[10px] uppercase tracking-wider ml-1">
                     {t("mail.truncated")}
                   </Badge>
                 )}

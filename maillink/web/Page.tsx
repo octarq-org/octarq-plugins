@@ -62,7 +62,13 @@ export default function MailLinksPage() {
       {error !== null ? (
         <TableError error={error} onRetry={load} />
       ) : links === null ? (
-        <TableSkeleton columnsCount={4} rowsCount={5} />
+        <PageCard className="mt-0 overflow-hidden p-0">
+          <TableSkeleton
+            columnsCount={4}
+            rowsCount={5}
+            ariaLabel={t("maillink.loading", "Loading…")}
+          />
+        </PageCard>
       ) : links.length === 0 ? (
         <TableEmpty emptyText={t("maillink.empty")} />
       ) : (
