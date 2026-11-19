@@ -1,6 +1,6 @@
 {
   "name": "@octarq/plugin-pt",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Private-tracker account manager plugin for Octarq: refresh logins, sign in daily, and read traffic statistics.",
   "type": "module",
   "main": "./index.ts",
