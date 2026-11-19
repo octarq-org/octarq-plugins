@@ -20,10 +20,27 @@ import { SecretQrModal } from "./components/SecretQrModal";
 import { AuditLogsModal } from "./components/AuditLogsModal";
 import { ImportExportModal } from "./components/ImportExportModal";
 
-export default function TwoFAPage() {
+export type TwoFAScope = "team" | "personal";
+
+export default function TwoFAPage({ scope }: { scope: TwoFAScope }) {
   const { t } = useTranslation();
   const toast = useToast();
   const confirm = useConfirm();
+  const apiBase = scope === "personal" ? "/api/personal/twofa" : "/api/twofa";
+  const title =
+    scope === "personal"
+      ? t("twofa.personalPageTitle", "Personal 2FA")
+      : t("twofa.teamPageTitle", "Team 2FA Vault");
+  const description =
+    scope === "personal"
+      ? t(
+          "twofa.personalPageDesc",
+          "TOTP accounts that belong to you. Other workspace members cannot see them."
+        )
+      : t(
+          "twofa.teamPageDesc",
+          "Shared TOTP accounts for this workspace. Only admins can add, edit, or reveal secrets."
+        );
   const [accounts, setAccounts] = useState<AccountSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<number | null>(null);
@@ -40,13 +57,13 @@ export default function TwoFAPage() {
 
   const fetchAccounts = useCallback(async () => {
     try {
-      setAccounts(await req<AccountSummary[]>("GET", "/api/twofa/accounts"));
+      setAccounts(await req<AccountSummary[]>("GET", `${apiBase}/accounts`));
       setLoading(false);
     } catch (err: unknown) {
       setStatus(err instanceof ApiError ? err.status : 0);
       setLoading(false);
     }
-  }, []);
+  }, [apiBase]);
 
   useEffect(() => {
     fetchAccounts();
@@ -81,7 +98,7 @@ export default function TwoFAPage() {
 
   const handleTogglePin = async (id: number) => {
     try {
-      await req("POST", `/api/twofa/accounts/${id}/pin`);
+      await req("POST", `${apiBase}/accounts/${id}/pin`);
       fetchAccounts();
     } catch {
       // A pin that did not save shows on the next read of the list.
@@ -95,7 +112,7 @@ export default function TwoFAPage() {
     });
     if (!ok) return;
     try {
-      await req("DELETE", `/api/twofa/accounts/${id}`);
+      await req("DELETE", `${apiBase}/accounts/${id}`);
       fetchAccounts();
       toast.success(t("twofa.deleted", "Account deleted."));
     } catch {
@@ -154,23 +171,35 @@ export default function TwoFAPage() {
     );
   }
 
+  // The personal vault fails closed when the account has no personal org.
+  if (scope === "personal" && status === 403) {
+    return (
+      <PageShell title={title} description={description}>
+        <Empty reason={t("twofa.personalUnavailable", "Personal space is unavailable for this account.")}>
+          <ShieldCheck className="h-8 w-8 text-foreground/30" />
+        </Empty>
+      </PageShell>
+    );
+  }
+
   const isFiltering = Boolean(searchTerm || selectedTag);
 
   return (
     <PageShell
-      title={t("twofa.pageTitle", "2FA Vault")}
-      description={t(
-        "twofa.pageDesc",
-        "Centralized TOTP two-factor authentication manager for team & infrastructure accounts."
-      )}
+      title={title}
+      description={description}
       action={
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => setAuditLogsOpen(true)} title={t("twofa.auditLogs", "Audit Logs")}>
-            <ScrollText className="h-3.5 w-3.5" /> {t("twofa.auditLogs", "Audit Logs")}
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => setImportExportOpen(true)} title={t("twofa.importExport", "Import / Export")}>
-            <RefreshCw className="h-3.5 w-3.5" /> {t("twofa.importExport", "Import / Export")}
-          </Button>
+          {scope === "team" && (
+            <>
+              <Button variant="ghost" size="sm" onClick={() => setAuditLogsOpen(true)} title={t("twofa.auditLogs", "Audit Logs")}>
+                <ScrollText className="h-3.5 w-3.5" /> {t("twofa.auditLogs", "Audit Logs")}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setImportExportOpen(true)} title={t("twofa.importExport", "Import / Export")}>
+                <RefreshCw className="h-3.5 w-3.5" /> {t("twofa.importExport", "Import / Export")}
+              </Button>
+            </>
+          )}
           <Button
             size="sm"
             onClick={() => {
@@ -266,7 +295,9 @@ export default function TwoFAPage() {
           detail={
             isFiltering
               ? t("twofa.tryDifferentSearch", "Try searching with a different term or clearing active tag filters.")
-              : t("twofa.emptyDesc", "Add your first TOTP credential to start managing shared two-factor authentication tokens.")
+              : scope === "personal"
+                ? t("twofa.personalEmptyDesc", "Add your first personal TOTP credential.")
+                : t("twofa.emptyDesc", "Add your first TOTP credential to start managing shared two-factor authentication tokens.")
           }
           action={
             !isFiltering ? (
@@ -309,6 +340,7 @@ export default function TwoFAPage() {
       {/* Modals */}
       {addEditOpen && (
         <AddEditModal
+          apiBase={apiBase}
           onClose={() => setAddEditOpen(false)}
           account={editingAccount}
           onSaved={fetchAccounts}
@@ -318,6 +350,7 @@ export default function TwoFAPage() {
 
       {secretQrOpen && (
         <SecretQrModal
+          apiBase={apiBase}
           onClose={() => {
             setSecretQrOpen(false);
             setSecretQrAccount(null);
@@ -327,10 +360,15 @@ export default function TwoFAPage() {
         />
       )}
 
-      {auditLogsOpen && <AuditLogsModal onClose={() => setAuditLogsOpen(false)} t={t} />}
+      {auditLogsOpen && <AuditLogsModal apiBase={apiBase} onClose={() => setAuditLogsOpen(false)} t={t} />}
 
       {importExportOpen && (
-        <ImportExportModal onClose={() => setImportExportOpen(false)} onImported={fetchAccounts} t={t} />
+        <ImportExportModal
+          apiBase={apiBase}
+          onClose={() => setImportExportOpen(false)}
+          onImported={fetchAccounts}
+          t={t}
+        />
       )}
     </PageShell>
   );

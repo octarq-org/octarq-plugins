@@ -14,13 +14,14 @@ import {
 import type { AccountSummary, CreateAccountInput, UpdateAccountInput } from "../types";
 
 interface Props {
+  apiBase: string;
   onClose: () => void;
   account?: AccountSummary | null;
   onSaved: () => void;
   t: (key: string, fallback?: string) => string;
 }
 
-export function AddEditModal({ onClose, account, onSaved, t }: Props) {
+export function AddEditModal({ apiBase, onClose, account, onSaved, t }: Props) {
   const isEdit = !!account;
   const [tab, setTab] = useState<"manual" | "uri">("manual");
   const [loading, setLoading] = useState(false);
@@ -131,8 +132,8 @@ export function AddEditModal({ onClose, account, onSaved, t }: Props) {
     setLoading(true);
     try {
       const url = isEdit
-        ? `/api/twofa/accounts/${account.id}`
-        : "/api/twofa/accounts";
+        ? `${apiBase}/accounts/${account.id}`
+        : `${apiBase}/accounts`;
       const method = isEdit ? "PUT" : "POST";
 
       const payload: CreateAccountInput | UpdateAccountInput = {

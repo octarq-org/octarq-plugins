@@ -4,10 +4,33 @@ import type { UIPlugin } from "@octarq/plugin-sdk";
 export const twofaPlugin: UIPlugin = {
   name: "twofa",
   routes: [
-    { path: "/twofa", Component: lazy(() => import("./Page")) },
+    { path: "/governance/twofa", Component: lazy(() => import("./TeamPage")) },
+    { path: "/personal/twofa", Component: lazy(() => import("./PersonalPage")) },
+  ],
+  // The team vault lives in Governance, an area only the Pro build used to
+  // declare. Declaring it here keeps the team menu visible in an OSS-only
+  // build; uiAreas() dedupes by id when both builds declare it.
+  areas: [
+    {
+      id: "governance",
+      title: "Governance",
+      subtitle: "Roles, audit & enterprise access",
+      icon: "shield",
+      groups: ["Access", "Compliance"],
+    },
   ],
   i18n: {
     en: {
+      _shared: {
+        nav: { twofa: "Team 2FA Vault", "personal-twofa": "Personal 2FA" },
+        groups: { Access: "Access", Accounts: "Accounts" },
+      },
+      teamPageTitle: "Team 2FA Vault",
+      teamPageDesc: "Shared TOTP accounts for this workspace. Only admins can add, edit, or reveal secrets.",
+      personalPageTitle: "Personal 2FA",
+      personalPageDesc: "TOTP accounts that belong to you. Other workspace members cannot see them.",
+      personalEmptyDesc: "Add your first personal TOTP credential.",
+      personalUnavailable: "Personal space is unavailable for this account.",
       pageTitle: "2FA Vault",
       pageDesc: "Centralized TOTP two-factor authentication manager for team & infrastructure accounts.",
       addAccount: "Add Account",
@@ -58,7 +81,7 @@ export const twofaPlugin: UIPlugin = {
       scanHelp: "Scan with Google Authenticator, 1Password, or any authenticator app.",
       secretSeed: "Secret Seed (Base32)",
       keyURI: "Standard Key URI",
-      auditNotice: "Revealing this secret has been recorded in the workspace security audit trail.",
+      auditNotice: "Revealing this secret is recorded in the security audit trail.",
       close: "Close",
       auditModalTitle: "2FA Security Audit Logs",
       auditDesc: "Immutable activity history tracking every code generation, secret reveal, export, and AI agent query.",
@@ -88,6 +111,16 @@ export const twofaPlugin: UIPlugin = {
       errNoValidURIs: "No valid otpauth:// lines found.",
     },
     zh: {
+      _shared: {
+        nav: { twofa: "团队 2FA 保管库", "personal-twofa": "个人 2FA" },
+        groups: { Access: "访问控制", Accounts: "账户" },
+      },
+      teamPageTitle: "团队 2FA 保管库",
+      teamPageDesc: "本工作区共享的 TOTP 账户。仅管理员可添加、编辑或查看密钥明文。",
+      personalPageTitle: "个人 2FA",
+      personalPageDesc: "属于您本人的 TOTP 账户，其他工作区成员无法查看。",
+      personalEmptyDesc: "添加您的第一个个人 TOTP 凭证。",
+      personalUnavailable: "此账户没有可用的个人空间。",
       pageTitle: "2FA 密钥保管库",
       pageDesc: "集中管理团队与基础设施账户的双重验证（TOTP）密钥，提供实时动态口令与 AI Agent 自动化调用。",
       addAccount: "添加凭证",

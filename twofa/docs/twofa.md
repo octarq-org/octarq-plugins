@@ -13,6 +13,13 @@ Rather than fragmenting authentication seeds across individual smartphones or br
 All seeds and shared secrets stored in the 2FA Vault are encrypted using AES-256-GCM authenticated encryption before touching the database. Plaintext secrets are never returned in list endpoints.
 :::
 
+## Two vaults: team and personal
+
+- **Team 2FA Vault** (`/governance/twofa`) belongs to the workspace. Admins add, edit, reveal and export credentials.
+- **Personal 2FA** (`/personal/twofa`) belongs to you. It lives in your personal space, not in the active workspace, and every member can manage their own entries.
+
+A team admin cannot read your personal entries. Team entries never appear in the personal vault.
+
 ## Key Features
 
 - **Real-Time Code Generation**: View 6-digit or 8-digit verification codes that automatically refresh every 30 seconds with animated countdown rings.
@@ -25,7 +32,7 @@ All seeds and shared secrets stored in the 2FA Vault are encrypted using AES-256
 
 ### Adding an Account
 
-1. Navigate to **2FA Vault** in your workspace sidebar.
+1. Open **Team 2FA Vault** (`/governance/twofa`) or **Personal 2FA** (`/personal/twofa`) in the sidebar.
 2. Click **+ Add Account**.
 3. Choose your preferred input method:
    - **Manual Entry**: Enter the account title (e.g. `AWS Production`), issuer, username, and Base32 secret seed.
@@ -51,12 +58,12 @@ If you ever need to enroll a backup physical authenticator device:
 3. Inspecting or copying the secret creates an immutable record in your workspace audit log.
 
 :::caution
-Only workspace owners and authorized operators should reveal plaintext secret seeds. Always verify unfamiliar audit log entries in the audit trail.
+In the team vault, only workspace admins can reveal plaintext seeds. In your personal vault, only you can. Always verify unfamiliar audit log entries in the audit trail.
 :::
 
 ## Using 2FA with AI Agents (MCP)
 
-Octarq exposes three dedicated tools to AI agents connected over the Model Context Protocol:
+Octarq exposes three dedicated tools to AI agents connected over the Model Context Protocol. These tools read the team vault only.
 
 - `get_2fa_code(account_name)`: Returns the live TOTP code and remaining valid seconds.
 - `list_2fa_accounts(tag)`: Lists registered account names and tags without revealing secret keys.

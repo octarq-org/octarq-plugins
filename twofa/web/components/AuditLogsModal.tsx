@@ -16,23 +16,24 @@ import {
 import type { AuditLog } from "../types";
 
 interface Props {
+  apiBase: string;
   onClose: () => void;
   t: (key: string, fallback?: string) => string;
 }
 
-export function AuditLogsModal({ onClose, t }: Props) {
+export function AuditLogsModal({ apiBase, onClose, t }: Props) {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     setLoading(true);
-    req<AuditLog[]>("GET", "/api/twofa/logs")
+    req<AuditLog[]>("GET", `${apiBase}/logs`)
       .catch(() => [] as AuditLog[])
       .then((data) => {
         setLogs(data);
         setLoading(false);
       });
-  }, []);
+  }, [apiBase]);
 
   const getBadgeTone = (action: string) => {
     switch (action) {

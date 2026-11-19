@@ -4,12 +4,13 @@ import { AlertTriangle, Copy, Check } from "lucide-react";
 import type { AccountSummary, AccountDetail } from "../types";
 
 interface Props {
+  apiBase: string;
   onClose: () => void;
   account: AccountSummary | null;
   t: (key: string, fallback?: string) => string;
 }
 
-export function SecretQrModal({ onClose, account, t }: Props) {
+export function SecretQrModal({ apiBase, onClose, account, t }: Props) {
   const [detail, setDetail] = useState<AccountDetail | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [uri, setUri] = useState("");
@@ -30,8 +31,8 @@ export function SecretQrModal({ onClose, account, t }: Props) {
     setLoading(true);
     // One read reveals the secret; the other draws its QR code.
     Promise.all([
-      req<AccountDetail>("GET", `/api/twofa/accounts/${account.id}?reveal=true`).catch(() => null),
-      req<{ qr_data_url?: string; uri?: string }>("GET", `/api/twofa/accounts/${account.id}/qr`).catch(() => null),
+      req<AccountDetail>("GET", `${apiBase}/accounts/${account.id}?reveal=true`).catch(() => null),
+      req<{ qr_data_url?: string; uri?: string }>("GET", `${apiBase}/accounts/${account.id}/qr`).catch(() => null),
     ])
       .then(([accData, qrData]) => {
         if (accData) setDetail(accData);
@@ -45,7 +46,7 @@ export function SecretQrModal({ onClose, account, t }: Props) {
         setError(err.message || "Failed to load secret and QR code");
         setLoading(false);
       });
-  }, [account]);
+  }, [account, apiBase]);
 
   const copySecret = () => {
     if (!detail?.secret) return;
@@ -141,7 +142,7 @@ export function SecretQrModal({ onClose, account, t }: Props) {
 
             {/* Security audit notice */}
             <Alert variant="warning" icon={<AlertTriangle className="h-4 w-4" />}>
-              {t("twofa.auditNotice", "Revealing this secret has been recorded in the workspace security audit trail.")}
+              {t("twofa.auditNotice", "Revealing this secret is recorded in the security audit trail.")}
             </Alert>
           </>
         )}

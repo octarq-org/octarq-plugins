@@ -149,23 +149,85 @@ func extractSecretFromPayload(payload map[string]any) string {
 	return ""
 }
 
-func (p *Plugin) requireTwoFAItem(ctx context.Context, vs plugin.VaultService, orgID, id uint) (*plugin.VaultItemMeta, error) {
-	meta, err := vs.GetMeta(ctx, orgID, id)
+// errPersonalSpaceUnavailable fails the personal routes closed when the caller
+// has no personal org. Falling back to the session workspace would put private
+// seeds in the team vault.
+var errPersonalSpaceUnavailable = errors.New("Personal space is unavailable for this account.")
+
+// errNoWorkspace means the request carries no team workspace.
+var errNoWorkspace = errors.New("unauthorized workspace")
+
+// vaultScope names the vault a request reads and writes. The team vault is
+// org-scoped and admin-gated; the personal vault is user-scoped and owned by
+// the caller, so ownership alone is the boundary.
+type vaultScope struct {
+	OrgID   uint
+	Scope   plugin.VaultScope
+	OwnerID uint // 0 for the team vault
+	Team    bool
+}
+
+// scopeFor resolves the request path to its vault. It never falls back from a
+// missing personal org to the session workspace.
+func (p *Plugin) scopeFor(r *http.Request) (vaultScope, error) {
+	if strings.HasPrefix(r.URL.Path, "/api/personal/twofa/") {
+		ownerID := p.actorUserID(r)
+		if ownerID == 0 {
+			return vaultScope{}, errPersonalSpaceUnavailable
+		}
+		var orgID uint
+		if p.host != nil && p.host.Session() != nil {
+			orgID = p.host.Session().PersonalOrgID(r)
+		}
+		if orgID == 0 {
+			return vaultScope{}, errPersonalSpaceUnavailable
+		}
+		return vaultScope{OrgID: orgID, Scope: plugin.VaultScopeUser, OwnerID: ownerID}, nil
+	}
+	orgID := p.orgID(r)
+	if orgID == 0 {
+		return vaultScope{}, errNoWorkspace
+	}
+	return vaultScope{OrgID: orgID, Scope: plugin.VaultScopeOrg, Team: true}, nil
+}
+
+// requireScope writes the failure response and reports whether the handler may
+// continue.
+func (p *Plugin) requireScope(w http.ResponseWriter, r *http.Request) (vaultScope, bool) {
+	scope, err := p.scopeFor(r)
+	if err == nil {
+		return scope, true
+	}
+	if errors.Is(err, errPersonalSpaceUnavailable) {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return vaultScope{}, false
+	}
+	http.Error(w, err.Error(), http.StatusUnauthorized)
+	return vaultScope{}, false
+}
+
+// requireTwoFAItem loads an item only when it belongs to the active scope. The
+// owner check is what keeps one member's personal item invisible to another
+// member in the same personal org.
+func (p *Plugin) requireTwoFAItem(ctx context.Context, vs plugin.VaultService, scope vaultScope, id uint) (*plugin.VaultItemMeta, error) {
+	meta, err := vs.GetMeta(ctx, scope.OrgID, id)
 	if err != nil {
 		return nil, err
 	}
-	if meta == nil || meta.Scope != plugin.VaultScopeOrg || meta.ItemType != "twofa_totp" {
+	if meta == nil || meta.Scope != scope.Scope || meta.ItemType != "twofa_totp" {
+		return nil, plugin.ErrSecretNotFound
+	}
+	if scope.Scope == plugin.VaultScopeUser && meta.OwnerUserID != scope.OwnerID {
 		return nil, plugin.ErrSecretNotFound
 	}
 	return meta, nil
 }
 
-// listAccounts returns safe summaries for all 2FA accounts belonging to the active org,
-// including real-time TOTP codes and time remaining.
+// listAccounts returns safe summaries for every 2FA account in the active
+// scope, including real-time TOTP codes and time remaining.
 func (p *Plugin) listAccounts(w http.ResponseWriter, r *http.Request) {
-	orgID := p.orgID(r)
-	if orgID == 0 {
-		http.Error(w, "unauthorized workspace", http.StatusUnauthorized)
+	scope, ok := p.requireScope(w, r)
+	if !ok {
 		return
 	}
 
@@ -175,9 +237,10 @@ func (p *Plugin) listAccounts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items, err := vs.ListItems(r.Context(), orgID, plugin.VaultFilter{
-		Scope:    plugin.VaultScopeOrg,
-		ItemType: "twofa_totp",
+	items, err := vs.ListItems(r.Context(), scope.OrgID, plugin.VaultFilter{
+		Scope:       scope.Scope,
+		ItemType:    "twofa_totp",
+		OwnerUserID: scope.OwnerID,
 	})
 	if err != nil {
 		http.Error(w, "failed to query accounts", http.StatusInternalServerError)
@@ -186,7 +249,7 @@ func (p *Plugin) listAccounts(w http.ResponseWriter, r *http.Request) {
 
 	summaries := make([]AccountSummary, 0, len(items))
 	for _, item := range items {
-		code, rem, cErr := vs.ComputeTOTP(r.Context(), orgID, item.ID)
+		code, rem, cErr := vs.ComputeTOTP(r.Context(), scope.OrgID, item.ID)
 		if cErr != nil {
 			code = ""
 			rem = 0
@@ -210,15 +273,18 @@ func (p *Plugin) listAccounts(w http.ResponseWriter, r *http.Request) {
 // getAccount retrieves a single account. If ?reveal=true is passed, it returns the decrypted secret
 // and creates an audit log entry.
 func (p *Plugin) getAccount(w http.ResponseWriter, r *http.Request) {
-	orgID := p.orgID(r)
+	scope, ok := p.requireScope(w, r)
+	if !ok {
+		return
+	}
 	id := getID(r)
-	if orgID == 0 || id == 0 {
+	if id == 0 {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
 
 	reveal := r.URL.Query().Get("reveal") == "true"
-	if reveal && !p.requireRole(r, "admin") {
+	if reveal && scope.Team && !p.requireRole(r, "admin") {
 		http.Error(w, "forbidden: revealing secret requires admin role", http.StatusForbidden)
 		return
 	}
@@ -229,7 +295,7 @@ func (p *Plugin) getAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	meta, err := p.requireTwoFAItem(r.Context(), vs, orgID, id)
+	meta, err := p.requireTwoFAItem(r.Context(), vs, scope, id)
 	if err != nil {
 		if errors.Is(err, plugin.ErrSecretNotFound) {
 			http.Error(w, "account not found", http.StatusNotFound)
@@ -240,7 +306,7 @@ func (p *Plugin) getAccount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	acc := metaToAccount(*meta)
-	currentCode, rem, _ := vs.ComputeTOTP(r.Context(), orgID, id)
+	currentCode, rem, _ := vs.ComputeTOTP(r.Context(), scope.OrgID, id)
 
 	resp := map[string]any{
 		"id":                acc.ID,
@@ -261,13 +327,13 @@ func (p *Plugin) getAccount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if reveal {
-		sec, sErr := vs.GetSecret(r.Context(), orgID, id)
+		sec, sErr := vs.GetSecret(r.Context(), scope.OrgID, id)
 		if sErr != nil {
 			http.Error(w, "failed to decrypt secret", http.StatusInternalServerError)
 			return
 		}
 		resp["secret"] = extractSecretFromPayload(sec.Payload)
-		p.logAudit(r.Context(), orgID, acc.ID, acc.Name, "view_secret", p.actor(r), r.RemoteAddr)
+		p.logAudit(r.Context(), scope.OrgID, acc.ID, acc.Name, "view_secret", p.actor(r), r.RemoteAddr)
 	}
 
 	writeJSON(w, resp)
@@ -288,13 +354,12 @@ type createAccountIn struct {
 }
 
 func (p *Plugin) createAccount(w http.ResponseWriter, r *http.Request) {
-	orgID := p.orgID(r)
-	if orgID == 0 {
-		http.Error(w, "unauthorized workspace", http.StatusUnauthorized)
+	scope, ok := p.requireScope(w, r)
+	if !ok {
 		return
 	}
 
-	if !p.requireRole(r, "admin") {
+	if scope.Team && !p.requireRole(r, "admin") {
 		http.Error(w, "forbidden: creating account requires admin role", http.StatusForbidden)
 		return
 	}
@@ -383,8 +448,9 @@ func (p *Plugin) createAccount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	meta, err := vs.PutSecret(r.Context(), plugin.PutSecretRequest{
-		OrgID:          orgID,
-		Scope:          plugin.VaultScopeOrg,
+		OrgID:          scope.OrgID,
+		Scope:          scope.Scope,
+		OwnerUserID:    scope.OwnerID,
 		CollectionSlug: "default",
 		ItemType:       "twofa_totp",
 		Name:           acc.Name,
@@ -398,9 +464,9 @@ func (p *Plugin) createAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p.logAudit(r.Context(), orgID, meta.ID, meta.Name, "create_account", p.actor(r), r.RemoteAddr)
+	p.logAudit(r.Context(), scope.OrgID, meta.ID, meta.Name, "create_account", p.actor(r), r.RemoteAddr)
 
-	currentCode, rem, _ := vs.ComputeTOTP(r.Context(), orgID, meta.ID)
+	currentCode, rem, _ := vs.ComputeTOTP(r.Context(), scope.OrgID, meta.ID)
 
 	w.WriteHeader(http.StatusCreated)
 	writeJSON(w, metaToSummary(*meta, currentCode, rem))
@@ -420,14 +486,17 @@ type updateAccountIn struct {
 }
 
 func (p *Plugin) updateAccount(w http.ResponseWriter, r *http.Request) {
-	orgID := p.orgID(r)
+	scope, ok := p.requireScope(w, r)
+	if !ok {
+		return
+	}
 	id := getID(r)
-	if orgID == 0 || id == 0 {
+	if id == 0 {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
 
-	if !p.requireRole(r, "admin") {
+	if scope.Team && !p.requireRole(r, "admin") {
 		http.Error(w, "forbidden: updating account requires admin role", http.StatusForbidden)
 		return
 	}
@@ -438,7 +507,7 @@ func (p *Plugin) updateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	meta, err := p.requireTwoFAItem(r.Context(), vs, orgID, id)
+	meta, err := p.requireTwoFAItem(r.Context(), vs, scope, id)
 	if err != nil {
 		if errors.Is(err, plugin.ErrSecretNotFound) {
 			http.Error(w, "account not found", http.StatusNotFound)
@@ -500,7 +569,7 @@ func (p *Plugin) updateAccount(w http.ResponseWriter, r *http.Request) {
 		}
 		payload = buildTwoFAPayload(&acc, clean)
 	} else if paramsChanged {
-		sec, sErr := vs.GetSecret(r.Context(), orgID, id)
+		sec, sErr := vs.GetSecret(r.Context(), scope.OrgID, id)
 		if sErr != nil {
 			if errors.Is(sErr, plugin.ErrSecretNotFound) {
 				http.Error(w, "account not found", http.StatusNotFound)
@@ -517,27 +586,30 @@ func (p *Plugin) updateAccount(w http.ResponseWriter, r *http.Request) {
 		payload = buildTwoFAPayload(&acc, existingSecret)
 	}
 
-	updated, err := vs.UpdateSecret(r.Context(), orgID, id, &acc.Name, buildTwoFAMetadata(&acc), payload, nil, "Updated 2FA account", p.actorUserID(r))
+	updated, err := vs.UpdateSecret(r.Context(), scope.OrgID, id, &acc.Name, buildTwoFAMetadata(&acc), payload, nil, "Updated 2FA account", p.actorUserID(r))
 	if err != nil {
 		http.Error(w, "failed to update account", http.StatusInternalServerError)
 		return
 	}
 
-	p.logAudit(r.Context(), orgID, updated.ID, updated.Name, "update_account", p.actor(r), r.RemoteAddr)
+	p.logAudit(r.Context(), scope.OrgID, updated.ID, updated.Name, "update_account", p.actor(r), r.RemoteAddr)
 
-	currentCode, rem, _ := vs.ComputeTOTP(r.Context(), orgID, updated.ID)
+	currentCode, rem, _ := vs.ComputeTOTP(r.Context(), scope.OrgID, updated.ID)
 	writeJSON(w, metaToSummary(*updated, currentCode, rem))
 }
 
 func (p *Plugin) deleteAccount(w http.ResponseWriter, r *http.Request) {
-	orgID := p.orgID(r)
+	scope, ok := p.requireScope(w, r)
+	if !ok {
+		return
+	}
 	id := getID(r)
-	if orgID == 0 || id == 0 {
+	if id == 0 {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
 
-	if !p.requireRole(r, "admin") {
+	if scope.Team && !p.requireRole(r, "admin") {
 		http.Error(w, "forbidden: deleting account requires admin role", http.StatusForbidden)
 		return
 	}
@@ -548,7 +620,7 @@ func (p *Plugin) deleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	meta, err := p.requireTwoFAItem(r.Context(), vs, orgID, id)
+	meta, err := p.requireTwoFAItem(r.Context(), vs, scope, id)
 	if err != nil {
 		if errors.Is(err, plugin.ErrSecretNotFound) {
 			http.Error(w, "account not found", http.StatusNotFound)
@@ -558,7 +630,7 @@ func (p *Plugin) deleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := vs.DeleteSecret(r.Context(), orgID, id); err != nil {
+	if err := vs.DeleteSecret(r.Context(), scope.OrgID, id); err != nil {
 		if errors.Is(err, plugin.ErrSecretNotFound) {
 			http.Error(w, "account not found", http.StatusNotFound)
 			return
@@ -567,19 +639,22 @@ func (p *Plugin) deleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p.logAudit(r.Context(), orgID, meta.ID, meta.Name, "delete_account", p.actor(r), r.RemoteAddr)
+	p.logAudit(r.Context(), scope.OrgID, meta.ID, meta.Name, "delete_account", p.actor(r), r.RemoteAddr)
 	writeJSON(w, map[string]bool{"deleted": true})
 }
 
 func (p *Plugin) togglePin(w http.ResponseWriter, r *http.Request) {
-	orgID := p.orgID(r)
+	scope, ok := p.requireScope(w, r)
+	if !ok {
+		return
+	}
 	id := getID(r)
-	if orgID == 0 || id == 0 {
+	if id == 0 {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
 
-	if !p.requireRole(r, "admin") {
+	if scope.Team && !p.requireRole(r, "admin") {
 		http.Error(w, "forbidden: pinning account requires admin role", http.StatusForbidden)
 		return
 	}
@@ -590,7 +665,7 @@ func (p *Plugin) togglePin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	meta, err := p.requireTwoFAItem(r.Context(), vs, orgID, id)
+	meta, err := p.requireTwoFAItem(r.Context(), vs, scope, id)
 	if err != nil {
 		if errors.Is(err, plugin.ErrSecretNotFound) {
 			http.Error(w, "account not found", http.StatusNotFound)
@@ -601,7 +676,7 @@ func (p *Plugin) togglePin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	pinned := !metaBool(meta.Metadata, "pinned")
-	if _, err := vs.UpdateSecret(r.Context(), orgID, id, nil, map[string]any{"pinned": pinned}, nil, nil, "Toggled pin", p.actorUserID(r)); err != nil {
+	if _, err := vs.UpdateSecret(r.Context(), scope.OrgID, id, nil, map[string]any{"pinned": pinned}, nil, nil, "Toggled pin", p.actorUserID(r)); err != nil {
 		http.Error(w, "failed to update pin", http.StatusInternalServerError)
 		return
 	}
@@ -609,9 +684,12 @@ func (p *Plugin) togglePin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Plugin) getCode(w http.ResponseWriter, r *http.Request) {
-	orgID := p.orgID(r)
+	scope, ok := p.requireScope(w, r)
+	if !ok {
+		return
+	}
 	id := getID(r)
-	if orgID == 0 || id == 0 {
+	if id == 0 {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
@@ -622,7 +700,7 @@ func (p *Plugin) getCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	meta, err := p.requireTwoFAItem(r.Context(), vs, orgID, id)
+	meta, err := p.requireTwoFAItem(r.Context(), vs, scope, id)
 	if err != nil {
 		if errors.Is(err, plugin.ErrSecretNotFound) {
 			http.Error(w, "account not found", http.StatusNotFound)
@@ -632,14 +710,14 @@ func (p *Plugin) getCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	code, rem, err := vs.ComputeTOTP(r.Context(), orgID, id)
+	code, rem, err := vs.ComputeTOTP(r.Context(), scope.OrgID, id)
 	if err != nil {
 		http.Error(w, "failed to generate code", http.StatusInternalServerError)
 		return
 	}
 	validUntil := time.Now().Add(time.Duration(rem) * time.Second)
 
-	p.logAudit(r.Context(), orgID, meta.ID, meta.Name, "generate_code", p.actor(r), r.RemoteAddr)
+	p.logAudit(r.Context(), scope.OrgID, meta.ID, meta.Name, "generate_code", p.actor(r), r.RemoteAddr)
 
 	writeJSON(w, map[string]any{
 		"id":                meta.ID,
@@ -654,9 +732,12 @@ type verifyIn struct {
 }
 
 func (p *Plugin) verifyCode(w http.ResponseWriter, r *http.Request) {
-	orgID := p.orgID(r)
+	scope, ok := p.requireScope(w, r)
+	if !ok {
+		return
+	}
 	id := getID(r)
-	if orgID == 0 || id == 0 {
+	if id == 0 {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
@@ -673,7 +754,7 @@ func (p *Plugin) verifyCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := p.requireTwoFAItem(r.Context(), vs, orgID, id); err != nil {
+	if _, err := p.requireTwoFAItem(r.Context(), vs, scope, id); err != nil {
 		if errors.Is(err, plugin.ErrSecretNotFound) {
 			http.Error(w, "account not found", http.StatusNotFound)
 			return
@@ -682,7 +763,7 @@ func (p *Plugin) verifyCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sec, err := vs.GetSecret(r.Context(), orgID, id)
+	sec, err := vs.GetSecret(r.Context(), scope.OrgID, id)
 	if err != nil {
 		if errors.Is(err, plugin.ErrSecretNotFound) {
 			http.Error(w, "account not found", http.StatusNotFound)
@@ -695,20 +776,23 @@ func (p *Plugin) verifyCode(w http.ResponseWriter, r *http.Request) {
 	acc := metaToAccount(sec.Meta)
 	secret := extractSecretFromPayload(sec.Payload)
 	valid := VerifyCode(secret, in.Code, time.Now(), acc.Period, acc.Digits, acc.Algorithm, 1)
-	p.logAudit(r.Context(), orgID, acc.ID, acc.Name, "verify_code", p.actor(r), r.RemoteAddr)
+	p.logAudit(r.Context(), scope.OrgID, acc.ID, acc.Name, "verify_code", p.actor(r), r.RemoteAddr)
 
 	writeJSON(w, map[string]bool{"valid": valid})
 }
 
 func (p *Plugin) getQRCode(w http.ResponseWriter, r *http.Request) {
-	orgID := p.orgID(r)
+	scope, ok := p.requireScope(w, r)
+	if !ok {
+		return
+	}
 	id := getID(r)
-	if orgID == 0 || id == 0 {
+	if id == 0 {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
 
-	if !p.requireRole(r, "admin") {
+	if scope.Team && !p.requireRole(r, "admin") {
 		http.Error(w, "forbidden: retrieving QR code requires admin role", http.StatusForbidden)
 		return
 	}
@@ -719,7 +803,7 @@ func (p *Plugin) getQRCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := p.requireTwoFAItem(r.Context(), vs, orgID, id); err != nil {
+	if _, err := p.requireTwoFAItem(r.Context(), vs, scope, id); err != nil {
 		if errors.Is(err, plugin.ErrSecretNotFound) {
 			http.Error(w, "account not found", http.StatusNotFound)
 			return
@@ -728,7 +812,7 @@ func (p *Plugin) getQRCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sec, err := vs.GetSecret(r.Context(), orgID, id)
+	sec, err := vs.GetSecret(r.Context(), scope.OrgID, id)
 	if err != nil {
 		if errors.Is(err, plugin.ErrSecretNotFound) {
 			http.Error(w, "account not found", http.StatusNotFound)
@@ -741,7 +825,7 @@ func (p *Plugin) getQRCode(w http.ResponseWriter, r *http.Request) {
 	acc := metaToAccount(sec.Meta)
 	secret := extractSecretFromPayload(sec.Payload)
 	uri := BuildOTPAuthURI(&acc, secret)
-	p.logAudit(r.Context(), orgID, acc.ID, acc.Name, "view_qr", p.actor(r), r.RemoteAddr)
+	p.logAudit(r.Context(), scope.OrgID, acc.ID, acc.Name, "view_qr", p.actor(r), r.RemoteAddr)
 
 	if r.URL.Query().Get("format") == "image" {
 		png, err := GenerateQRCodePNG(uri, 256)
@@ -772,13 +856,12 @@ type importIn struct {
 }
 
 func (p *Plugin) importAccounts(w http.ResponseWriter, r *http.Request) {
-	orgID := p.orgID(r)
-	if orgID == 0 {
-		http.Error(w, "unauthorized workspace", http.StatusUnauthorized)
+	scope, ok := p.requireScope(w, r)
+	if !ok {
 		return
 	}
 
-	if !p.requireRole(r, "admin") {
+	if scope.Team && !p.requireRole(r, "admin") {
 		http.Error(w, "forbidden: importing accounts requires admin role", http.StatusForbidden)
 		return
 	}
@@ -819,8 +902,9 @@ func (p *Plugin) importAccounts(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if _, err := vs.PutSecret(r.Context(), plugin.PutSecretRequest{
-			OrgID:          orgID,
-			Scope:          plugin.VaultScopeOrg,
+			OrgID:          scope.OrgID,
+			Scope:          scope.Scope,
+			OwnerUserID:    scope.OwnerID,
 			CollectionSlug: "default",
 			ItemType:       "twofa_totp",
 			Name:           acc.Name,
@@ -835,7 +919,7 @@ func (p *Plugin) importAccounts(w http.ResponseWriter, r *http.Request) {
 		imported++
 	}
 
-	p.logAudit(r.Context(), orgID, 0, fmt.Sprintf("imported %d accounts", imported), "import_accounts", p.actor(r), r.RemoteAddr)
+	p.logAudit(r.Context(), scope.OrgID, 0, fmt.Sprintf("imported %d accounts", imported), "import_accounts", p.actor(r), r.RemoteAddr)
 
 	writeJSON(w, map[string]any{
 		"imported": imported,
@@ -844,13 +928,12 @@ func (p *Plugin) importAccounts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Plugin) exportAccounts(w http.ResponseWriter, r *http.Request) {
-	orgID := p.orgID(r)
-	if orgID == 0 {
-		http.Error(w, "unauthorized workspace", http.StatusUnauthorized)
+	scope, ok := p.requireScope(w, r)
+	if !ok {
 		return
 	}
 
-	if !p.requireRole(r, "admin") {
+	if scope.Team && !p.requireRole(r, "admin") {
 		http.Error(w, "forbidden: exporting accounts requires admin role", http.StatusForbidden)
 		return
 	}
@@ -861,9 +944,10 @@ func (p *Plugin) exportAccounts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items, err := vs.ListItems(r.Context(), orgID, plugin.VaultFilter{
-		Scope:    plugin.VaultScopeOrg,
-		ItemType: "twofa_totp",
+	items, err := vs.ListItems(r.Context(), scope.OrgID, plugin.VaultFilter{
+		Scope:       scope.Scope,
+		ItemType:    "twofa_totp",
+		OwnerUserID: scope.OwnerID,
 	})
 	if err != nil {
 		http.Error(w, "vault query error", http.StatusInternalServerError)
@@ -884,7 +968,7 @@ func (p *Plugin) exportAccounts(w http.ResponseWriter, r *http.Request) {
 
 	out := make([]exportItem, 0, len(items))
 	for _, item := range items {
-		sec, err := vs.GetSecret(r.Context(), orgID, item.ID)
+		sec, err := vs.GetSecret(r.Context(), scope.OrgID, item.ID)
 		if err != nil {
 			continue
 		}
@@ -904,18 +988,17 @@ func (p *Plugin) exportAccounts(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	p.logAudit(r.Context(), orgID, 0, fmt.Sprintf("exported %d accounts", len(out)), "export_accounts", p.actor(r), r.RemoteAddr)
+	p.logAudit(r.Context(), scope.OrgID, 0, fmt.Sprintf("exported %d accounts", len(out)), "export_accounts", p.actor(r), r.RemoteAddr)
 	writeJSON(w, out)
 }
 
 func (p *Plugin) listAuditLogs(w http.ResponseWriter, r *http.Request) {
-	orgID := p.orgID(r)
-	if orgID == 0 {
-		http.Error(w, "unauthorized workspace", http.StatusUnauthorized)
+	scope, ok := p.requireScope(w, r)
+	if !ok {
 		return
 	}
 
-	tdb := p.tenantDB(r.Context(), orgID)
+	tdb := p.tenantDB(r.Context(), scope.OrgID)
 	if tdb == nil {
 		http.Error(w, "database unavailable", http.StatusInternalServerError)
 		return
