@@ -40,14 +40,21 @@ func (m *testMux) Serve(pattern string, w http.ResponseWriter, r *http.Request) 
 }
 
 type mockSession struct {
-	orgID       func(r *http.Request) uint
-	userID      func(r *http.Request) uint
-	requireRole func(r *http.Request, min string) bool
+	orgID         func(r *http.Request) uint
+	userID        func(r *http.Request) uint
+	personalOrgID func(r *http.Request) uint
+	requireRole   func(r *http.Request, min string) bool
 }
 
 func (s *mockSession) UserID(r *http.Request) uint    { return s.userID(r) }
 func (s *mockSession) OrgID(r *http.Request) uint     { return s.orgID(r) }
 func (s *mockSession) OrgRole(r *http.Request) string { return "admin" }
+func (s *mockSession) PersonalOrgID(r *http.Request) uint {
+	if s.personalOrgID != nil {
+		return s.personalOrgID(r)
+	}
+	return 0
+}
 func (s *mockSession) RequireRole(r *http.Request, min string) bool {
 	if s.requireRole != nil {
 		return s.requireRole(r, min)
@@ -119,7 +126,29 @@ func setupTestEnv(t *testing.T) (*Plugin, *testMux, *gorm.DB) {
 					return 1
 				},
 				userID: func(r *http.Request) uint {
+					if userHeader := r.Header.Get("X-Test-User"); userHeader != "" {
+						var uid uint
+						_, _ = fmt.Sscanf(userHeader, "%d", &uid)
+						return uid
+					}
 					return 42
+				},
+				// Each account has its own personal org. User 42 -> 100,
+				// user 43 -> 101. X-Test-Personal-Org: 0 models an account
+				// that has no personal org.
+				personalOrgID: func(r *http.Request) uint {
+					if orgHeader := r.Header.Get("X-Test-Personal-Org"); orgHeader != "" {
+						var org uint
+						_, _ = fmt.Sscanf(orgHeader, "%d", &org)
+						return org
+					}
+					var uid uint
+					if userHeader := r.Header.Get("X-Test-User"); userHeader != "" {
+						_, _ = fmt.Sscanf(userHeader, "%d", &uid)
+					} else {
+						uid = 42
+					}
+					return uid + 58
 				},
 			},
 		},

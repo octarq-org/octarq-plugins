@@ -63,23 +63,35 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 	}
 	guard := func(h http.Handler) http.Handler { return ctx.Guard(h) }
 
-	mux.Handle("GET /api/twofa/accounts", guard(http.HandlerFunc(p.listAccounts)))
-	mux.Handle("POST /api/twofa/accounts", guard(http.HandlerFunc(p.createAccount)))
-	mux.Handle("GET /api/twofa/accounts/{id}", guard(http.HandlerFunc(p.getAccount)))
-	mux.Handle("PUT /api/twofa/accounts/{id}", guard(http.HandlerFunc(p.updateAccount)))
-	mux.Handle("DELETE /api/twofa/accounts/{id}", guard(http.HandlerFunc(p.deleteAccount)))
-	mux.Handle("POST /api/twofa/accounts/{id}/pin", guard(http.HandlerFunc(p.togglePin)))
-	mux.Handle("POST /api/twofa/accounts/{id}/code", guard(http.HandlerFunc(p.getCode)))
-	mux.Handle("POST /api/twofa/accounts/{id}/verify", guard(http.HandlerFunc(p.verifyCode)))
-	mux.Handle("GET /api/twofa/accounts/{id}/qr", guard(http.HandlerFunc(p.getQRCode)))
-	mux.Handle("POST /api/twofa/import", guard(http.HandlerFunc(p.importAccounts)))
-	mux.Handle("GET /api/twofa/export", guard(http.HandlerFunc(p.exportAccounts)))
-	mux.Handle("GET /api/twofa/logs", guard(http.HandlerFunc(p.listAuditLogs)))
+	// The team vault (/api/twofa) is admin-gated inside the handlers; the
+	// personal vault (/api/personal/twofa) is owned by the caller. Both groups
+	// serve the same operations and resolve their scope from the path.
+	for _, base := range []string{"/api/twofa", "/api/personal/twofa"} {
+		mux.Handle("GET "+base+"/accounts", guard(http.HandlerFunc(p.listAccounts)))
+		mux.Handle("POST "+base+"/accounts", guard(http.HandlerFunc(p.createAccount)))
+		mux.Handle("GET "+base+"/accounts/{id}", guard(http.HandlerFunc(p.getAccount)))
+		mux.Handle("PUT "+base+"/accounts/{id}", guard(http.HandlerFunc(p.updateAccount)))
+		mux.Handle("DELETE "+base+"/accounts/{id}", guard(http.HandlerFunc(p.deleteAccount)))
+		mux.Handle("POST "+base+"/accounts/{id}/pin", guard(http.HandlerFunc(p.togglePin)))
+		mux.Handle("POST "+base+"/accounts/{id}/code", guard(http.HandlerFunc(p.getCode)))
+		mux.Handle("POST "+base+"/accounts/{id}/verify", guard(http.HandlerFunc(p.verifyCode)))
+		mux.Handle("GET "+base+"/accounts/{id}/qr", guard(http.HandlerFunc(p.getQRCode)))
+		mux.Handle("POST "+base+"/import", guard(http.HandlerFunc(p.importAccounts)))
+		mux.Handle("GET "+base+"/export", guard(http.HandlerFunc(p.exportAccounts)))
+		mux.Handle("GET "+base+"/logs", guard(http.HandlerFunc(p.listAuditLogs)))
+	}
 }
 
 func (*Plugin) Menus() []plugin.MenuItem {
 	return []plugin.MenuItem{
-		{ID: "twofa", Label: "2FA Vault", Path: "/twofa", Icon: "shield", Category: "Security"},
+		{
+			ID: "twofa", Label: "Team 2FA Vault", Path: "/governance/twofa", Icon: "shield",
+			Category: "Access", Area: "governance", RequiredRole: "admin", Order: 10,
+		},
+		{
+			ID: "personal-twofa", Label: "Personal 2FA", Path: "/personal/twofa", Icon: "shield",
+			Category: "Accounts", Area: "personal", Order: 20,
+		},
 	}
 }
 

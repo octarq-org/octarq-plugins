@@ -14,12 +14,13 @@ import {
 import { AlertTriangle, Copy } from "lucide-react";
 
 interface Props {
+  apiBase: string;
   onClose: () => void;
   onImported: () => void;
   t: (key: string, fallback?: string) => string;
 }
 
-export function ImportExportModal({ onClose, onImported, t }: Props) {
+export function ImportExportModal({ apiBase, onClose, onImported, t }: Props) {
   const toast = useToast();
   const [tab, setTab] = useState<"import" | "export">("import");
   const [importText, setImportText] = useState("");
@@ -41,7 +42,7 @@ export function ImportExportModal({ onClose, onImported, t }: Props) {
 
     setLoading(true);
     try {
-      const data = await req<{ imported: number }>("POST", "/api/twofa/import", {
+      const data = await req<{ imported: number }>("POST", `${apiBase}/import`, {
         uris: lines,
         tags: tags.trim(),
       });
@@ -59,7 +60,7 @@ export function ImportExportModal({ onClose, onImported, t }: Props) {
   const handleExport = async () => {
     setLoading(true);
     try {
-      setExportData(JSON.stringify(await req("GET", "/api/twofa/export"), null, 2));
+      setExportData(JSON.stringify(await req("GET", `${apiBase}/export`), null, 2));
     } catch {
       toast.error(t("twofa.exportFailed", "Failed to fetch export data"));
     } finally {
