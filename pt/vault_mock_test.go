@@ -43,11 +43,19 @@ func (m *mockVaultService) PutSecret(_ context.Context, req plugin.PutSecretRequ
 	if req.OrgID == 0 {
 		return nil, errors.New("vault: organization id is required")
 	}
+	scope := req.Scope
+	if scope == "" {
+		scope = plugin.VaultScopeOrg
+	}
+	if scope == plugin.VaultScopeUser && req.OwnerUserID == 0 {
+		return nil, errors.New("vault: owner user id is required for user-scoped secrets")
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if req.KeyName != "" {
 		for _, ent := range m.items {
-			if ent.meta.OrgID == req.OrgID && ent.meta.KeyName == req.KeyName {
+			if ent.meta.OrgID == req.OrgID && ent.meta.Scope == scope &&
+				ent.meta.OwnerUserID == req.OwnerUserID && ent.meta.KeyName == req.KeyName {
 				ent.payload = maps.Clone(req.Payload)
 				ent.meta.Name = req.Name
 				ent.meta.CurrentVersion++
@@ -73,7 +81,8 @@ func (m *mockVaultService) PutSecret(_ context.Context, req plugin.PutSecretRequ
 		ID:             id,
 		SecretID:       fmt.Sprintf("sec-%d", id),
 		OrgID:          req.OrgID,
-		Scope:          plugin.VaultScopeOrg,
+		Scope:          scope,
+		OwnerUserID:    req.OwnerUserID,
 		CollectionSlug: req.CollectionSlug,
 		ItemType:       req.ItemType,
 		ProviderType:   strings.ToLower(req.ProviderType),

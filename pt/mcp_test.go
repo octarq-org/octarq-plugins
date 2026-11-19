@@ -2,6 +2,7 @@ package pt
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 
@@ -75,5 +76,55 @@ func TestValidateRefusesWithoutAnyHost(t *testing.T) {
 	}
 	if p.vaultAvailable() {
 		t.Fatal("a mount without a vault reports available")
+	}
+}
+
+// TestMCPToolsUseThePersonalOrg proves the tools read the caller's personal
+// org, never the active team workspace, and refuse an account without one.
+func TestMCPToolsUseThePersonalOrg(t *testing.T) {
+	db := mcpTestDB(t)
+	p := &Plugin{db: db, vaultSvc: newMockVaultService()}
+	p.ctx = &plugin.Context{
+		DB: db,
+		PersonalOrgID: func(uid uint) uint {
+			if uid == 7 {
+				return 101
+			}
+			return 0
+		},
+	}
+
+	for _, row := range []PTTracker{
+		{OwnerUserID: 7, OrgID: 101, Name: "personal", SecretID: "a", SchemaKey: "nexusphp"},
+		{OwnerUserID: 7, OrgID: 1, Name: "team", SecretID: "b", SchemaKey: "nexusphp"},
+		{OwnerUserID: 8, OrgID: 101, Name: "other-owner", SecretID: "c", SchemaKey: "nexusphp"},
+	} {
+		if err := db.Create(&row).Error; err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+	}
+
+	ctx := plugin.WithUserID(plugin.WithOrgID(context.Background(), 1), 7)
+	_, out, err := p.mcpListTrackers(ctx, nil, mcpTrackerArgs{})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	list, ok := out.(mcpListOut)
+	if !ok {
+		t.Fatalf("unexpected output %T", out)
+	}
+	if list.Total != 1 || list.Trackers[0].Name != "personal" {
+		t.Fatalf("list = %+v", list)
+	}
+
+	// An account without a personal org is refused, not given the team rows.
+	ctx = plugin.WithUserID(plugin.WithOrgID(context.Background(), 1), 9)
+	if _, _, err := p.mcpListTrackers(ctx, nil, mcpTrackerArgs{}); !errors.Is(err, errNoPersonalSpace) {
+		t.Fatalf("no personal org = %v", err)
+	}
+
+	// A call with no user at all is refused too.
+	if _, _, err := p.mcpListTrackers(context.Background(), nil, mcpTrackerArgs{}); !errors.Is(err, errNoActor) {
+		t.Fatalf("no actor = %v", err)
 	}
 }

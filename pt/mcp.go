@@ -12,18 +12,28 @@ import (
 	"github.com/octarq-org/octarq-plugins/pt/adapter"
 )
 
-// errNoWorkspace refuses a tool call without a tenant scope. Every transport
-// supplies one; defaulting it would hand one workspace's data to whoever asked.
-var errNoWorkspace = plugin.NewAgentError(
+// errNoPersonalSpace refuses a tool call from an account with no personal org.
+// The active workspace is never a substitute.
+var errNoPersonalSpace = plugin.NewAgentError(
+	403,
+	"FORBIDDEN_NO_PERSONAL_SPACE",
+	"this account has no personal space",
+	"Sign in to the dashboard once so the personal space is provisioned.",
+	false,
+)
+
+// errNoActor refuses a tool call that carries no user. Personal data is only
+// readable by the account that owns it.
+var errNoActor = plugin.NewAgentError(
 	401,
-	"UNAUTHORIZED_NO_WORKSPACE",
-	"no workspace in this request",
-	"Every tool call needs a workspace. Use an API token from the workspace.",
+	"UNAUTHORIZED_NO_ACTOR",
+	"no user in this request",
+	"Use an API token from a signed-in account.",
 	false,
 )
 
 // errNoRole refuses a write tool called over a transport that carries no
-// identity. The stdio transport stamps a workspace but no token role.
+// identity. The stdio transport stamps a user but no token role.
 var errNoRole = plugin.NewAgentError(
 	403,
 	"FORBIDDEN_NO_ROLE",
@@ -41,7 +51,7 @@ func (*Plugin) MCPTier() string { return "" }
 func (p *Plugin) RegisterMCP(srv *mcp.Server) {
 	plugin.AddMCPTool(srv, "pt", &mcp.Tool{
 		Name:        "pt_list_trackers",
-		Description: "List the private-tracker accounts of this workspace with their latest statistics.",
+		Description: "List the private-tracker accounts in your personal space with their latest statistics.",
 	}, p.mcpListTrackers)
 
 	plugin.AddMCPTool(srv, "pt", &mcp.Tool{
@@ -151,12 +161,27 @@ type mcpSigninOut struct {
 	NextSigninAt *time.Time `json:"next_signin_at,omitempty"`
 }
 
-func (p *Plugin) mcpListTrackers(ctx context.Context, _ *mcp.CallToolRequest, _ mcpTrackerArgs) (*mcp.CallToolResult, any, error) {
-	orgID := plugin.OrgIDFromContext(ctx)
-	if orgID == 0 {
-		return nil, nil, errNoWorkspace
+// personalScope resolves the calling account and its personal org. Both are
+// required: a zero user or a zero org refuses the call instead of falling back
+// to the active workspace.
+func (p *Plugin) personalScope(ctx context.Context) (orgID, uid uint, err error) {
+	uid = plugin.UserIDFromContext(ctx)
+	if uid == 0 {
+		return 0, 0, errNoActor
 	}
-	list, err := p.listTrackers(ctx, orgID)
+	orgID = p.pluginContext().PersonalOrgFor(uid)
+	if orgID == 0 {
+		return 0, 0, errNoPersonalSpace
+	}
+	return orgID, uid, nil
+}
+
+func (p *Plugin) mcpListTrackers(ctx context.Context, _ *mcp.CallToolRequest, _ mcpTrackerArgs) (*mcp.CallToolResult, any, error) {
+	orgID, uid, err := p.personalScope(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	list, err := p.listTrackers(ctx, orgID, uid)
 	if err != nil {
 		return nil, nil, toolError(err)
 	}
@@ -169,11 +194,11 @@ func (p *Plugin) mcpListTrackers(ctx context.Context, _ *mcp.CallToolRequest, _ 
 }
 
 func (p *Plugin) mcpTrackerStatus(ctx context.Context, _ *mcp.CallToolRequest, in mcpTrackerArgs) (*mcp.CallToolResult, any, error) {
-	orgID := plugin.OrgIDFromContext(ctx)
-	if orgID == 0 {
-		return nil, nil, errNoWorkspace
+	orgID, uid, err := p.personalScope(ctx)
+	if err != nil {
+		return nil, nil, err
 	}
-	t, err := p.resolveTracker(ctx, orgID, in.ID, in.Name)
+	t, err := p.resolveTracker(ctx, orgID, uid, in.ID, in.Name)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -181,11 +206,11 @@ func (p *Plugin) mcpTrackerStatus(ctx context.Context, _ *mcp.CallToolRequest, i
 }
 
 func (p *Plugin) mcpTrackerHistory(ctx context.Context, _ *mcp.CallToolRequest, in mcpHistoryArgs) (*mcp.CallToolResult, any, error) {
-	orgID := plugin.OrgIDFromContext(ctx)
-	if orgID == 0 {
-		return nil, nil, errNoWorkspace
+	orgID, uid, err := p.personalScope(ctx)
+	if err != nil {
+		return nil, nil, err
 	}
-	t, err := p.resolveTracker(ctx, orgID, in.ID, "")
+	t, err := p.resolveTracker(ctx, orgID, uid, in.ID, "")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -211,11 +236,11 @@ func (p *Plugin) mcpSignin(ctx context.Context, _ *mcp.CallToolRequest, in mcpSi
 	if plugin.RoleFromContext(ctx) == "" {
 		return nil, nil, errNoRole
 	}
-	orgID := plugin.OrgIDFromContext(ctx)
-	if orgID == 0 {
-		return nil, nil, errNoWorkspace
+	orgID, uid, err := p.personalScope(ctx)
+	if err != nil {
+		return nil, nil, err
 	}
-	t, err := p.resolveTracker(ctx, orgID, in.ID, in.Name)
+	t, err := p.resolveTracker(ctx, orgID, uid, in.ID, in.Name)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -243,11 +268,11 @@ func (p *Plugin) mcpRefreshStats(ctx context.Context, _ *mcp.CallToolRequest, in
 	if plugin.RoleFromContext(ctx) == "" {
 		return nil, nil, errNoRole
 	}
-	orgID := plugin.OrgIDFromContext(ctx)
-	if orgID == 0 {
-		return nil, nil, errNoWorkspace
+	orgID, uid, err := p.personalScope(ctx)
+	if err != nil {
+		return nil, nil, err
 	}
-	t, err := p.resolveTracker(ctx, orgID, in.ID, in.Name)
+	t, err := p.resolveTracker(ctx, orgID, uid, in.ID, in.Name)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -263,9 +288,9 @@ func (p *Plugin) mcpRefreshStats(ctx context.Context, _ *mcp.CallToolRequest, in
 }
 
 // resolveTracker loads a tracker by id, or by name when no id is given.
-func (p *Plugin) resolveTracker(ctx context.Context, orgID, id uint, name string) (*PTTracker, error) {
+func (p *Plugin) resolveTracker(ctx context.Context, orgID, ownerUserID, id uint, name string) (*PTTracker, error) {
 	if id != 0 {
-		t, err := p.findTracker(ctx, orgID, id)
+		t, err := p.findTracker(ctx, orgID, ownerUserID, id)
 		if err != nil {
 			if errors.Is(err, ErrNotFound) {
 				return nil, plugin.NewAgentError(404, "NOT_FOUND", "tracker not found", "Check the id.", false)
@@ -278,7 +303,7 @@ func (p *Plugin) resolveTracker(ctx context.Context, orgID, id uint, name string
 	if trimmed == "" {
 		return nil, plugin.NewAgentError(422, "INVALID_ARGUMENT", "give an id or a name", "Send either id or name.", false)
 	}
-	t, err := p.findTrackerByName(ctx, orgID, trimmed)
+	t, err := p.findTrackerByName(ctx, orgID, ownerUserID, trimmed)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return nil, plugin.NewAgentError(404, "NOT_FOUND", "tracker not found", "Check the name.", false)
@@ -308,16 +333,12 @@ func (p *Plugin) mcpView(ctx context.Context, t *PTTracker) mcpTrackerOut {
 	if ad, err := p.registry().Get(adapter.Schema(t.SchemaKey)); err == nil {
 		out.CanSignin = ad.Capabilities().Signin
 	}
-	if t.VaultItemID > 0 {
-		if vs, vErr := p.vault(); vErr == nil {
-			if meta, mErr := vs.GetMeta(ctx, t.OrgID, t.VaultItemID); mErr == nil {
-				cv := credentialViewFromMeta(t, meta)
-				out.Credential = &mcpCredentialOut{
-					HasLoginSecret: cv.HasLoginSecret,
-					HasCookie:      cv.HasCookie,
-					HasAPIKey:      cv.HasAPIKey,
-				}
-			}
+	if meta := p.vaultMetaOf(ctx, t); meta != nil {
+		cv := credentialViewFromMeta(t, meta)
+		out.Credential = &mcpCredentialOut{
+			HasLoginSecret: cv.HasLoginSecret,
+			HasCookie:      cv.HasCookie,
+			HasAPIKey:      cv.HasAPIKey,
 		}
 	}
 	if snap, err := p.latestSnapshot(ctx, t.OrgID, t.ID); err == nil && snap != nil {
@@ -350,7 +371,7 @@ func statsOut(snap *PTSnapshot) mcpStatsOut {
 }
 
 // toolError turns an internal failure into an agent error without leaking
-// internals. The workspace and vault cases keep their distinct codes.
+// internals. The tenant and vault cases keep their distinct codes.
 func toolError(err error) error {
 	switch {
 	case errors.Is(err, errTenantUnavailable), errors.Is(err, errVaultUnavailable):

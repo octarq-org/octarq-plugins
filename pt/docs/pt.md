@@ -9,9 +9,11 @@ order: 40
 
 Use this page to manage your private tracker (PT) accounts in one place. The plugin refreshes logins, signs in every day, and collects basic account data. It does not download torrents.
 
+Your trackers belong to you. They live in your personal space, and other members of your workspace cannot see them. Open **PT Accounts** in the **Personal** area.
+
 ## Add a tracker
 
-1. Open **PT Accounts**.
+1. Open **Personal** > **PT Accounts**.
 2. Select **Add tracker**.
 3. Enter the site URL. Select the site type. Enter the account name and the account secret.
 4. Select **Detect** to check that the site answers.

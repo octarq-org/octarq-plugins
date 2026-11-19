@@ -5,10 +5,8 @@ import (
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
-// Permission keys. Read, sign-in, and refresh are member work: a team member
-// runs the account day to day. Anything that changes configuration or
-// credentials is admin work, because it can send requests to a third-party site
-// on the workspace's behalf.
+// Permission keys. Every key defaults to member: the tracker lives in the
+// caller's personal space, so ownership protects the data, not a team role.
 const (
 	permRead    = "pt.trackers.read"
 	permCreate  = "pt.trackers.create"
@@ -18,19 +16,16 @@ const (
 	permRefresh = "pt.trackers.refresh"
 )
 
-// roleMember and roleAdmin are the minimum roles passed to RequirePerm. The
-// resolver may still grant or deny by policy.
-const (
-	roleMember = "member"
-	roleAdmin  = "admin"
-)
+// roleMember is the minimum role passed to RequirePerm. The resolver may still
+// grant or deny by policy.
+const roleMember = "member"
 
 func declarePerms() {
 	plugin.DeclarePerm(
 		plugin.Perm{Key: permRead, Module: "pt", Resource: "PT Tracker", Action: "read", Label: "View tracker statistics", Default: roleMember},
-		plugin.Perm{Key: permCreate, Module: "pt", Resource: "PT Tracker", Action: "create", Label: "Add a tracker", Default: roleAdmin},
-		plugin.Perm{Key: permUpdate, Module: "pt", Resource: "PT Tracker", Action: "update", Label: "Change tracker settings and credentials", Default: roleAdmin},
-		plugin.Perm{Key: permDelete, Module: "pt", Resource: "PT Tracker", Action: "delete", Label: "Delete a tracker", Default: roleAdmin},
+		plugin.Perm{Key: permCreate, Module: "pt", Resource: "PT Tracker", Action: "create", Label: "Add a tracker", Default: roleMember},
+		plugin.Perm{Key: permUpdate, Module: "pt", Resource: "PT Tracker", Action: "update", Label: "Change tracker settings and credentials", Default: roleMember},
+		plugin.Perm{Key: permDelete, Module: "pt", Resource: "PT Tracker", Action: "delete", Label: "Delete a tracker", Default: roleMember},
 		plugin.Perm{Key: permSignin, Module: "pt", Resource: "PT Tracker", Action: "update", Label: "Sign in to a tracker", Default: roleMember},
 		plugin.Perm{Key: permRefresh, Module: "pt", Resource: "PT Tracker", Action: "update", Label: "Refresh tracker statistics", Default: roleMember},
 	)

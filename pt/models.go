@@ -2,8 +2,9 @@ package pt
 
 import "time"
 
-// PTTracker is one private-tracker account. A row is workspace-scoped: the
-// same tracker can exist in two workspaces with different credentials.
+// PTTracker is one private-tracker account. A row belongs to one user and
+// lives in that user's personal org: a team admin in the same workspace can
+// never see it.
 //
 // Credentials are not here. They live in the core VaultService so that a query
 // that lists trackers never loads ciphertext, and so a credential wipe does not
@@ -13,9 +14,16 @@ type PTTracker struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 
-	OrgID uint `gorm:"column:org_id;not null;index;uniqueIndex:idx_pt_tracker_org_name,priority:1" json:"-"`
+	// OwnerUserID is the account the tracker belongs to. It is the identity
+	// behind the personal org, kept as its own column so a query can never
+	// return another member's row even if the org scope is mis-bound.
+	OwnerUserID uint `gorm:"column:owner_user_id;not null;index;uniqueIndex:idx_pt_tracker_owner_name,priority:1" json:"-"`
 
-	Name string `gorm:"size:120;not null;uniqueIndex:idx_pt_tracker_org_name,priority:2" json:"name"`
+	// OrgID is the owner's personal org. Indexed, not unique: two users never
+	// share a personal org, but nothing may depend on that.
+	OrgID uint `gorm:"column:org_id;not null;index" json:"-"`
+
+	Name string `gorm:"size:120;not null;uniqueIndex:idx_pt_tracker_owner_name,priority:2" json:"name"`
 
 	// SecretID anchors the credential's KeyName in VaultService.
 	// It is generated once at creation and never changes, so renaming a

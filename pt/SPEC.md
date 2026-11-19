@@ -14,7 +14,7 @@
 
 The plugin manages private-tracker (PT) accounts. It performs four jobs:
 
-1. Store an account secret per site, encrypted, per workspace.
+1. Store an account secret per site, encrypted, in the owner's personal space.
 2. Log in again on demand (server-side form post or API key check).
 3. Run the daily sign-in inside a per-site time window.
 4. Read level, traffic, ratio, bonus, warnings, and seeding numbers.
@@ -25,13 +25,14 @@ Out of scope for v1: browsers, captcha solving, Cloudflare bypass, 2FA automatio
 
 ## 2. Data Model
 
-Three tables. Every row carries `org_id` directly; the plugin never joins through another tenant table. Models use explicit `ID/CreatedAt/UpdatedAt` and no soft delete: deleting a tracker must remove its Vault secret, and a soft delete would keep it.
+Three tables. Every tracker belongs to one user and lives in that user's personal org. Each row carries `owner_user_id` and `org_id` directly; the plugin never joins through another tenant table. Models use explicit `ID/CreatedAt/UpdatedAt` and no soft delete: deleting a tracker must remove its Vault secret, and a soft delete would keep it.
 
 ### 2.1 `pt_trackers`
 
 | Column | Notes |
 |---|---|
-| `org_id`, `name` | Unique pair `idx_pt_tracker_org_name` |
+| `owner_user_id`, `name` | Unique pair `idx_pt_tracker_owner_name` |
+| `org_id` | The owner's personal org; indexed, not unique |
 | `secret_id` | Immutable UUID, unique; anchors the Vault `KeyName` (`pt.tracker.<secret_id>`) |
 | `vault_item_id` | Foreign ID of the encrypted `tracker_credential` item in `VaultService` |
 | `base_url`, `api_base_url`, `domain` | Domain is indexed; API base is separate because M-Team serves the site and the API on different hosts |
@@ -47,6 +48,8 @@ Three tables. Every row carries `org_id` directly; the plugin never joins throug
 | `last_error`, `last_error_at`, `consecutive_failures` | |
 | `last_notified_outcome` | Notification de-duplication, not exposed |
 | `latest_snapshot_id`, `created_by_user_id` | |
+
+Snapshots and sign-in rows are keyed by the owner's personal org, the same `org_id` as their tracker.
 
 ### 2.2 `pt_snapshots`
 
@@ -72,6 +75,7 @@ Append-only ledger. Index `idx_pt_signin_org_tracker_time` on `org_id, tracker_i
 
 Tracker secrets (`login`, `cookie`, `site_api_token`, `token`) are stored in the core `plugin.VaultService` (`item_type="tracker_credential"`, `provider_type="tracker"`, `KeyName="pt.tracker."+tracker.SecretID`), with `vault_item_id` recorded on `pt_trackers`.
 
+- **Personal scope**: every item is a user-scope item (`scope="user"`, `owner_user_id`) in the owner's personal org. A read, update, or delete first proves `meta.Scope == "user"` and `meta.OwnerUserID` matches the tracker's owner. A mismatch reads as not found.
 - **Workspace & item isolation**: `VaultService` seals each item under its own per-item `SubjectVault` DEK and enforces `org_id` scoping on every read/write/delete.
 - **Write order**: insert the tracker first (it carries `secret_id`), then store the secret in `VaultService` and record `vault_item_id`. A credential write failure deletes the tracker and shreds any created secret.
 - **Delete**: a tenant transaction hard-deletes all three tables' rows, then calls `VaultService.DeleteSecret` to shred the DEK.
@@ -114,7 +118,7 @@ Successful sign-ins set `cookie_valid` and reset the failure counter. A cookie-e
 | Job | Cron | Purpose |
 |---|---|---|
 | `pt.tick` | `*/5 * * * *` | The only job that sends outbound requests. It runs due sign-ins and due refreshes in the same tick. |
-| `pt.retention` | `0 4 * * *` | Deletes snapshots older than 90 days and sign-in rows older than 180 days, per workspace. |
+| `pt.retention` | `0 4 * * *` | Deletes snapshots older than 90 days and sign-in rows older than 180 days, per personal org. |
 
 One tick job keeps all outbound traffic behind one Redis lease. Two separate jobs would take two leases and could hit the same site at the same time.
 
@@ -136,25 +140,25 @@ One tick job keeps all outbound traffic behind one Redis lease. Two separate job
 
 ## 6. HTTP API
 
-All routes are registered on the shared huma API under `/api/pt`. Cross-workspace access returns 404, never 403.
+All routes are registered on the shared huma API under `/api/pt`. Every request resolves the caller's personal org; an account with none gets 403. Another owner's tracker id returns 404, never 403.
 
 | Method | Path | Permission | Minimum role |
 |---|---|---|---|
 | GET | `/api/pt/overview` | `pt.trackers.read` | member |
 | GET | `/api/pt/trackers` | `pt.trackers.read` | member |
-| POST | `/api/pt/trackers` | `pt.trackers.create` | admin |
-| POST | `/api/pt/detect` | `pt.trackers.create` | admin |
+| POST | `/api/pt/trackers` | `pt.trackers.create` | member |
+| POST | `/api/pt/detect` | `pt.trackers.create` | member |
 | GET | `/api/pt/trackers/{id}` | `pt.trackers.read` | member |
-| PUT | `/api/pt/trackers/{id}` | `pt.trackers.update` | admin |
-| DELETE | `/api/pt/trackers/{id}` | `pt.trackers.delete` | admin |
-| PUT | `/api/pt/trackers/{id}/credentials` | `pt.trackers.update` | admin |
-| POST | `/api/pt/trackers/{id}/login` | `pt.trackers.update` | admin |
+| PUT | `/api/pt/trackers/{id}` | `pt.trackers.update` | member |
+| DELETE | `/api/pt/trackers/{id}` | `pt.trackers.delete` | member |
+| PUT | `/api/pt/trackers/{id}/credentials` | `pt.trackers.update` | member |
+| POST | `/api/pt/trackers/{id}/login` | `pt.trackers.update` | member |
 | POST | `/api/pt/trackers/{id}/signin` | `pt.trackers.signin` | member |
 | POST | `/api/pt/trackers/{id}/refresh` | `pt.trackers.refresh` | member |
 | GET | `/api/pt/trackers/{id}/snapshots?limit=90` | `pt.trackers.read` | member |
 | GET | `/api/pt/trackers/{id}/signins?limit=30` | `pt.trackers.read` | member |
 
-Write access needs admin on purpose: a write changes stored credentials and makes the plugin send requests to a third-party site.
+Every permission defaults to member. Ownership protects the data: the tracker lives in the caller's personal space, so a team role does not grant access to another member's account.
 
 Permission checks go through `Context.HasPerm`. When the host or session is missing, the check returns false, so the request is refused. It is never allowed by default.
 
@@ -178,7 +182,7 @@ The create path verifies a supplied cookie or API key before it writes any row. 
 
 The write tools decrypt a stored credential, so they are registered only when the mount has a vault. The stdio MCP composition has none and publishes the three read tools alone.
 
-The workspace always comes from `plugin.OrgIDFromContext`; zero is an error. No tool changes configuration or reads credentials. Write tools refuse a context with no role, because a stdio session has no actor to attribute the request to.
+The personal org always comes from `HostSession.PersonalOrgID` (HTTP) or `Context.PersonalOrgFor` (MCP). Zero is an error; the active team workspace is never a substitute. No tool changes configuration or reads credentials. Write tools refuse a context with no role, because a stdio session has no actor to attribute the request to.
 
 ---
 
@@ -187,10 +191,11 @@ The workspace always comes from `plugin.OrgIDFromContext`; zero is an error. No 
 | Condition | Behaviour |
 |---|---|
 | `Host.Crypto()` is nil | `Validate` returns an error; the plugin does not start |
-| Missing or zero workspace | HTTP 401 before any query |
+| No personal org for the account | HTTP 403 before any query; never the team workspace |
+| Missing or zero owner | Write refused; reads match nothing |
 | Missing permission wiring | `HasPerm` returns false |
 | Unknown `schema_key` | 422; nothing is written |
-| Duplicate name in the workspace | 409 |
+| Duplicate name in one personal space | 409 |
 | Secret in an update body | 422; use the credentials endpoint |
 | Unverifiable secret on create | 422; nothing is written |
 | Verification skipped (`force`) | Stored, response says `stored: false` |

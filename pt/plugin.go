@@ -95,7 +95,7 @@ func (*Plugin) Models() []any {
 // here; the frontend contributes routes, not navigation.
 func (*Plugin) Menus() []plugin.MenuItem {
 	return []plugin.MenuItem{
-		{ID: "pt", Label: "PT Accounts", Path: "/pt", Icon: "hard-drive", Category: "Integrations", Area: "operations", Order: 40},
+		{ID: "pt", Label: "PT Accounts", Path: "/personal/pt", Icon: "hard-drive", Category: "Accounts", Area: "personal", Order: 40},
 	}
 }
 

@@ -74,7 +74,41 @@ func secretFromPayload(payload map[string]any) storedSecret {
 	}
 }
 
+// verifyUserSecret refuses a vault item that is not a user-scope item of the
+// given owner. A mismatch reads as ErrNotFound: an id from another owner must
+// be indistinguishable from a missing one.
+func verifyUserSecret(meta *plugin.VaultItemMeta, ownerUserID uint) error {
+	if meta == nil || ownerUserID == 0 ||
+		meta.Scope != plugin.VaultScopeUser || meta.OwnerUserID != ownerUserID {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// vaultMetaOf returns the tracker's credential metadata only when the item is a
+// user-scope item owned by the tracker's owner. Anything else is invisible.
+func (p *Plugin) vaultMetaOf(ctx context.Context, t *PTTracker) *plugin.VaultItemMeta {
+	if t.VaultItemID == 0 {
+		return nil
+	}
+	vs, err := p.vault()
+	if err != nil {
+		return nil
+	}
+	meta, err := vs.GetMeta(ctx, t.OrgID, t.VaultItemID)
+	if err != nil {
+		return nil
+	}
+	if verifyUserSecret(meta, t.OwnerUserID) != nil {
+		return nil
+	}
+	return meta
+}
+
 func (p *Plugin) storeVaultSecret(ctx context.Context, t *PTTracker, secret storedSecret) error {
+	if t.OwnerUserID == 0 {
+		return errOwnerRequired
+	}
 	vs, err := p.vault()
 	if err != nil {
 		return err
@@ -93,9 +127,25 @@ func (p *Plugin) storeVaultSecret(ctx context.Context, t *PTTracker, secret stor
 		metaMap["last_login_at"] = t.LastLoginAt.UTC().Format(time.RFC3339)
 	}
 
+	// An existing item is updated only after it proves to be this owner's
+	// user-scope item. A missing one drops the anchor; a foreign one refuses.
+	if t.VaultItemID > 0 {
+		existing, err := vs.GetMeta(ctx, t.OrgID, t.VaultItemID)
+		switch {
+		case errors.Is(err, plugin.ErrSecretNotFound):
+			t.VaultItemID = 0
+		case err != nil:
+			return err
+		default:
+			if err := verifyUserSecret(existing, t.OwnerUserID); err != nil {
+				return err
+			}
+		}
+	}
+
 	var meta *plugin.VaultItemMeta
 	if t.VaultItemID > 0 {
-		meta, err = vs.UpdateSecret(ctx, t.OrgID, t.VaultItemID, &t.Name, metaMap, payload, nil, "Updated tracker credential", t.CreatedByUserID)
+		meta, err = vs.UpdateSecret(ctx, t.OrgID, t.VaultItemID, &t.Name, metaMap, payload, nil, "Updated tracker credential", t.OwnerUserID)
 		if errors.Is(err, plugin.ErrSecretNotFound) {
 			t.VaultItemID = 0
 		} else if err != nil {
@@ -105,7 +155,8 @@ func (p *Plugin) storeVaultSecret(ctx context.Context, t *PTTracker, secret stor
 	if t.VaultItemID == 0 {
 		meta, err = vs.PutSecret(ctx, plugin.PutSecretRequest{
 			OrgID:          t.OrgID,
-			Scope:          plugin.VaultScopeOrg,
+			Scope:          plugin.VaultScopeUser,
+			OwnerUserID:    t.OwnerUserID,
 			CollectionSlug: "default",
 			ItemType:       "tracker_credential",
 			ProviderType:   "tracker",
@@ -114,7 +165,7 @@ func (p *Plugin) storeVaultSecret(ctx context.Context, t *PTTracker, secret stor
 			Name:           t.Name,
 			Metadata:       metaMap,
 			Payload:        payload,
-			ActorUserID:    t.CreatedByUserID,
+			ActorUserID:    t.OwnerUserID,
 		})
 		if err != nil {
 			return err
@@ -150,15 +201,29 @@ func (p *Plugin) readVaultSecret(ctx context.Context, t *PTTracker) (storedSecre
 		}
 		return storedSecret{}, err
 	}
+	// The payload is revealed only after the item proves to be this owner's.
+	if err := verifyUserSecret(&sec.Meta, t.OwnerUserID); err != nil {
+		return storedSecret{}, err
+	}
 	return secretFromPayload(sec.Payload), nil
 }
 
-func (p *Plugin) shredSecret(ctx context.Context, orgID, vaultItemID uint) error {
+func (p *Plugin) shredSecret(ctx context.Context, orgID, vaultItemID, ownerUserID uint) error {
 	if orgID == 0 || vaultItemID == 0 {
 		return nil
 	}
 	vs, err := p.vault()
 	if err != nil {
+		return err
+	}
+	meta, err := vs.GetMeta(ctx, orgID, vaultItemID)
+	if errors.Is(err, plugin.ErrSecretNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if err := verifyUserSecret(meta, ownerUserID); err != nil {
 		return err
 	}
 	err = vs.DeleteSecret(ctx, orgID, vaultItemID)
