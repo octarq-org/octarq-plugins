@@ -147,10 +147,10 @@ describe("Mail Forms", () => {
       const urlObj = new URL(rawUrl, "http://localhost");
       const path = urlObj.pathname;
 
-      if (method === "GET" && path === "/api/integrations") {
+      if (method === "GET" && path === "/api/vault/items") {
         return jsonResponse(mockIntegrations);
       }
-      if (method === "POST" && path.startsWith("/api/integrations/") && path.endsWith("/test")) {
+      if (method === "POST" && path.startsWith("/api/vault/items/") && path.endsWith("/test")) {
         return jsonResponse({ ok: true, message: "Sent test email via Corporate Mailgun." });
       }
 
@@ -316,7 +316,7 @@ describe("Mail Forms", () => {
         const urlObj = new URL(rawUrl, "http://localhost");
         const path = urlObj.pathname;
 
-        if (method === "GET" && (path === "/api/integrations" || path === "/api/smtp-senders")) return jsonResponse(mockIntegrations);
+        if (method === "GET" && (path === "/api/vault/items" || path === "/api/smtp-senders")) return jsonResponse(mockIntegrations);
         if (method === "GET" && path === "/api/settings") return jsonResponse({});
         if (method === "POST" && path === "/api/emails/send") {
           return jsonResponse({ message: "SMTP relay authentication failed" }, 400);
@@ -348,7 +348,7 @@ describe("Mail Forms", () => {
         const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
         const urlObj = new URL(rawUrl, "http://localhost");
         const path = urlObj.pathname;
-        if (method === "GET" && (path === "/api/integrations" || path === "/api/smtp-senders")) return jsonResponse([]);
+        if (method === "GET" && (path === "/api/vault/items" || path === "/api/smtp-senders")) return jsonResponse([]);
         if (method === "GET" && path === "/api/settings") return jsonResponse({});
         throw new Error(`Unhandled fetch: ${method} ${rawUrl}`);
       });
@@ -361,16 +361,15 @@ describe("Mail Forms", () => {
       });
     });
 
-    // Standalone Core has no Integrations Hub. The local sender registry must
-    // still be usable, and the send must name that registry.
-    it("falls back to local SMTP senders when the Integrations Hub is absent", async () => {
+    // Standalone instances without Core Vault still serve the local sender registry.
+    it("falls back to local SMTP senders when Core Vault is absent", async () => {
       fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
         const method = (init?.method ?? "GET").toUpperCase();
         const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
         const urlObj = new URL(rawUrl, "http://localhost");
         const path = urlObj.pathname;
 
-        if (method === "GET" && path === "/api/integrations") return jsonResponse({ detail: "Not Found" }, 404);
+        if (method === "GET" && path === "/api/vault/items") return jsonResponse({ detail: "Not Found" }, 404);
         if (method === "GET" && path === "/api/smtp-senders") return jsonResponse(mockSenders);
         if (method === "GET" && path === "/api/settings") return jsonResponse({});
         if (method === "POST" && path === "/api/emails/send") return jsonResponse({ ok: true });
@@ -491,7 +490,7 @@ describe("Mail Forms", () => {
   });
 
   describe("SMTPSenders", () => {
-    it("uses the Integrations Hub when it is mounted and hides the local sender form", async () => {
+    it("uses Core Vault when it is mounted and hides the local sender form", async () => {
       renderWithProviders(<SMTPSenders />);
 
       await waitFor(() => {
@@ -501,30 +500,48 @@ describe("Mail Forms", () => {
         expect(screen.getByText("Manage third-party credentials and cloud provider integrations centrally.")).toBeDefined();
       });
 
-      // Test connection goes through the hub, not the local table.
+      // Test connection goes through Core Vault, not the local table.
       fireEvent.click(screen.getByRole("button", { name: "Test" }));
 
       await waitFor(() => {
         const tested = fetchMock.mock.calls.some((c) => {
           const url = typeof c[0] === "string" ? c[0] : (c[0] as Request).url;
-          return url.includes("/api/integrations/1/test");
+          return url.includes("/api/vault/items/1/test");
         });
         expect(tested).toBe(true);
       });
 
-      // The local CRUD surfaces stay absent while the hub is authoritative.
+      // The local CRUD surfaces stay absent while Core Vault is authoritative.
       expect(screen.queryByRole("button", { name: "Add SMTP" })).toBeNull();
       expect(screen.queryByRole("button", { name: "Edit SMTP" })).toBeNull();
       expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
     });
 
-    it("renders empty state with deep link when the hub has no senders", async () => {
+    it("unwraps { body: [...] } envelope from Core Vault API", async () => {
+      fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const method = (init?.method ?? "GET").toUpperCase();
+        const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
+        const urlObj = new URL(rawUrl, "http://localhost");
+        if (method === "GET" && urlObj.pathname === "/api/vault/items" && urlObj.searchParams.get("provider_type") === "communication") {
+          return jsonResponse({ body: mockIntegrations });
+        }
+        throw new Error(`Unhandled fetch: ${method} ${rawUrl}`);
+      });
+
+      renderWithProviders(<SMTPSenders />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Corporate Mailgun")).toBeDefined();
+      });
+    });
+
+    it("renders empty state with deep link when Core Vault has no senders", async () => {
       fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
         const method = (init?.method ?? "GET").toUpperCase();
         const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
         const urlObj = new URL(rawUrl, "http://localhost");
         const path = urlObj.pathname;
-        if (method === "GET" && path === "/api/integrations") return jsonResponse([]);
+        if (method === "GET" && path === "/api/vault/items") return jsonResponse([]);
         throw new Error(`Unhandled fetch: ${method} ${rawUrl}`);
       });
 
@@ -536,16 +553,15 @@ describe("Mail Forms", () => {
       });
     });
 
-    // Standalone Core mounts no Integrations Hub, so the page must serve the
-    // local registry and keep its CRUD controls.
-    it("serves the local sender registry when the Integrations Hub is absent", async () => {
+    // Standalone instances without Core Vault serve the local registry and keep its CRUD controls.
+    it("serves the local sender registry when Core Vault is absent", async () => {
       fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
         const method = (init?.method ?? "GET").toUpperCase();
         const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
         const urlObj = new URL(rawUrl, "http://localhost");
         const path = urlObj.pathname;
 
-        if (method === "GET" && path === "/api/integrations") return jsonResponse({ detail: "Not Found" }, 404);
+        if (method === "GET" && path === "/api/vault/items") return jsonResponse({ detail: "Not Found" }, 404);
         if (method === "GET" && path === "/api/smtp-senders") return jsonResponse(mockSenders);
         if (method === "POST" && path === "/api/smtp-senders/1/test") return jsonResponse({ ok: true });
         if (method === "POST" && path === "/api/smtp-senders") {

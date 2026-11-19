@@ -149,6 +149,17 @@ func extractSecretFromPayload(payload map[string]any) string {
 	return ""
 }
 
+func (p *Plugin) requireTwoFAItem(ctx context.Context, vs plugin.VaultService, orgID, id uint) (*plugin.VaultItemMeta, error) {
+	meta, err := vs.GetMeta(ctx, orgID, id)
+	if err != nil {
+		return nil, err
+	}
+	if meta == nil || meta.Scope != plugin.VaultScopeOrg || meta.ItemType != "twofa_totp" {
+		return nil, plugin.ErrSecretNotFound
+	}
+	return meta, nil
+}
+
 // listAccounts returns safe summaries for all 2FA accounts belonging to the active org,
 // including real-time TOTP codes and time remaining.
 func (p *Plugin) listAccounts(w http.ResponseWriter, r *http.Request) {
@@ -218,7 +229,7 @@ func (p *Plugin) getAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	meta, err := vs.GetMeta(r.Context(), orgID, id)
+	meta, err := p.requireTwoFAItem(r.Context(), vs, orgID, id)
 	if err != nil {
 		if errors.Is(err, plugin.ErrSecretNotFound) {
 			http.Error(w, "account not found", http.StatusNotFound)
@@ -280,6 +291,11 @@ func (p *Plugin) createAccount(w http.ResponseWriter, r *http.Request) {
 	orgID := p.orgID(r)
 	if orgID == 0 {
 		http.Error(w, "unauthorized workspace", http.StatusUnauthorized)
+		return
+	}
+
+	if !p.requireRole(r, "admin") {
+		http.Error(w, "forbidden: creating account requires admin role", http.StatusForbidden)
 		return
 	}
 
@@ -422,7 +438,7 @@ func (p *Plugin) updateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	meta, err := vs.GetMeta(r.Context(), orgID, id)
+	meta, err := p.requireTwoFAItem(r.Context(), vs, orgID, id)
 	if err != nil {
 		if errors.Is(err, plugin.ErrSecretNotFound) {
 			http.Error(w, "account not found", http.StatusNotFound)
@@ -432,6 +448,8 @@ func (p *Plugin) updateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	acc := metaToAccount(*meta)
+	prevIssuer, prevAccount := acc.Issuer, acc.Account
+	prevAlgorithm, prevDigits, prevPeriod := acc.Algorithm, acc.Digits, acc.Period
 
 	var in updateAccountIn
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
@@ -467,6 +485,12 @@ func (p *Plugin) updateAccount(w http.ResponseWriter, r *http.Request) {
 		acc.Pinned = *in.Pinned
 	}
 
+	paramsChanged := acc.Issuer != prevIssuer ||
+		acc.Account != prevAccount ||
+		acc.Algorithm != prevAlgorithm ||
+		acc.Digits != prevDigits ||
+		acc.Period != prevPeriod
+
 	var payload map[string]any
 	if in.Secret != "" {
 		clean := NormalizeSecret(in.Secret)
@@ -475,6 +499,22 @@ func (p *Plugin) updateAccount(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		payload = buildTwoFAPayload(&acc, clean)
+	} else if paramsChanged {
+		sec, sErr := vs.GetSecret(r.Context(), orgID, id)
+		if sErr != nil {
+			if errors.Is(sErr, plugin.ErrSecretNotFound) {
+				http.Error(w, "account not found", http.StatusNotFound)
+				return
+			}
+			http.Error(w, "failed to load existing secret", http.StatusInternalServerError)
+			return
+		}
+		existingSecret := extractSecretFromPayload(sec.Payload)
+		if existingSecret == "" {
+			http.Error(w, "failed to extract existing secret", http.StatusInternalServerError)
+			return
+		}
+		payload = buildTwoFAPayload(&acc, existingSecret)
 	}
 
 	updated, err := vs.UpdateSecret(r.Context(), orgID, id, &acc.Name, buildTwoFAMetadata(&acc), payload, nil, "Updated 2FA account", p.actorUserID(r))
@@ -508,7 +548,7 @@ func (p *Plugin) deleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	meta, err := vs.GetMeta(r.Context(), orgID, id)
+	meta, err := p.requireTwoFAItem(r.Context(), vs, orgID, id)
 	if err != nil {
 		if errors.Is(err, plugin.ErrSecretNotFound) {
 			http.Error(w, "account not found", http.StatusNotFound)
@@ -539,13 +579,18 @@ func (p *Plugin) togglePin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !p.requireRole(r, "admin") {
+		http.Error(w, "forbidden: pinning account requires admin role", http.StatusForbidden)
+		return
+	}
+
 	vs, err := p.vault()
 	if err != nil {
 		http.Error(w, "credential vault unavailable", http.StatusInternalServerError)
 		return
 	}
 
-	meta, err := vs.GetMeta(r.Context(), orgID, id)
+	meta, err := p.requireTwoFAItem(r.Context(), vs, orgID, id)
 	if err != nil {
 		if errors.Is(err, plugin.ErrSecretNotFound) {
 			http.Error(w, "account not found", http.StatusNotFound)
@@ -577,7 +622,7 @@ func (p *Plugin) getCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	meta, err := vs.GetMeta(r.Context(), orgID, id)
+	meta, err := p.requireTwoFAItem(r.Context(), vs, orgID, id)
 	if err != nil {
 		if errors.Is(err, plugin.ErrSecretNotFound) {
 			http.Error(w, "account not found", http.StatusNotFound)
@@ -628,6 +673,15 @@ func (p *Plugin) verifyCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if _, err := p.requireTwoFAItem(r.Context(), vs, orgID, id); err != nil {
+		if errors.Is(err, plugin.ErrSecretNotFound) {
+			http.Error(w, "account not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "failed to load account", http.StatusInternalServerError)
+		return
+	}
+
 	sec, err := vs.GetSecret(r.Context(), orgID, id)
 	if err != nil {
 		if errors.Is(err, plugin.ErrSecretNotFound) {
@@ -662,6 +716,15 @@ func (p *Plugin) getQRCode(w http.ResponseWriter, r *http.Request) {
 	vs, err := p.vault()
 	if err != nil {
 		http.Error(w, "credential vault unavailable", http.StatusInternalServerError)
+		return
+	}
+
+	if _, err := p.requireTwoFAItem(r.Context(), vs, orgID, id); err != nil {
+		if errors.Is(err, plugin.ErrSecretNotFound) {
+			http.Error(w, "account not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "failed to load account", http.StatusInternalServerError)
 		return
 	}
 
@@ -712,6 +775,11 @@ func (p *Plugin) importAccounts(w http.ResponseWriter, r *http.Request) {
 	orgID := p.orgID(r)
 	if orgID == 0 {
 		http.Error(w, "unauthorized workspace", http.StatusUnauthorized)
+		return
+	}
+
+	if !p.requireRole(r, "admin") {
+		http.Error(w, "forbidden: importing accounts requires admin role", http.StatusForbidden)
 		return
 	}
 

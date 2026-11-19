@@ -211,6 +211,18 @@ func (m *mockVaultService) PutInstanceSecret(_ context.Context, req plugin.PutSe
 	return cloneMeta(meta), nil
 }
 
+func (m *mockVaultService) DeleteInstanceSecret(_ context.Context, keyName string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for id, entry := range m.items {
+		if entry.meta.Scope == plugin.VaultScopeInstance && entry.meta.KeyName == keyName {
+			delete(m.items, id)
+			return nil
+		}
+	}
+	return plugin.ErrSecretNotFound
+}
+
 func (m *mockVaultService) ListItems(_ context.Context, orgID uint, filter plugin.VaultFilter) ([]plugin.VaultItemMeta, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -288,7 +300,6 @@ func (m *mockVaultService) ComputeTOTP(_ context.Context, orgID, itemID uint) (s
 		return "", 0, plugin.ErrSecretNotFound
 	}
 	payload := cloneMap(entry.payload)
-	metadata := cloneMap(entry.meta.Metadata)
 	m.mu.RUnlock()
 
 	secret, _ := payload["secret"].(string)
@@ -310,15 +321,6 @@ func (m *mockVaultService) ComputeTOTP(_ context.Context, orgID, itemID uint) (s
 				algo = parsed.Algorithm
 			}
 		}
-	}
-	if v, ok := intFromAny(metadata["period"]); ok && v > 0 {
-		period = v
-	}
-	if v, ok := intFromAny(metadata["digits"]); ok && v > 0 {
-		digits = v
-	}
-	if v, ok := metadata["algorithm"].(string); ok && v != "" {
-		algo = v
 	}
 	if secret == "" {
 		return "", 0, fmt.Errorf("missing TOTP secret")

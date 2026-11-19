@@ -186,6 +186,18 @@ func (m *mockVaultService) ResolveInstanceSecret(_ context.Context, keyName stri
 	return nil, plugin.ErrSecretNotFound
 }
 
+func (m *mockVaultService) DeleteInstanceSecret(_ context.Context, keyName string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for id, ent := range m.items {
+		if ent.meta.Scope == plugin.VaultScopeInstance && ent.meta.KeyName == keyName {
+			delete(m.items, id)
+			return nil
+		}
+	}
+	return plugin.ErrSecretNotFound
+}
+
 func (m *mockVaultService) ListItems(_ context.Context, orgID uint, filter plugin.VaultFilter) ([]plugin.VaultItemMeta, error) {
 	if m.listErr != nil {
 		return nil, m.listErr
