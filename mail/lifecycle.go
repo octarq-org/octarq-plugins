@@ -17,8 +17,6 @@ type Plugin struct {
 	db                  *gorm.DB
 	orgID               func(*http.Request) uint
 	audit               func(r *http.Request, action, targetType string, targetID uint, meta map[string]any)
-	encrypt             func(plaintext []byte) (string, error)
-	decrypt             func(encoded string) ([]byte, error)
 	getWorkspaceSetting func(orgID uint, key string) string
 	getGlobalSetting    func(key string) string
 	sendLimiter         *rateLimiter
@@ -35,6 +33,7 @@ type Plugin struct {
 	requireRole  func(r *http.Request, min string) bool
 	ctx          *plugin.Context
 	host         plugin.Host
+	vaultSvc     plugin.VaultService
 }
 
 // Host returns the host runtime interface.
@@ -49,8 +48,6 @@ var (
 	_ plugin.Describer    = (*Plugin)(nil)
 	_ plugin.MenuProvider = (*Plugin)(nil)
 	_ plugin.HelpDocsFS   = (*Plugin)(nil)
-
-	_ plugin.EncryptedDataReporter = (*Plugin)(nil)
 )
 
 // Compile-time service contract assertions: these methods are provided to the
@@ -148,10 +145,6 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 		if p.host.Session() != nil {
 			p.orgID = p.host.Session().OrgID
 			p.requireRole = p.host.Session().RequireRole
-		}
-		if p.host.Crypto() != nil {
-			p.encrypt = p.host.Crypto().Encrypt
-			p.decrypt = p.host.Crypto().Decrypt
 		}
 		if p.host.Settings() != nil {
 			p.getWorkspaceSetting = p.host.Settings().GetWorkspaceSetting

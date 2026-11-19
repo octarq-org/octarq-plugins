@@ -124,35 +124,36 @@ func normalizeHosts(hosts []hostEntry) hostlist.HostList {
 }
 
 // ownsProviderAccount reports whether the given provider account id belongs to
-// the caller's org. Exactly one registry answers: the Integrations Hub when
-// mounted, the local provider_accounts table on standalone Core. The second
-// return reports a resolution failure (500-class), which is never "not owned".
+// the caller's org (either via a local ProviderAccount row or a Vault DNS
+// integration item). The second return reports a resolution failure (500-class),
+// which is never "not owned".
 func (p *Plugin) ownsProviderAccount(r *http.Request, id uint) (bool, error) {
 	if id == 0 {
 		return false, nil
 	}
 	orgID := p.orgID(r)
-	cred, err := p.credentialHost().LookupCredential(r.Context(), orgID, plugin.CredentialQuery{
-		ID:           id,
-		ProviderType: "dns",
-	})
-	switch {
-	case err == nil:
-		return cred != nil && cred.OrgID == orgID, nil
-	case errors.Is(err, plugin.ErrCredentialNotFound):
-		return false, nil
-	case !errors.Is(err, plugin.ErrCredentialResolverUnavailable):
-		return false, fmt.Errorf("%w: %v", errProviderCredentials, err)
+	vs, vErr := p.vault()
+	if vErr != nil {
+		return false, fmt.Errorf("%w: %v", errProviderCredentials, vErr)
 	}
 
 	var acc ProviderAccount
-	if err := p.db.Where("id = ? AND owner_id = ?", id, orgID).First(&acc).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return false, nil
-		}
+	err := p.db.WithContext(r.Context()).Where("id = ? AND owner_id = ?", id, orgID).First(&acc).Error
+	switch {
+	case err == nil:
+		return true, nil
+	case !errors.Is(err, gorm.ErrRecordNotFound):
 		return false, fmt.Errorf("%w: %v", errProviderCredentials, err)
 	}
-	return true, nil
+
+	meta, metaErr := vs.GetMeta(r.Context(), orgID, id)
+	if metaErr == nil {
+		return meta != nil && meta.OrgID == orgID && meta.ProviderType == "dns", nil
+	}
+	if errors.Is(metaErr, plugin.ErrSecretNotFound) {
+		return false, nil
+	}
+	return false, fmt.Errorf("%w: %v", errProviderCredentials, metaErr)
 }
 
 type DNSProvidersInput struct {

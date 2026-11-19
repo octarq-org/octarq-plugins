@@ -5,8 +5,8 @@ import "time"
 // PTTracker is one private-tracker account. A row is workspace-scoped: the
 // same tracker can exist in two workspaces with different credentials.
 //
-// Credentials are not here. They live in PTCredential so that a query that
-// lists trackers never loads ciphertext, and so a credential wipe does not
+// Credentials are not here. They live in the core VaultService so that a query
+// that lists trackers never loads ciphertext, and so a credential wipe does not
 // destroy the tracker's history.
 type PTTracker struct {
 	ID        uint      `gorm:"primarykey" json:"id"`
@@ -17,10 +17,11 @@ type PTTracker struct {
 
 	Name string `gorm:"size:120;not null;uniqueIndex:idx_pt_tracker_org_name,priority:2" json:"name"`
 
-	// SecretID anchors the credential's encryption AAD and subject namespace.
+	// SecretID anchors the credential's KeyName in VaultService.
 	// It is generated once at creation and never changes, so renaming a
-	// tracker or correcting its schema cannot brick the ciphertext.
-	SecretID string `gorm:"size:64;not null;uniqueIndex" json:"-"`
+	// tracker or correcting its schema cannot break the credential key.
+	SecretID    string `gorm:"size:64;not null;uniqueIndex" json:"-"`
+	VaultItemID uint   `gorm:"index" json:"-"`
 
 	BaseURL string `gorm:"size:512;not null" json:"base_url"`
 	// APIBaseURL is separate because the API host is not always derived from
@@ -31,7 +32,7 @@ type PTTracker struct {
 	SchemaKey  string `gorm:"column:schema_key;size:32;not null;index" json:"schema"`
 
 	// Username is the site account name. The matching login secret is stored
-	// encrypted in PTCredential, never in this row.
+	// encrypted in VaultService, never in this row.
 	Username  string `gorm:"size:255" json:"username,omitempty"`
 	UserAgent string `gorm:"size:512" json:"user_agent,omitempty"`
 	// Timezone is an IANA name. Empty means server local time.
@@ -83,36 +84,6 @@ type PTTracker struct {
 // TableName pins the table name; core migrations are dialect-neutral and the
 // pt_ prefix keeps this plugin's tables out of every other module's namespace.
 func (PTTracker) TableName() string { return "pt_trackers" }
-
-// PTCredential is the 1:1 encrypted secret store for a tracker.
-//
-// The plaintext payload is a JSON object of {login_secret, cookie, api_key,
-// token}. It is encrypted under a per-workspace subject vault and bound to
-// (org_id, SecretID) through the AES-GCM additional data, so a ciphertext
-// copied to another workspace or another tracker fails to decrypt.
-type PTCredential struct {
-	ID        uint      `gorm:"primarykey" json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-
-	OrgID     uint `gorm:"column:org_id;not null;index;uniqueIndex:idx_pt_cred_org_tracker,priority:1" json:"-"`
-	TrackerID uint `gorm:"not null;uniqueIndex:idx_pt_cred_org_tracker,priority:2" json:"tracker_id"`
-
-	Ciphertext    string `gorm:"type:text;not null" json:"-"`
-	SecretVersion int    `gorm:"not null;default:1" json:"secret_version"`
-
-	// Presence flags let the UI and API report what is stored without ever
-	// decrypting or revealing it.
-	HasLoginSecret bool `gorm:"not null;default:false" json:"has_login_secret"`
-	HasCookie      bool `gorm:"not null;default:false" json:"has_cookie"`
-	HasAPIKey      bool `gorm:"not null;default:false" json:"has_api_key"`
-
-	CookieSetAt   *time.Time `json:"cookie_set_at,omitempty"`
-	LastLoginAt   *time.Time `json:"last_login_at,omitempty"`
-	LoginFailures int        `gorm:"not null;default:0" json:"login_failures"`
-}
-
-func (PTCredential) TableName() string { return "pt_credentials" }
 
 // PTSnapshot is one immutable statistics capture.
 //

@@ -14,9 +14,9 @@ export default function MailSetupStepWidget() {
     let cancelled = false;
     (async () => {
       try {
-        // The Integrations Hub owns mail senders when it is mounted. Count the
+        // Core Vault owns mail senders when it is mounted. Count the
         // same registry the mail pages offer, not just the local table.
-        const res = await fetch("/api/integrations?provider_type=communication", {
+        const res = await fetch("/api/vault/items?provider_type=communication", {
           credentials: "same-origin",
         });
         if (res.status === 404) {
@@ -26,7 +26,8 @@ export default function MailSetupStepWidget() {
         }
         if (!res.ok) return;
         const data = await res.json();
-        const list = (Array.isArray(data) ? data : []).filter(
+        const raw = Array.isArray(data) ? data : (data?.body ?? []);
+        const list = (Array.isArray(raw) ? raw : []).filter(
           (item: any) => item.provider === "smtp" || item.provider === "resend"
         );
         if (!cancelled) setSmtpCount(list.length);

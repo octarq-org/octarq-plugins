@@ -81,7 +81,7 @@ func (p *Plugin) humaErrorFor(err error) error {
 		return huma.Error404NotFound("Tracker not found.")
 	case errors.Is(err, errTenantUnavailable):
 		return huma.Error503ServiceUnavailable("This server cannot reach workspace data. Contact your administrator.")
-	case errors.Is(err, errCryptoUnavailable):
+	case errors.Is(err, errVaultUnavailable):
 		return huma.Error503ServiceUnavailable("The credential vault is unavailable. Contact your administrator.")
 	default:
 		return huma.Error500InternalServerError("The request failed. Try again.")
@@ -293,14 +293,11 @@ func (p *Plugin) buildView(ctx context.Context, t *PTTracker) trackerView {
 		view.SchemaLabel = t.SchemaKey
 	}
 
-	if cred, err := p.credentialFor(ctx, t.OrgID, t.ID); err == nil && cred != nil {
-		view.Credential = credentialView{
-			HasLoginSecret: cred.HasLoginSecret,
-			HasCookie:      cred.HasCookie,
-			HasAPIKey:      cred.HasAPIKey,
-			SecretVersion:  cred.SecretVersion,
-			CookieSetAt:    cred.CookieSetAt,
-			LastLoginAt:    cred.LastLoginAt,
+	if t.VaultItemID > 0 {
+		if vs, vErr := p.vault(); vErr == nil {
+			if meta, mErr := vs.GetMeta(ctx, t.OrgID, t.VaultItemID); mErr == nil {
+				view.Credential = credentialViewFromMeta(t, meta)
+			}
 		}
 	}
 	if snap, err := p.latestSnapshot(ctx, t.OrgID, t.ID); err == nil && snap != nil {
@@ -562,7 +559,7 @@ func (p *Plugin) createTrackerHandler(ctx context.Context, input *createTrackerI
 	if !secret.empty() {
 		if err := p.storeSecrets(ctx, t, secret, true); err != nil {
 			_ = p.deleteTrackerCascade(ctx, orgID, t.ID)
-			_ = p.shredSecret(orgID, t.SecretID)
+			_ = p.shredSecret(ctx, orgID, t.VaultItemID)
 			return nil, p.humaErrorFor(err)
 		}
 	}
@@ -594,48 +591,11 @@ func (p *Plugin) shouldVerify(caps adapter.Capabilities, secret storedSecret) (b
 	return false, nil
 }
 
-// storeSecrets encrypts and saves the payload. verified records whether the
+// storeSecrets saves the payload in VaultService. verified records whether the
 // site accepted it, which sets the tracker's cookie state.
 func (p *Plugin) storeSecrets(ctx context.Context, t *PTTracker, secret storedSecret, verified bool) error {
-	cipher, err := p.encryptSecret(t.OrgID, t.SecretID, secret)
-	if err != nil {
+	if err := p.storeVaultSecret(ctx, t, secret); err != nil {
 		return err
-	}
-	now := p.clock()
-
-	cred, findErr := p.credentialFor(ctx, t.OrgID, t.ID)
-	switch {
-	case findErr == nil && cred != nil:
-		cred.Ciphertext = cipher
-		cred.SecretVersion++
-		cred.HasLoginSecret = secret.Login != ""
-		cred.HasCookie = secret.Cookie != ""
-		cred.HasAPIKey = secret.APIKey != ""
-		if secret.Cookie != "" {
-			cred.CookieSetAt = &now
-		}
-		cred.UpdatedAt = now
-		if err := p.saveCredential(ctx, cred); err != nil {
-			return err
-		}
-	case errors.Is(findErr, ErrNotFound):
-		cred = &PTCredential{
-			OrgID:          t.OrgID,
-			TrackerID:      t.ID,
-			Ciphertext:     cipher,
-			SecretVersion:  1,
-			HasLoginSecret: secret.Login != "",
-			HasCookie:      secret.Cookie != "",
-			HasAPIKey:      secret.APIKey != "",
-		}
-		if secret.Cookie != "" {
-			cred.CookieSetAt = &now
-		}
-		if err := p.createCredential(ctx, cred); err != nil {
-			return err
-		}
-	default:
-		return findErr
 	}
 
 	if verified {
@@ -733,7 +693,7 @@ func (p *Plugin) deleteTrackerHandler(ctx context.Context, input *trackerInput) 
 	}
 	// The rows are gone; a shred failure leaves an orphan key with no
 	// ciphertext, so the deletion still stands.
-	_ = p.shredSecret(orgID, t.SecretID)
+	_ = p.shredSecret(ctx, orgID, t.VaultItemID)
 	return &deleteOutput{Body: map[string]bool{"ok": true}}, nil
 }
 
@@ -838,16 +798,9 @@ func (p *Plugin) setCredentialHandler(ctx context.Context, input *credentialInpu
 	return out, nil
 }
 
-// readSecrets decrypts the stored payload. A missing row is an empty payload.
+// readSecrets decrypts the stored payload from VaultService. Missing item is an empty payload.
 func (p *Plugin) readSecrets(ctx context.Context, t *PTTracker) (storedSecret, error) {
-	cred, err := p.credentialFor(ctx, t.OrgID, t.ID)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return storedSecret{}, nil
-		}
-		return storedSecret{}, err
-	}
-	return p.decryptSecret(t.OrgID, t.SecretID, cred.Ciphertext)
+	return p.readVaultSecret(ctx, t)
 }
 
 func (p *Plugin) loginHandler(ctx context.Context, input *trackerInput) (*actionOutput, error) {
@@ -940,7 +893,7 @@ func (p *Plugin) actionError(err error) error {
 	switch {
 	case err == nil:
 		return nil
-	case errors.Is(err, errTenantUnavailable), errors.Is(err, errCryptoUnavailable):
+	case errors.Is(err, errTenantUnavailable), errors.Is(err, errVaultUnavailable):
 		return p.humaErrorFor(err)
 	case errors.Is(err, ErrNotFound):
 		return p.humaErrorFor(err)

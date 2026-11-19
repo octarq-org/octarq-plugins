@@ -2,6 +2,7 @@ package pt
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -16,40 +17,13 @@ import (
 	"gorm.io/gorm"
 )
 
-// lazyVault hands out a subject vault on first use. Unlike fakeVault it can
-// serve a subject created during the test, which is what the HTTP create
-// path does with a fresh SecretID.
-type lazyVault struct {
-	keys map[string][]byte
-}
-
-func (v *lazyVault) key(ownerID uint, subject string) []byte {
-	k := subjectKey(ownerID, subject)
-	if _, ok := v.keys[k]; !ok {
-		v.keys[k] = deriveKey(k)
-	}
-	return v.keys[k]
-}
-
-func (v *lazyVault) SubjectVault(ownerID uint, subject string) (plugin.CryptoVault, error) {
-	return &subjectVault{vault: v.own(), key: v.key(ownerID, subject)}, nil
-}
-
-func (v *lazyVault) ShredSubjectKey(ownerID uint, subject string) error {
-	delete(v.keys, subjectKey(ownerID, subject))
-	return nil
-}
-
-func (v *lazyVault) own() *fakeVault {
-	return &fakeVault{keys: v.keys}
-}
-
 // routed is a plugin mounted on a live huma API with an org-stamping front door.
 type routed struct {
 	plugin  *Plugin
 	handler http.Handler
 	db      *gorm.DB
 	site    *fakeSite
+	vault   *mockVaultService
 	perms   func(r *http.Request, key, minRole string) bool
 }
 
@@ -61,14 +35,16 @@ func newRouted(t *testing.T) *routed {
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
-	if err := db.AutoMigrate(&PTTracker{}, &PTCredential{}, &PTSnapshot{}, &PTSigninResult{}); err != nil {
+	if err := db.AutoMigrate(&PTTracker{}, &PTSnapshot{}, &PTSigninResult{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 
 	site := newFakeSite(t)
-	lazy := &lazyVault{keys: map[string][]byte{}}
+	vault := newMockVaultService()
+	reg := plugin.NewRegistry()
+	reg.Provide(plugin.ServiceVault, plugin.VaultService(vault))
 
-	r := &routed{db: db, site: site}
+	r := &routed{db: db, site: site, vault: vault}
 	r.perms = func(*http.Request, string, string) bool { return true }
 
 	mux := http.NewServeMux()
@@ -79,11 +55,12 @@ func newRouted(t *testing.T) *routed {
 		now:       func() time.Time { return time.Date(2026, 11, 15, 9, 0, 0, 0, time.UTC) },
 	}
 	r.plugin.Mount(mux, &plugin.Context{
-		DB:    db,
-		Huma:  api,
-		Guard: func(h http.Handler) http.Handler { return h },
+		DB:      db,
+		Huma:    api,
+		Guard:   func(h http.Handler) http.Handler { return h },
+		Provide: reg.Provide,
+		Lookup:  reg.Lookup,
 		Host: &plugin.TestHost{
-			CryptoMock: &plugin.TestCrypto{SubjectVaultFn: lazy.SubjectVault, ShredSubjectKeyFn: lazy.ShredSubjectKey},
 			SessionMock: &plugin.TestSession{
 				UserIDFn:      func(*http.Request) uint { return 7 },
 				RequirePermFn: func(req *http.Request, key, minRole string) bool { return r.perms(req, key, minRole) },
@@ -327,17 +304,18 @@ func TestRouteDeleteShredsCredential(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 
+	var before PTTracker
+	if err := r.db.Where("id = ?", view.ID).First(&before).Error; err != nil {
+		t.Fatalf("load tracker before delete: %v", err)
+	}
+
 	path := fmt.Sprintf("/api/pt/trackers/%d", view.ID)
 	if rec, body := r.do(t, http.MethodDelete, path, "", nil); rec.Code != http.StatusOK {
 		t.Fatalf("delete -> %d %s", rec.Code, body)
 	}
 
-	var rows int64
-	if err := r.db.Model(&PTCredential{}).Where("tracker_id = ?", view.ID).Count(&rows).Error; err != nil {
-		t.Fatalf("count: %v", err)
-	}
-	if rows != 0 {
-		t.Fatalf("credential rows left after delete: %d", rows)
+	if _, err := r.vault.GetSecret(t.Context(), 1, before.VaultItemID); !errors.Is(err, plugin.ErrSecretNotFound) {
+		t.Fatalf("expected vault secret to be shredded after delete, got %v", err)
 	}
 
 	// The tracker row is gone with it.

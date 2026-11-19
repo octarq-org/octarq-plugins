@@ -3,7 +3,7 @@ package mail
 import (
 	"bufio"
 	"context"
-	"encoding/json"
+	"fmt"
 	"net"
 	"strings"
 	"sync"
@@ -111,7 +111,7 @@ func newSystemMailTestPlugin(t *testing.T, globalSetting func(string) string) (*
 	db.Where("1 = 1").Delete(&SMTPSender{})
 	p := New()
 	p.db = db
-	p.decrypt = func(encoded string) ([]byte, error) { return []byte(encoded), nil }
+	p.vaultSvc = newMockVaultService()
 	if globalSetting != nil {
 		p.getGlobalSetting = globalSetting
 	}
@@ -147,16 +147,16 @@ func TestSendSystemMailNoSenderReturnsClearError(t *testing.T) {
 // orgID — the recipient's membership (or lack of one) must not matter.
 func TestSendSystemMailDeliversWithoutOrg(t *testing.T) {
 	host, port, got := captureSMTP(t)
-	p, db := newSystemMailTestPlugin(t, func(key string) string {
+	p, _ := newSystemMailTestPlugin(t, func(key string) string {
 		if key == "mail_system_sender_id" {
 			return "1"
 		}
 		return ""
 	})
-	if err := db.Create(&SMTPSender{
+	if _, err := seedVaultSMTPSender(p, SMTPSender{
 		ID: 1, OrgID: 1, Name: "relay", Host: host, Port: port,
-		User: "u", Pass: "pw", FromEmail: "noreply@example.com",
-	}).Error; err != nil {
+		User: "u", FromEmail: "noreply@example.com",
+	}, "pw"); err != nil {
 		t.Fatalf("seed sender: %v", err)
 	}
 
@@ -207,68 +207,95 @@ func TestSystemSenderResolution(t *testing.T) {
 	}
 }
 
-func TestHostSPI_MailCredentialBridge(t *testing.T) {
+func TestVaultService_MailCredentialResolution(t *testing.T) {
 	p, _ := newSystemMailTestPlugin(t, func(string) string { return "" })
 
-	// 1. Initially no senders and no host -> not ready
+	// 1. Initially no senders -> not ready
 	if p.mailReady() {
 		t.Fatal("expected mailReady = false initially")
 	}
 
 	host, port, got := captureSMTP(t)
+	mv := p.vaultSvc.(*mockVaultService)
 
-	// 2. Wire TestHost that resolves communication credentials
-	th := &plugin.TestHost{
-		LookupCredentialMock: func(ctx context.Context, orgID uint, query plugin.CredentialQuery) (*plugin.Credential, error) {
-			if query.ProviderType == "communication" {
-				cfgJSON, _ := json.Marshal(map[string]any{
-					"host":      host,
-					"port":      port,
-					"fromEmail": "pro-sender@octarq.com",
-				})
-				return &plugin.Credential{
-					ID:           101,
-					OrgID:        orgID,
-					ProviderType: "communication",
-					Provider:     "smtp",
-					Name:         "Centralized SMTP",
-					ConfigJSON:   cfgJSON,
-				}, nil
-			}
-			return nil, plugin.ErrCredentialNotFound
+	// 2. Wire org-scoped communication secret in VaultService
+	if _, err := mv.PutSecret(context.Background(), plugin.PutSecretRequest{
+		OrgID:        1,
+		Scope:        plugin.VaultScopeOrg,
+		ItemType:     "integration",
+		ProviderType: "communication",
+		Provider:     "smtp",
+		Name:         "Centralized SMTP",
+		Payload: map[string]any{
+			"host":      host,
+			"port":      port,
+			"fromEmail": "pro-sender@octarq.com",
 		},
+	}); err != nil {
+		t.Fatal(err)
 	}
-	p.host = th
 
-	// A Hub integration is not a system sender: readiness stays false until a
-	// local sender is selected, because system mail never reads the Hub.
+	// Org-scoped integration is not a system sender until mail_system_sender_id is selected.
 	if p.mailReady() {
-		t.Fatal("expected mailReady = false while only a Hub integration exists")
+		t.Fatal("expected mailReady = false while only an org-scoped integration exists")
 	}
 
-	// 3. sendMail delivers via Host SPI
-	if err := p.sendMail(1, "recipient@example.com", "Test Subject Via SPI", "<p>Body</p>", "Body"); err != nil {
-		t.Fatalf("sendMail via Host SPI failed: %v", err)
+	// 3. sendMail delivers via VaultService
+	if err := p.sendMail(1, "recipient@example.com", "Test Subject Via Vault", "<p>Body</p>", "Body"); err != nil {
+		t.Fatalf("sendMail via VaultService failed: %v", err)
 	}
 
 	captured := got()
-	if !strings.Contains(captured, "Test Subject Via SPI") {
+	if !strings.Contains(captured, "Test Subject Via Vault") {
 		t.Fatalf("SMTP relay did not receive expected subject: %s", captured)
 	}
 	if !strings.Contains(captured, "pro-sender@octarq.com") {
 		t.Fatalf("SMTP relay did not receive expected from address: %s", captured)
 	}
 
-	// 4. Test Resend credential resolution
-	resendCred := &plugin.Credential{
-		ID:           102,
-		OrgID:        1,
+	// 4. Instance-scoped system sender (orgID == 0, scope = instance) works via ResolveInstanceSecret
+	hostInst, portInst, gotInst := captureSMTP(t)
+	instMeta, err := mv.PutInstanceSecret(context.Background(), plugin.PutSecretRequest{
+		Scope:        plugin.VaultScopeInstance,
+		ItemType:     "integration",
 		ProviderType: "communication",
-		Provider:     "resend",
-		ConfigJSON:   json.RawMessage(`{"apiKey":"re_123456","fromEmail":"resend@octarq.com"}`),
+		Provider:     "smtp",
+		KeyName:      "mail.system.default",
+		Name:         "Instance System SMTP",
+		Payload: map[string]any{
+			"smtpHost":  hostInst,
+			"smtpPort":  portInst,
+			"apiKey":    "sys-user",
+			"secretKey": "sys-pass",
+			"fromEmail": "system@octarq.com",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
-	sender, from, err := p.senderFromCredential(resendCred)
+	p.getGlobalSetting = func(key string) string {
+		if key == "mail_system_sender_id" {
+			return fmt.Sprintf("%d", instMeta.ID)
+		}
+		return ""
+	}
+	if !p.mailReady() {
+		t.Fatal("expected mailReady = true with instance-scoped system sender")
+	}
+	if err := p.sendSystemMail("user@example.com", "Instance System Subject", "", "hello"); err != nil {
+		t.Fatalf("sendSystemMail via instance vault failed: %v", err)
+	}
+	if !strings.Contains(gotInst(), "system@octarq.com") {
+		t.Fatalf("instance relay did not receive expected from address: %s", gotInst())
+	}
+
+	// 5. Test Resend credential resolution
+	resendSec := &plugin.VaultSecret{
+		Meta:    plugin.VaultItemMeta{ID: 102, OrgID: 1, ProviderType: "communication", Provider: "resend"},
+		Payload: map[string]any{"apiKey": "re_123456", "fromEmail": "resend@octarq.com"},
+	}
+	sender, from, err := p.senderFromVaultSecret(resendSec)
 	if err != nil || sender == nil || from != "resend@octarq.com" {
-		t.Fatalf("senderFromCredential for resend failed: %v, from=%s", err, from)
+		t.Fatalf("senderFromVaultSecret for resend failed: %v, from=%s", err, from)
 	}
 }

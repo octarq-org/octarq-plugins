@@ -48,11 +48,11 @@ export function Compose({
     setLoadingSenders(true);
     (async () => {
       try {
-        const res = await fetch("/api/integrations?provider_type=communication", {
+        const res = await fetch("/api/vault/items?provider_type=communication", {
           credentials: "same-origin",
         });
         if (res.status === 404) {
-          // No Integrations Hub on this instance: the local SMTP sender
+          // Core Vault is unavailable on this instance: the local SMTP sender
           // registry is the only source, so offer it instead of an empty list.
           const list = await mailApi.smtpSenders();
           if (cancelled) return;
@@ -63,7 +63,8 @@ export function Compose({
         }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        const commSenders = (Array.isArray(data) ? data : []).filter(
+        const raw = Array.isArray(data) ? data : (data?.body ?? []);
+        const commSenders = (Array.isArray(raw) ? raw : []).filter(
           (item: any) => item.provider === "smtp" || item.provider === "resend"
         );
         if (cancelled) return;
@@ -192,14 +193,18 @@ export function Compose({
                 className="text-sm"
                 value={String(smtpSenderId)}
                 onValueChange={(v) => setSmtpSenderId(Number(v))}
-                options={senders.map((s) => ({
-                  value: String(s.id),
-                  label: s.summary
-                    ? `${s.name} (${s.summary})`
-                    : s.fromEmail
-                      ? `${s.name} (${s.fromEmail})`
-                      : `${s.name} (${s.provider})`,
-                }))}
+                options={senders.map((s) => {
+                  const detail =
+                    s.metadata?.fromEmail ||
+                    s.fromEmail ||
+                    s.summary ||
+                    s.metadata?.smtpHost ||
+                    s.provider;
+                  return {
+                    value: String(s.id),
+                    label: detail ? `${s.name} (${detail})` : s.name,
+                  };
+                })}
               />
             </Field>
           )}

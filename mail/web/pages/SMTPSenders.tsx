@@ -4,11 +4,22 @@ import { NavLink } from "react-router-dom";
 import { mailApi, SMTPSender } from "../api";
 import { KeyRound, Send, Blocks } from "lucide-react";
 
-// Which registry owns the sender rows. An instance with the Integrations Hub
-// mounted uses hub credentials; a standalone Core instance has no hub and uses
+// Which registry owns the sender rows. An instance with Core Vault
+// mounted uses vault items; a standalone instance without vault uses
 // the local mail_smtp_senders table. The two registries number rows
 // independently, so a page must read exactly one of them.
 type SenderMode = "integration" | "local" | null;
+
+function formatIntegrationSenderSummary(s: any): string {
+  const fromEmail = s.metadata?.fromEmail || s.fromEmail;
+  const host = s.metadata?.smtpHost || s.host;
+  const port = s.metadata?.smtpPort || s.port || 587;
+  if (fromEmail && host) return `${fromEmail} via ${host}:${port}`;
+  if (s.summary) return s.summary;
+  if (fromEmail) return fromEmail;
+  if (host) return `${host}:${port}`;
+  return s.metadata?.fromName || s.provider || s.name || "";
+}
 
 export function SMTPSenders() {
   const { t } = useTranslation();
@@ -24,7 +35,7 @@ export function SMTPSenders() {
   async function load() {
     setLoading(true);
     try {
-      const res = await fetch("/api/integrations?provider_type=communication", {
+      const res = await fetch("/api/vault/items?provider_type=communication", {
         credentials: "same-origin",
       });
       if (res.status === 404) {
@@ -38,9 +49,10 @@ export function SMTPSenders() {
         return;
       }
       const data = await res.json();
+      const raw = Array.isArray(data) ? data : (data?.body ?? []);
       setMode("integration");
       setSenders(
-        (Array.isArray(data) ? data : []).filter(
+        (Array.isArray(raw) ? raw : []).filter(
           (item: any) => item.provider === "smtp" || item.provider === "resend"
         )
       );
@@ -70,7 +82,7 @@ export function SMTPSenders() {
         await mailApi.testSMTPSender(sender.id);
         toast.success(t("settings.smtpTestSent", { to: sender.fromEmail }));
       } else {
-        const res = await fetch(`/api/integrations/${sender.id}/test`, {
+        const res = await fetch(`/api/vault/items/${sender.id}/test`, {
           method: "POST",
           credentials: "same-origin",
         });
@@ -183,7 +195,7 @@ export function SMTPSenders() {
                   </div>
                   <div className="text-xs text-muted-foreground mt-1 font-mono">
                     {mode === "integration"
-                      ? (s.summary || `${s.fromEmail} via ${s.host}:${s.port || 587}`)
+                      ? formatIntegrationSenderSummary(s)
                       : `${s.fromEmail} via ${s.host}:${s.port}`}
                   </div>
                 </div>

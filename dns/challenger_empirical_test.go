@@ -34,8 +34,8 @@ func TestFinding4_SyncDomainsIgnoresDBCreateConflict(t *testing.T) {
 		},
 	}
 	provName := registerFakeProvider(t, "sync-conflict-prov", fake)
-	accOrg2 := ProviderAccount{OrgID: 2, Name: "org2-acc", Type: provName, Config: "{}"}
-	if err := p.db.Create(&accOrg2).Error; err != nil {
+	accOrg2, err := seedVaultProviderAccount(p, 2, "org2-acc", provName, map[string]any{"apiToken": "tok"})
+	if err != nil {
 		t.Fatalf("setup Org 2 provider: %v", err)
 	}
 

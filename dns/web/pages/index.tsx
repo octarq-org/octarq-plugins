@@ -104,19 +104,20 @@ export default function DomainsPage() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/integrations?provider_type=dns", {
+        const res = await fetch("/api/vault/items?provider_type=dns", {
           credentials: "same-origin",
         });
         if (res.status === 404) {
-          // No Integrations Hub on this instance: domain forms must offer the
-          // local provider_accounts registry instead of an empty list.
+          // Core Vault is unavailable on this instance: domain forms must offer
+          // the local provider_accounts registry instead of an empty list.
           const local = await dnsApi.providerAccounts();
           if (!cancelled) setAccounts(local);
           return;
         }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        const items = Array.isArray(data) ? data : [];
+        const raw = Array.isArray(data) ? data : (data?.body ?? []);
+        const items = Array.isArray(raw) ? raw : [];
         const mapped: ProviderAccount[] = items.map((i: any) => ({
           id: i.id,
           name: i.name,

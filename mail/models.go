@@ -45,17 +45,17 @@ type Email struct {
 }
 
 type SMTPSender struct {
-	ID        uint      `json:"id" gorm:"primaryKey"`
-	OrgID     uint      `gorm:"column:owner_id;index" json:"-"`
-	Name      string    `json:"name"`
-	Host      string    `json:"host"`
-	Port      int       `json:"port"`
-	User      string    `json:"user"`
-	Pass      string    `json:"-"`
-	FromEmail string    `json:"fromEmail"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
-	// PassSet is computed (not persisted): the encrypted password never leaves the
+	ID          uint      `json:"id" gorm:"primaryKey"`
+	OrgID       uint      `gorm:"column:owner_id;index" json:"-"`
+	Name        string    `json:"name"`
+	Host        string    `json:"host"`
+	Port        int       `json:"port"`
+	User        string    `json:"user"`
+	VaultItemID uint      `gorm:"index" json:"vaultItemId,omitempty"`
+	FromEmail   string    `json:"fromEmail"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+	// PassSet is computed (not persisted): Vault secrets never leave the
 	// server, so the dashboard shows "password is set — leave blank to keep it"
 	// rather than an empty field that looks like nothing was ever entered.
 	PassSet bool `gorm:"-" json:"passSet"`

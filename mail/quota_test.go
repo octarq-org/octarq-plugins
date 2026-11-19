@@ -127,18 +127,20 @@ func mailQuotaPlugin(t *testing.T, checker plugin.QuotaChecker) (*Plugin, *int64
 			return nil, false
 		},
 	})
-	s := SMTPSender{
+	p.vaultSvc = newMockVaultService()
+	s, err := seedVaultSMTPSender(p, SMTPSender{
 		ID:        1,
 		OrgID:     100,
+		Name:      "quota-relay",
 		Host:      host,
 		Port:      port,
 		User:      "test",
-		Pass:      "",
 		FromEmail: "noreply@example.com",
-	}
-	if err := db.Create(&s).Error; err != nil {
+	}, "pw")
+	if err != nil {
 		t.Fatalf("seed SMTP sender: %v", err)
 	}
+	_ = s
 	return p, accepted
 }
 

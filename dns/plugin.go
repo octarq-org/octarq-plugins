@@ -12,6 +12,7 @@ package dns
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -49,13 +50,12 @@ type Plugin struct {
 	db          *gorm.DB
 	orgID       func(*http.Request) uint
 	audit       func(r *http.Request, action, targetType string, targetID uint, meta map[string]any)
-	encrypt     func(plaintext []byte) (string, error)
-	decrypt     func(encoded string) ([]byte, error)
 	requireRole func(r *http.Request, min string) bool
 
 	publishEvent func(orgID uint, event string, data any)
 	ctx          *plugin.Context
 	host         plugin.Host
+	vaultSvc     plugin.VaultService
 
 	// DNS resolvers, injectable so tests can stub them; default to net.
 	lookupTXT   func(string) ([]string, error)
@@ -74,8 +74,6 @@ var (
 	_ plugin.Describer    = (*Plugin)(nil)
 	_ plugin.MenuProvider = (*Plugin)(nil)
 	_ plugin.HelpDocsFS   = (*Plugin)(nil)
-
-	_ plugin.EncryptedDataReporter = (*Plugin)(nil)
 )
 
 // Compile-time service contract assertions: these methods are provided to the
@@ -154,10 +152,6 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 			p.orgID = p.host.Session().OrgID
 			p.requireRole = p.host.Session().RequireRole
 		}
-		if p.host.Crypto() != nil {
-			p.encrypt = p.host.Crypto().Encrypt
-			p.decrypt = p.host.Crypto().Decrypt
-		}
 		if p.host.Events() != nil {
 			p.publishEvent = p.host.Events().PublishEvent
 			p.host.Events().RegisterWebhookEvent(plugin.WebhookEventDef{Key: "domain.create", Group: "Domain", Title: "Domain Created", Description: "A domain was added to the workspace"})
@@ -226,6 +220,15 @@ func (p *Plugin) purge(orgID uint) error {
 	p.db.Model(&Domain{}).Where("owner_id = ?", orgID).Pluck("name", &names)
 	p.db.Where("owner_id = ?", orgID).Delete(&Domain{})
 	forgetOrigin(names...)
+
+	var accounts []ProviderAccount
+	p.db.Where("owner_id = ? AND vault_item_id > 0", orgID).Find(&accounts)
+	if vs, err := p.vault(); err == nil {
+		for _, acc := range accounts {
+			_ = vs.DeleteSecret(context.Background(), orgID, acc.VaultItemID)
+		}
+	}
+
 	p.db.Where("owner_id = ?", orgID).Delete(&ProviderAccount{})
 	p.db.Where("owner_id = ?", orgID).Delete(&DDNSToken{})
 	return nil
@@ -264,21 +267,18 @@ func (p *Plugin) orgDB(r *http.Request) *gorm.DB {
 	return p.db.Where("owner_id = ?", p.orgID(r))
 }
 
-// credentialHost returns the mounted Host, or a no-op host when the plugin has
-// none (unit tests build the plugin directly). The no-op host reports
-// ErrCredentialResolverUnavailable, which is exactly "no Integrations Hub here".
-func (p *Plugin) credentialHost() plugin.Host {
-	if p.host != nil {
-		return p.host
+func (p *Plugin) vault() (plugin.VaultService, error) {
+	if p.vaultSvc != nil {
+		return p.vaultSvc, nil
 	}
-	return plugin.EnsureHost(nil)
+	if svc, ok := plugin.LookupAs[plugin.VaultService](p.ctx, plugin.ServiceVault); ok && svc != nil {
+		return svc, nil
+	}
+	return nil, plugin.ErrVaultUnavailable
 }
 
-// providerFor decrypts a domain's stored credentials and builds its DNS
-// provider. Exactly one registry is authoritative: an instance with the
-// Integrations Hub mounted resolves the account there and refuses a missing
-// integration, while standalone Core reads the local provider_accounts table.
-// Scoped to the domain's owning org.
+// providerFor resolves a domain's stored credentials from VaultService and
+// builds its DNS provider. Scoped to the domain's owning org.
 func (p *Plugin) providerFor(dom Domain) (provider.Provider, error) {
 	return p.providerForContext(context.Background(), dom)
 }
@@ -288,43 +288,55 @@ func (p *Plugin) providerForContext(ctx context.Context, dom Domain) (provider.P
 		return nil, errors.New("domain has no provider account configured")
 	}
 
-	cred, err := p.credentialHost().LookupCredential(ctx, dom.OrgID, plugin.CredentialQuery{
-		ID:           dom.ProviderAccountID,
-		ProviderType: "dns",
-	})
-	if err == nil {
-		if cred == nil || cred.OrgID != dom.OrgID {
-			return nil, errProviderAccountNotFound
-		}
-		if len(cred.ConfigJSON) == 0 {
-			return nil, fmt.Errorf("%w: integration %d has no credentials", errProviderCredentials, dom.ProviderAccountID)
-		}
-		return provider.New(cred.Provider, cred.ConfigJSON)
-	}
-	if errors.Is(err, plugin.ErrCredentialNotFound) {
-		// The hub is mounted and owns DNS credentials: its answer is final.
-		// Falling through to a same-numbered local row would bind the domain to
-		// a different account, because the registries number rows independently.
-		return nil, errProviderAccountNotFound
-	}
-	if !errors.Is(err, plugin.ErrCredentialResolverUnavailable) {
+	vs, err := p.vault()
+	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errProviderCredentials, err)
 	}
 
-	// Standalone Core: no Integrations Hub is mounted.
 	var acc ProviderAccount
-	if err := p.db.Where("id = ? AND owner_id = ?", dom.ProviderAccountID, dom.OrgID).
-		First(&acc).Error; err != nil {
-		return nil, errProviderAccountNotFound
+	err = p.db.WithContext(ctx).Where("id = ? AND owner_id = ?", dom.ProviderAccountID, dom.OrgID).First(&acc).Error
+	switch {
+	case err == nil:
+		if acc.VaultItemID == 0 {
+			return nil, fmt.Errorf("%w: provider account %d has no credentials", errProviderCredentials, acc.ID)
+		}
+		sec, secErr := vs.GetSecret(ctx, dom.OrgID, acc.VaultItemID)
+		if secErr != nil {
+			if errors.Is(secErr, plugin.ErrSecretNotFound) {
+				return nil, errProviderAccountNotFound
+			}
+			return nil, fmt.Errorf("%w: %v", errProviderCredentials, secErr)
+		}
+		if sec == nil || len(sec.Payload) == 0 {
+			return nil, fmt.Errorf("%w: provider account %d has no credentials", errProviderCredentials, acc.ID)
+		}
+		cfgJSON, mErr := json.Marshal(sec.Payload)
+		if mErr != nil {
+			return nil, fmt.Errorf("%w: %v", errProviderCredentials, mErr)
+		}
+		return provider.New(acc.Type, cfgJSON)
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		sec, secErr := vs.GetSecret(ctx, dom.OrgID, dom.ProviderAccountID)
+		if secErr != nil {
+			if errors.Is(secErr, plugin.ErrSecretNotFound) {
+				return nil, errProviderAccountNotFound
+			}
+			return nil, fmt.Errorf("%w: %v", errProviderCredentials, secErr)
+		}
+		if sec == nil || sec.Meta.OrgID != dom.OrgID || sec.Meta.ProviderType != "dns" {
+			return nil, errProviderAccountNotFound
+		}
+		if len(sec.Payload) == 0 {
+			return nil, fmt.Errorf("%w: integration %d has no credentials", errProviderCredentials, dom.ProviderAccountID)
+		}
+		cfgJSON, mErr := json.Marshal(sec.Payload)
+		if mErr != nil {
+			return nil, fmt.Errorf("%w: %v", errProviderCredentials, mErr)
+		}
+		return provider.New(sec.Meta.Provider, cfgJSON)
+	default:
+		return nil, fmt.Errorf("%w: %v", errProviderCredentials, err)
 	}
-	if acc.Config == "" {
-		return nil, fmt.Errorf("%w: provider account %d has no credentials", errProviderCredentials, acc.ID)
-	}
-	creds, err := p.decrypt(acc.Config)
-	if err != nil {
-		return nil, fmt.Errorf("%w: stored API token could not be decrypted. Re-save this provider's API token under Settings → DNS Providers (the encryption key or database changed since it was saved)", errProviderCredentials)
-	}
-	return provider.New(acc.Type, creds)
 }
 
 // hasRole reports whether the caller holds at least the given workspace role.

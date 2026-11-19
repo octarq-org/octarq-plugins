@@ -58,32 +58,13 @@ func (s *mockSession) RequirePerm(r *http.Request, p, m string) bool { return tr
 func (s *mockSession) IsInstanceAdmin(r *http.Request) bool          { return false }
 func (s *mockSession) RevokeUserOrgSessions(u, o uint) int           { return 0 }
 
-type mockCryptoVault struct {
-	key []byte
-}
-
-func (c *mockCryptoVault) Encrypt(plaintext []byte) (string, error) {
-	return EncryptSecret(string(plaintext), c.key)
-}
-
-func (c *mockCryptoVault) Decrypt(encoded string) ([]byte, error) {
-	s, err := DecryptSecret(encoded, c.key)
-	return []byte(s), err
-}
-
 type mockHost struct {
 	session *mockSession
 	db      *gorm.DB
-	crypto  *mockCryptoVault
 }
 
-func (h *mockHost) Session() plugin.HostSession { return h.session }
-func (h *mockHost) Crypto() plugin.CryptoVault {
-	if h == nil || h.crypto == nil {
-		return nil
-	}
-	return h.crypto
-}
+func (h *mockHost) Session() plugin.HostSession                                { return h.session }
+func (h *mockHost) Crypto() plugin.CryptoVault                                 { return nil }
 func (h *mockHost) Settings() plugin.SettingsStore                             { return nil }
 func (h *mockHost) Events() plugin.EventSpine                                  { return nil }
 func (h *mockHost) HarnessSpec(context.Context, uint) (json.RawMessage, error) { return nil, nil }
@@ -107,10 +88,7 @@ func setupTestEnv(t *testing.T) (*Plugin, *testMux, *gorm.DB) {
 		t.Fatalf("Failed to open sqlite db: %v", err)
 	}
 
-	testKey := GetVaultKey("unit-test-vault-key")
-	p := &Plugin{
-		key: testKey,
-	}
+	p := &Plugin{}
 
 	// Auto-migrate models
 	for _, m := range p.Models() {
@@ -119,14 +97,18 @@ func setupTestEnv(t *testing.T) (*Plugin, *testMux, *gorm.DB) {
 		}
 	}
 
+	reg := plugin.NewRegistry()
+	reg.Provide(plugin.ServiceVault, plugin.VaultService(newMockVaultService()))
+
 	pCtx := &plugin.Context{
 		DB: db,
 		// The app always wraps plugin routes with Guard; mirror that here so
 		// Mount registers them. Role checks stay in the handlers under test.
-		Guard: func(h http.Handler) http.Handler { return h },
+		Guard:   func(h http.Handler) http.Handler { return h },
+		Provide: reg.Provide,
+		Lookup:  reg.Lookup,
 		Host: &mockHost{
-			db:     db,
-			crypto: &mockCryptoVault{key: testKey},
+			db: db,
 			session: &mockSession{
 				orgID: func(r *http.Request) uint {
 					if orgHeader := r.Header.Get("X-Test-Org"); orgHeader != "" {
@@ -334,20 +316,16 @@ func TestPlugin_ValidatorFailClosed(t *testing.T) {
 		t.Fatal("expected error for nil host")
 	}
 
-	// 2. Host with no Crypto and no env key
-	t.Setenv("OCTARQ_TWOFA_KEY", "")
-	t.Setenv("OCTARQ_SECRET_KEY", "")
-	hNoCrypto := &mockHost{}
-	if err := p.Validate(context.Background(), hNoCrypto); err == nil {
-		t.Fatal("expected error when neither host.Crypto nor env key is configured")
+	// 2. Host with no VaultService registered
+	hNoVault := &mockHost{}
+	if err := p.Validate(context.Background(), hNoVault); err == nil {
+		t.Fatal("expected error when VaultService is not registered")
 	}
 
-	// 3. Host with Crypto
-	hWithCrypto := &mockHost{
-		crypto: &mockCryptoVault{key: make([]byte, 32)},
-	}
-	if err := p.Validate(context.Background(), hWithCrypto); err != nil {
-		t.Fatalf("expected valid for host with crypto: %v", err)
+	// 3. Mounted with VaultService
+	pMounted, _, _ := setupTestEnv(t)
+	if err := pMounted.Validate(context.Background(), pMounted.host); err != nil {
+		t.Fatalf("expected valid when VaultService is registered: %v", err)
 	}
 }
 
@@ -426,6 +404,39 @@ func TestPlugin_AdminRoleGated(t *testing.T) {
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("Expected 403 for member get QR code, got %d", w.Code)
 	}
+
+	// 6. Create account with member role -> 403
+	req = httptest.NewRequest("POST", "/api/twofa/accounts", bytes.NewReader(bodyBytes))
+	req.Header.Set("X-Role", "member")
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	mux.Serve("POST /api/twofa/accounts", w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("Expected 403 for member create account, got %d", w.Code)
+	}
+
+	// 7. Import accounts with member role -> 403
+	impBody, _ := json.Marshal(map[string]any{
+		"uris": []string{"otpauth://totp/GitHub:octocat?secret=JBSWY3DPEHPK3PXP&issuer=GitHub"},
+	})
+	req = httptest.NewRequest("POST", "/api/twofa/import", bytes.NewReader(impBody))
+	req.Header.Set("X-Role", "member")
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	mux.Serve("POST /api/twofa/import", w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("Expected 403 for member import accounts, got %d", w.Code)
+	}
+
+	// 8. Toggle pin with member role -> 403
+	req = httptest.NewRequest("POST", fmt.Sprintf("/api/twofa/accounts/%d/pin", created.ID), nil)
+	req.Header.Set("X-Role", "member")
+	req.SetPathValue("id", fmt.Sprintf("%d", created.ID))
+	w = httptest.NewRecorder()
+	mux.Serve("POST /api/twofa/accounts/{id}/pin", w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("Expected 403 for member toggle pin, got %d", w.Code)
+	}
 }
 
 // TestPlugin_MountWithoutHTTPSurface pins the MCP composition contract: that
@@ -434,4 +445,308 @@ func TestPlugin_AdminRoleGated(t *testing.T) {
 func TestPlugin_MountWithoutHTTPSurface(t *testing.T) {
 	p := &Plugin{}
 	p.Mount(nil, &plugin.Context{})
+}
+
+func TestPlugin_UpdateDeleteCodeQRAndMCP(t *testing.T) {
+	p, mux, _ := setupTestEnv(t)
+
+	// Create account
+	bodyBytes, _ := json.Marshal(map[string]any{
+		"name":    "Cloudflare Prod",
+		"issuer":  "Cloudflare",
+		"account": "ops@company.com",
+		"secret":  "JBSWY3DPEHPK3PXP",
+		"tags":    "Cloud",
+	})
+	req := httptest.NewRequest("POST", "/api/twofa/accounts", bytes.NewReader(bodyBytes))
+	w := httptest.NewRecorder()
+	mux.Serve("POST /api/twofa/accounts", w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("Create failed: %d %s", w.Code, w.Body.String())
+	}
+	var created AccountSummary
+	_ = json.Unmarshal(w.Body.Bytes(), &created)
+
+	// Update account metadata & tags
+	upBytes, _ := json.Marshal(map[string]any{
+		"name": "Cloudflare Core",
+		"tags": "Cloud, Edge",
+	})
+	req = httptest.NewRequest("PUT", fmt.Sprintf("/api/twofa/accounts/%d", created.ID), bytes.NewReader(upBytes))
+	req.SetPathValue("id", fmt.Sprintf("%d", created.ID))
+	w = httptest.NewRecorder()
+	mux.Serve("PUT /api/twofa/accounts/{id}", w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("Update failed: %d %s", w.Code, w.Body.String())
+	}
+	var updated AccountSummary
+	_ = json.Unmarshal(w.Body.Bytes(), &updated)
+	if updated.Name != "Cloudflare Core" || updated.Tags != "Cloud, Edge" {
+		t.Fatalf("Unexpected updated account: %+v", updated)
+	}
+
+	// Get live code endpoint
+	req = httptest.NewRequest("POST", fmt.Sprintf("/api/twofa/accounts/%d/code", created.ID), nil)
+	req.SetPathValue("id", fmt.Sprintf("%d", created.ID))
+	w = httptest.NewRecorder()
+	mux.Serve("POST /api/twofa/accounts/{id}/code", w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("GetCode endpoint failed: %d %s", w.Code, w.Body.String())
+	}
+	var codeResp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &codeResp)
+	if c, _ := codeResp["code"].(string); len(c) != 6 {
+		t.Fatalf("Expected 6-digit code, got %v", codeResp)
+	}
+
+	// Get QR endpoint
+	req = httptest.NewRequest("GET", fmt.Sprintf("/api/twofa/accounts/%d/qr?format=image", created.ID), nil)
+	req.SetPathValue("id", fmt.Sprintf("%d", created.ID))
+	w = httptest.NewRecorder()
+	mux.Serve("GET /api/twofa/accounts/{id}/qr", w, req)
+	if w.Code != http.StatusOK || w.Header().Get("Content-Type") != "image/png" {
+		t.Fatalf("GetQR failed: code=%d ct=%s", w.Code, w.Header().Get("Content-Type"))
+	}
+
+	// MCP list_2fa_accounts
+	mcpCtx := plugin.WithOrgID(context.Background(), 1)
+	res, _, err := p.mcpListAccounts(mcpCtx, nil, listAccountsInput{Tag: "Edge"})
+	if err != nil || res == nil || len(res.Content) == 0 {
+		t.Fatalf("mcpListAccounts failed: err=%v res=%+v", err, res)
+	}
+
+	// Delete account
+	req = httptest.NewRequest("DELETE", fmt.Sprintf("/api/twofa/accounts/%d", created.ID), nil)
+	req.SetPathValue("id", fmt.Sprintf("%d", created.ID))
+	w = httptest.NewRecorder()
+	mux.Serve("DELETE /api/twofa/accounts/{id}", w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("Delete failed: %d %s", w.Code, w.Body.String())
+	}
+
+	// Confirm deleted
+	req = httptest.NewRequest("GET", fmt.Sprintf("/api/twofa/accounts/%d", created.ID), nil)
+	req.SetPathValue("id", fmt.Sprintf("%d", created.ID))
+	w = httptest.NewRecorder()
+	mux.Serve("GET /api/twofa/accounts/{id}", w, req)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("Expected 404 after delete, got %d", w.Code)
+	}
+}
+
+func TestPlugin_ItemTypeAndScopeIsolation(t *testing.T) {
+	p, mux, _ := setupTestEnv(t)
+	vs, err := p.vault()
+	if err != nil {
+		t.Fatalf("vault unavailable: %v", err)
+	}
+
+	// Seed a user-scoped twofa_totp item and org-scoped non-twofa items in the same org.
+	userScopedMeta, err := vs.PutSecret(context.Background(), plugin.PutSecretRequest{
+		OrgID:          1,
+		Scope:          plugin.VaultScopeUser,
+		OwnerUserID:    99,
+		CollectionSlug: "personal",
+		ItemType:       "twofa_totp",
+		Name:           "Personal TOTP",
+		Metadata:       map[string]any{"issuer": "Personal", "digits": 6, "period": 30, "algorithm": "SHA1"},
+		Payload:        map[string]any{"secret": "JBSWY3DPEHPK3PXP", "otpauthUri": "otpauth://totp/Personal:me?secret=JBSWY3DPEHPK3PXP&issuer=Personal"},
+	})
+	if err != nil {
+		t.Fatalf("seed user-scoped item failed: %v", err)
+	}
+
+	integrationMeta, err := vs.PutSecret(context.Background(), plugin.PutSecretRequest{
+		OrgID:          1,
+		Scope:          plugin.VaultScopeOrg,
+		CollectionSlug: "integrations",
+		ItemType:       "integration",
+		ProviderType:   "dns",
+		Provider:       "cloudflare",
+		Name:           "Cloudflare API Token",
+		Payload:        map[string]any{"apiToken": "cf-secret-token"},
+	})
+	if err != nil {
+		t.Fatalf("seed integration item failed: %v", err)
+	}
+
+	kvMeta, err := vs.PutSecret(context.Background(), plugin.PutSecretRequest{
+		OrgID:          1,
+		Scope:          plugin.VaultScopeOrg,
+		CollectionSlug: "default",
+		ItemType:       "kv_secret",
+		Name:           "Database Password",
+		Payload:        map[string]any{"password": "super-secret-password"},
+	})
+	if err != nil {
+		t.Fatalf("seed kv_secret item failed: %v", err)
+	}
+
+	targets := []struct {
+		label string
+		id    uint
+	}{
+		{"user_scoped_twofa", userScopedMeta.ID},
+		{"org_integration", integrationMeta.ID},
+		{"org_kv_secret", kvMeta.ID},
+	}
+
+	for _, tc := range targets {
+		t.Run(tc.label, func(t *testing.T) {
+			idStr := fmt.Sprintf("%d", tc.id)
+
+			// getAccount (plain and reveal=true)
+			for _, targetURL := range []string{
+				fmt.Sprintf("/api/twofa/accounts/%d", tc.id),
+				fmt.Sprintf("/api/twofa/accounts/%d?reveal=true", tc.id),
+			} {
+				req := httptest.NewRequest("GET", targetURL, nil)
+				req.SetPathValue("id", idStr)
+				w := httptest.NewRecorder()
+				mux.Serve("GET /api/twofa/accounts/{id}", w, req)
+				if w.Code != http.StatusNotFound {
+					t.Fatalf("GET %s expected 404, got %d (%s)", targetURL, w.Code, w.Body.String())
+				}
+			}
+
+			// updateAccount
+			upBody, _ := json.Marshal(map[string]any{"name": "Tampered"})
+			req := httptest.NewRequest("PUT", fmt.Sprintf("/api/twofa/accounts/%d", tc.id), bytes.NewReader(upBody))
+			req.SetPathValue("id", idStr)
+			w := httptest.NewRecorder()
+			mux.Serve("PUT /api/twofa/accounts/{id}", w, req)
+			if w.Code != http.StatusNotFound {
+				t.Fatalf("PUT updateAccount expected 404, got %d (%s)", w.Code, w.Body.String())
+			}
+
+			// deleteAccount
+			req = httptest.NewRequest("DELETE", fmt.Sprintf("/api/twofa/accounts/%d", tc.id), nil)
+			req.SetPathValue("id", idStr)
+			w = httptest.NewRecorder()
+			mux.Serve("DELETE /api/twofa/accounts/{id}", w, req)
+			if w.Code != http.StatusNotFound {
+				t.Fatalf("DELETE deleteAccount expected 404, got %d (%s)", w.Code, w.Body.String())
+			}
+
+			// togglePin
+			req = httptest.NewRequest("POST", fmt.Sprintf("/api/twofa/accounts/%d/pin", tc.id), nil)
+			req.SetPathValue("id", idStr)
+			w = httptest.NewRecorder()
+			mux.Serve("POST /api/twofa/accounts/{id}/pin", w, req)
+			if w.Code != http.StatusNotFound {
+				t.Fatalf("POST togglePin expected 404, got %d (%s)", w.Code, w.Body.String())
+			}
+
+			// getCode
+			req = httptest.NewRequest("POST", fmt.Sprintf("/api/twofa/accounts/%d/code", tc.id), nil)
+			req.SetPathValue("id", idStr)
+			w = httptest.NewRecorder()
+			mux.Serve("POST /api/twofa/accounts/{id}/code", w, req)
+			if w.Code != http.StatusNotFound {
+				t.Fatalf("POST getCode expected 404, got %d (%s)", w.Code, w.Body.String())
+			}
+
+			// verifyCode
+			verBody, _ := json.Marshal(map[string]string{"code": "123456"})
+			req = httptest.NewRequest("POST", fmt.Sprintf("/api/twofa/accounts/%d/verify", tc.id), bytes.NewReader(verBody))
+			req.SetPathValue("id", idStr)
+			w = httptest.NewRecorder()
+			mux.Serve("POST /api/twofa/accounts/{id}/verify", w, req)
+			if w.Code != http.StatusNotFound {
+				t.Fatalf("POST verifyCode expected 404, got %d (%s)", w.Code, w.Body.String())
+			}
+
+			// getQRCode
+			req = httptest.NewRequest("GET", fmt.Sprintf("/api/twofa/accounts/%d/qr", tc.id), nil)
+			req.SetPathValue("id", idStr)
+			w = httptest.NewRecorder()
+			mux.Serve("GET /api/twofa/accounts/{id}/qr", w, req)
+			if w.Code != http.StatusNotFound {
+				t.Fatalf("GET getQRCode expected 404, got %d (%s)", w.Code, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestPlugin_UpdateTOTPParamsSyncsOTPAuthURI(t *testing.T) {
+	p, mux, _ := setupTestEnv(t)
+	vs, err := p.vault()
+	if err != nil {
+		t.Fatalf("vault unavailable: %v", err)
+	}
+
+	const initialSecret = "JBSWY3DPEHPK3PXP"
+	createBody, _ := json.Marshal(map[string]any{
+		"name":      "GitHub Prod",
+		"issuer":    "GitHub",
+		"account":   "ops@company.com",
+		"secret":    initialSecret,
+		"algorithm": "SHA1",
+		"digits":    6,
+		"period":    30,
+	})
+	req := httptest.NewRequest("POST", "/api/twofa/accounts", bytes.NewReader(createBody))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.Serve("POST /api/twofa/accounts", w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create failed: %d %s", w.Code, w.Body.String())
+	}
+	var created AccountSummary
+	_ = json.Unmarshal(w.Body.Bytes(), &created)
+
+	// Update TOTP parameters without supplying secret.
+	upBody, _ := json.Marshal(map[string]any{
+		"issuer":    "GitHub Enterprise",
+		"account":   "secops@company.com",
+		"algorithm": "SHA256",
+		"digits":    8,
+		"period":    60,
+	})
+	req = httptest.NewRequest("PUT", fmt.Sprintf("/api/twofa/accounts/%d", created.ID), bytes.NewReader(upBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", fmt.Sprintf("%d", created.ID))
+	w = httptest.NewRecorder()
+	mux.Serve("PUT /api/twofa/accounts/{id}", w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("update failed: %d %s", w.Code, w.Body.String())
+	}
+
+	var updated AccountSummary
+	if err := json.Unmarshal(w.Body.Bytes(), &updated); err != nil {
+		t.Fatalf("decode updated response failed: %v", err)
+	}
+	if len(updated.CurrentCode) != 8 {
+		t.Fatalf("expected 8-digit code from ComputeTOTP after update, got %q", updated.CurrentCode)
+	}
+
+	// Verify encrypted payload in Vault has synchronized otpauthUri and identical secret.
+	sec, err := vs.GetSecret(context.Background(), 1, created.ID)
+	if err != nil {
+		t.Fatalf("GetSecret failed: %v", err)
+	}
+	if got := sec.Payload["secret"]; got != initialSecret {
+		t.Fatalf("expected secret %q to remain unchanged, got %v", initialSecret, got)
+	}
+	uri, _ := sec.Payload["otpauthUri"].(string)
+	parsedAcc, parsedSecret, err := ParseOTPAuthURI(uri)
+	if err != nil {
+		t.Fatalf("ParseOTPAuthURI(%q) failed: %v", uri, err)
+	}
+	if parsedSecret != initialSecret {
+		t.Fatalf("expected otpauthUri secret %q, got %q", initialSecret, parsedSecret)
+	}
+	if parsedAcc.Issuer != "GitHub Enterprise" || parsedAcc.Account != "secops@company.com" ||
+		parsedAcc.Algorithm != "SHA256" || parsedAcc.Digits != 8 || parsedAcc.Period != 60 {
+		t.Fatalf("otpauthUri params out of sync: %+v (uri=%q)", parsedAcc, uri)
+	}
+
+	// Verify ComputeTOTP directly produces an 8-digit code matching the updated algorithm/digits/period.
+	code, _, err := vs.ComputeTOTP(context.Background(), 1, created.ID)
+	if err != nil {
+		t.Fatalf("ComputeTOTP failed: %v", err)
+	}
+	if len(code) != 8 {
+		t.Fatalf("expected 8-digit ComputeTOTP code, got %q", code)
+	}
 }

@@ -40,8 +40,9 @@ type Plugin struct {
 	// host is captured only from a real HTTP mount. The MCP composition mounts
 	// plugins with a no-op host, and adopting that stub would silently disable
 	// the credential vault and tenant scoping.
-	host plugin.Host
-	db   *gorm.DB
+	host     plugin.Host
+	db       *gorm.DB
+	vaultSvc plugin.VaultService
 
 	registryOnce sync.Once
 	registryVal  *adapter.Registry
@@ -85,7 +86,6 @@ func (*Plugin) Describe() plugin.Info {
 func (*Plugin) Models() []any {
 	return []any{
 		&PTTracker{},
-		&PTCredential{},
 		&PTSnapshot{},
 		&PTSigninResult{},
 	}
@@ -112,7 +112,6 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 		return
 	}
 	p.mu.Lock()
-	p.ctx = ctx
 	if ctx.DB != nil {
 		p.db = ctx.DB
 	}
@@ -129,27 +128,20 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 		return
 	}
 
+	p.mu.Lock()
+	p.ctx = ctx
 	if ctx.Host != nil {
-		p.mu.Lock()
 		p.host = ctx.Host
-		p.mu.Unlock()
 	}
+	p.mu.Unlock()
 	p.registerRoutes(ctx)
 }
 
 // Validate refuses to start without a credential vault. Storing tracker
 // account secrets unencrypted is not an acceptable degraded mode.
-//
-// The host captured at an HTTP mount wins over the argument. Core validates
-// the stdio MCP path against a no-op host, because its later re-mount hands
-// that stub to the plugins; this plugin does not adopt the stub (see Mount),
-// so the real host is still the one its tools read from.
 func (p *Plugin) Validate(ctx context.Context, host plugin.Host) error {
-	if h := p.hostRef(); h != nil {
-		host = h
-	}
-	if host == nil || host.Crypto() == nil {
-		return errors.New("pt: credential vault unavailable (Host.Crypto is nil); refusing to start")
+	if _, err := p.vault(); err != nil {
+		return errors.New("pt: credential vault unavailable (ServiceVault not provided); refusing to start")
 	}
 	return nil
 }
@@ -225,20 +217,19 @@ func (p *Plugin) schedulerAvailable() bool {
 }
 
 var (
-	_ plugin.Plugin                = (*Plugin)(nil)
-	_ plugin.Validator             = (*Plugin)(nil)
-	_ plugin.Starter               = (*Plugin)(nil)
-	_ plugin.Stopper               = (*Plugin)(nil)
-	_ plugin.Describer             = (*Plugin)(nil)
-	_ plugin.MenuProvider          = (*Plugin)(nil)
-	_ plugin.HelpDocsFS            = (*Plugin)(nil)
-	_ plugin.EncryptedDataReporter = (*Plugin)(nil)
+	_ plugin.Plugin       = (*Plugin)(nil)
+	_ plugin.Validator    = (*Plugin)(nil)
+	_ plugin.Starter      = (*Plugin)(nil)
+	_ plugin.Stopper      = (*Plugin)(nil)
+	_ plugin.Describer    = (*Plugin)(nil)
+	_ plugin.MenuProvider = (*Plugin)(nil)
+	_ plugin.HelpDocsFS   = (*Plugin)(nil)
 )
 
-// errCryptoUnavailable is returned by every credential path when the host has
-// no vault. It is a configuration fault, not a user error.
-var errCryptoUnavailable = errors.New("pt: credential vault unavailable")
+// errVaultUnavailable is returned by every credential path when VaultService is
+// absent. It is a configuration fault, not a user error.
+var errVaultUnavailable = errors.New("pt: credential vault unavailable")
 
-func cryptoMissing(op string) error {
-	return fmt.Errorf("%w (%s)", errCryptoUnavailable, op)
+func vaultMissing(op string) error {
+	return fmt.Errorf("%w (%s)", errVaultUnavailable, op)
 }

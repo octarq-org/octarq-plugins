@@ -2,25 +2,19 @@ package dns
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
+	"github.com/octarq-org/octarq/server/plugin"
 )
 
-// encryptConfig JSON-encodes a provider credentials map and seals it with the
-// core cipher. An empty map yields "" (no credentials stored).
-func (p *Plugin) encryptConfig(cfg map[string]any) (string, error) {
-	if len(cfg) == 0 {
-		return "", nil
+func (p *Plugin) actorUserID(r *http.Request) uint {
+	if p.host != nil && p.host.Session() != nil && r != nil {
+		return p.host.Session().UserID(r)
 	}
-	b, err := json.Marshal(cfg)
-	if err != nil {
-		return "", err
-	}
-	return p.encrypt(b)
+	return 0
 }
 
 type providerAccountDTO struct {
@@ -53,7 +47,7 @@ func (p *Plugin) listProviderAccounts(ctx context.Context, input *ListProviderAc
 	var accounts []ProviderAccount
 	p.orgDB(r).Order("created_at DESC").Find(&accounts)
 	for i := range accounts {
-		accounts[i].HasCredentials = accounts[i].Config != ""
+		accounts[i].HasCredentials = accounts[i].VaultItemID > 0
 	}
 	return &ListProviderAccountsOutput{Body: accounts}, nil
 }
@@ -77,7 +71,8 @@ func (p *Plugin) createProviderAccount(ctx context.Context, input *CreateProvide
 		return nil, huma.Error500InternalServerError("Request context is unavailable. Try again.")
 	}
 	r, _ := humago.Unwrap(input.Ctx)
-	if p.orgID(r) == 0 {
+	orgID := p.orgID(r)
+	if orgID == 0 {
 		return nil, huma.Error401Unauthorized("Authentication required. Sign in to continue.")
 	}
 	if !p.hasRole(r, "admin") {
@@ -88,21 +83,46 @@ func (p *Plugin) createProviderAccount(ctx context.Context, input *CreateProvide
 	if name == "" || typ == "" {
 		return nil, huma.Error400BadRequest("Provider account name and type are required")
 	}
-	enc, err := p.encryptConfig(input.Body.Config)
-	if err != nil {
-		return nil, huma.Error500InternalServerError("Could not encrypt provider configuration. Try again.")
+
+	var vaultItemID uint
+	if len(input.Body.Config) > 0 {
+		vs, err := p.vault()
+		if err != nil {
+			return nil, huma.Error500InternalServerError("Credential vault is unavailable. Try again.")
+		}
+		meta, err := vs.PutSecret(ctx, plugin.PutSecretRequest{
+			OrgID:          orgID,
+			Scope:          plugin.VaultScopeOrg,
+			CollectionSlug: "integrations",
+			ItemType:       "integration",
+			ProviderType:   "dns",
+			Provider:       typ,
+			Name:           name,
+			Payload:        input.Body.Config,
+			ActorUserID:    p.actorUserID(r),
+		})
+		if err != nil {
+			return nil, huma.Error500InternalServerError("Could not store provider configuration in vault. Try again.")
+		}
+		vaultItemID = meta.ID
 	}
+
 	acc := ProviderAccount{
-		OrgID:  p.orgID(r),
-		Name:   name,
-		Type:   typ,
-		Config: enc,
+		OrgID:       orgID,
+		Name:        name,
+		Type:        typ,
+		VaultItemID: vaultItemID,
 	}
 	if err := p.db.Create(&acc).Error; err != nil {
+		if vaultItemID > 0 {
+			if vs, vErr := p.vault(); vErr == nil {
+				_ = vs.DeleteSecret(ctx, orgID, vaultItemID)
+			}
+		}
 		return nil, huma.Error500InternalServerError("Could not connect to DNS provider. Check credentials and try again.")
 	}
 	p.audit(r, "provider.create", "provider", acc.ID, map[string]any{"name": acc.Name, "type": acc.Type})
-	acc.HasCredentials = acc.Config != ""
+	acc.HasCredentials = acc.VaultItemID > 0
 	return &CreateProviderAccountOutput{Body: acc}, nil
 }
 
@@ -126,25 +146,51 @@ func (p *Plugin) updateProviderAccount(ctx context.Context, input *UpdateProvide
 		return nil, huma.Error500InternalServerError("Request context is unavailable. Try again.")
 	}
 	r, _ := humago.Unwrap(input.Ctx)
-	if p.orgID(r) == 0 {
+	orgID := p.orgID(r)
+	if orgID == 0 {
 		return nil, huma.Error401Unauthorized("Authentication required. Sign in to continue.")
 	}
 	if !p.hasRole(r, "admin") {
 		return nil, huma.Error403Forbidden("Admin role required to update provider account. Contact a workspace admin for access.")
 	}
 	var acc ProviderAccount
-	if p.db.Where("id = ? AND owner_id = ?", input.ID, p.orgID(r)).First(&acc).Error != nil {
+	if p.db.Where("id = ? AND owner_id = ?", input.ID, orgID).First(&acc).Error != nil {
 		return nil, huma.Error404NotFound("Provider account not found")
 	}
 	if strings.TrimSpace(input.Body.Name) != "" {
 		acc.Name = strings.TrimSpace(input.Body.Name)
 	}
+	actorID := p.actorUserID(r)
 	if len(input.Body.Config) > 0 {
-		enc, err := p.encryptConfig(input.Body.Config)
+		vs, err := p.vault()
 		if err != nil {
-			return nil, huma.Error500InternalServerError("Could not encrypt provider configuration. Try again.")
+			return nil, huma.Error500InternalServerError("Credential vault is unavailable. Try again.")
 		}
-		acc.Config = enc
+		if acc.VaultItemID > 0 {
+			if _, err := vs.UpdateSecret(ctx, orgID, acc.VaultItemID, &acc.Name, nil, input.Body.Config, nil, "Updated DNS provider credentials", actorID); err != nil {
+				return nil, huma.Error500InternalServerError("Could not update provider configuration in vault. Try again.")
+			}
+		} else {
+			meta, err := vs.PutSecret(ctx, plugin.PutSecretRequest{
+				OrgID:          orgID,
+				Scope:          plugin.VaultScopeOrg,
+				CollectionSlug: "integrations",
+				ItemType:       "integration",
+				ProviderType:   "dns",
+				Provider:       acc.Type,
+				Name:           acc.Name,
+				Payload:        input.Body.Config,
+				ActorUserID:    actorID,
+			})
+			if err != nil {
+				return nil, huma.Error500InternalServerError("Could not store provider configuration in vault. Try again.")
+			}
+			acc.VaultItemID = meta.ID
+		}
+	} else if strings.TrimSpace(input.Body.Name) != "" && acc.VaultItemID > 0 {
+		if vs, err := p.vault(); err == nil {
+			_, _ = vs.UpdateSecret(ctx, orgID, acc.VaultItemID, &acc.Name, nil, nil, nil, "Renamed DNS provider account", actorID)
+		}
 	}
 	p.db.Save(&acc)
 	meta := make(map[string]any)
@@ -159,7 +205,7 @@ func (p *Plugin) updateProviderAccount(ctx context.Context, input *UpdateProvide
 		meta["config"] = redactedConfig
 	}
 	p.audit(r, "provider.update", "provider", acc.ID, meta)
-	acc.HasCredentials = acc.Config != ""
+	acc.HasCredentials = acc.VaultItemID > 0
 	return &UpdateProviderAccountOutput{Body: acc}, nil
 }
 
@@ -182,7 +228,8 @@ func (p *Plugin) deleteProviderAccount(ctx context.Context, input *DeleteProvide
 		return nil, huma.Error500InternalServerError("Request context is unavailable. Try again.")
 	}
 	r, _ := humago.Unwrap(input.Ctx)
-	if p.orgID(r) == 0 {
+	orgID := p.orgID(r)
+	if orgID == 0 {
 		return nil, huma.Error401Unauthorized("Authentication required. Sign in to continue.")
 	}
 	if !p.hasRole(r, "admin") {
@@ -193,7 +240,8 @@ func (p *Plugin) deleteProviderAccount(ctx context.Context, input *DeleteProvide
 	// count below runs on a raw ID and its 409-vs-404 response becomes a
 	// cross-tenant oracle (it reveals whether another org's provider account
 	// exists and is referenced). Fail closed with 404 if the caller doesn't own it.
-	if err := p.db.Where("id = ? AND owner_id = ?", input.ID, p.orgID(r)).First(&ProviderAccount{}).Error; err != nil {
+	var acc ProviderAccount
+	if err := p.db.Where("id = ? AND owner_id = ?", input.ID, orgID).First(&acc).Error; err != nil {
 		return nil, huma.Error404NotFound("Provider account not found")
 	}
 
@@ -203,8 +251,13 @@ func (p *Plugin) deleteProviderAccount(ctx context.Context, input *DeleteProvide
 		return nil, huma.NewError(http.StatusConflict, "Cannot delete provider account because it is used by one or more domains. Reassign or delete those domains first.")
 	}
 
-	if res := p.db.Where("id = ? AND owner_id = ?", input.ID, p.orgID(r)).Delete(&ProviderAccount{}); res.RowsAffected == 0 {
+	if res := p.db.Where("id = ? AND owner_id = ?", input.ID, orgID).Delete(&ProviderAccount{}); res.RowsAffected == 0 {
 		return nil, huma.Error404NotFound("Provider account not found")
+	}
+	if acc.VaultItemID > 0 {
+		if vs, err := p.vault(); err == nil {
+			_ = vs.DeleteSecret(ctx, orgID, acc.VaultItemID)
+		}
 	}
 	p.audit(r, "provider.delete", "provider", input.ID, nil)
 	return &DeleteProviderAccountOutput{Body: map[string]bool{"ok": true}}, nil

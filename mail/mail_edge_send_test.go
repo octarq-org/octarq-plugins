@@ -23,8 +23,10 @@ func TestSendEmailEdgeBranches(t *testing.T) {
 	ctx := context.Background()
 
 	host, port, _ := captureSMTP(t)
-	sender := SMTPSender{OrgID: 1, Name: "relay", Host: host, Port: port, User: "u", Pass: "pw", FromEmail: "noreply@example.com"}
-	p.db.Create(&sender)
+	sender, err := seedVaultSMTPSender(p, SMTPSender{OrgID: 1, Name: "relay", Host: host, Port: port, User: "u", FromEmail: "noreply@example.com"}, "pw")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	send := func() *SendEmailInput {
 		req := httptest.NewRequest(http.MethodPost, "/api/emails/send", nil)
@@ -85,16 +87,19 @@ func TestSendEmailEdgeBranches(t *testing.T) {
 	if _, err := p.sendEmail(ctx, noTo); err == nil {
 		t.Error("missing To must fail")
 	}
-	// Decrypt unavailable -> 500.
-	p.decrypt = nil
+	// Vault unavailable -> 500.
+	mv := p.vaultSvc.(*mockVaultService)
+	p.vaultSvc = nil
 	if _, err := p.sendEmail(ctx, send()); err == nil {
-		t.Error("missing decrypt must fail with 500")
+		t.Error("missing vault must fail with 500")
 	}
-	// Decrypt error -> 500.
-	p.decrypt = func(string) ([]byte, error) { return nil, errBoom }
+	// Vault error -> 500.
+	mv.getErr = errBoom
+	p.vaultSvc = mv
 	if _, err := p.sendEmail(ctx, send()); err == nil {
-		t.Error("decrypt failure must fail with 500")
+		t.Error("vault failure must fail with 500")
 	}
+	mv.getErr = nil
 }
 
 type mockSendLinkCreator struct {
@@ -109,7 +114,6 @@ func TestSendEmailTrackLinksWraps(t *testing.T) {
 	p, _ := setupFullMailTestDB(t)
 	wipeMailTables(t, p)
 	ctx := context.Background()
-	p.decrypt = func(encoded string) ([]byte, error) { return []byte(encoded), nil }
 
 	type linkRow struct {
 		ID      uint   `gorm:"primaryKey"`
@@ -132,6 +136,7 @@ func TestSendEmailTrackLinksWraps(t *testing.T) {
 			return slug, nil
 		},
 	}
+	p.vaultSvc = newMockVaultService()
 	p.ctx = &plugin.Context{
 		Lookup: func(name string) (any, bool) {
 			if name == "links.create" {
@@ -142,8 +147,10 @@ func TestSendEmailTrackLinksWraps(t *testing.T) {
 	}
 
 	host, port, got := captureSMTP(t)
-	tlSender := SMTPSender{OrgID: 1, Name: "relay", Host: host, Port: port, User: "u", Pass: "pw", FromEmail: "noreply@example.com"}
-	p.db.Create(&tlSender)
+	tlSender, err := seedVaultSMTPSender(p, SMTPSender{OrgID: 1, Name: "relay", Host: host, Port: port, User: "u", FromEmail: "noreply@example.com"}, "pw")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	var usageOrg uint
 	var usageMetric string
@@ -203,12 +210,13 @@ func TestSendEmailSucceedsWithoutLinkTracking(t *testing.T) {
 	p, _ := setupFullMailTestDB(t)
 	wipeMailTables(t, p)
 	ctx := context.Background()
-	p.decrypt = func(encoded string) ([]byte, error) { return []byte(encoded), nil }
 	p.publishEvent = func(uint, string, any) {}
 
 	host, port, _ := captureSMTP(t)
-	plainSender := SMTPSender{OrgID: 1, Name: "relay", Host: host, Port: port, User: "u", Pass: "pw", FromEmail: "noreply@example.com"}
-	p.db.Create(&plainSender)
+	plainSender, err := seedVaultSMTPSender(p, SMTPSender{OrgID: 1, Name: "relay", Host: host, Port: port, User: "u", FromEmail: "noreply@example.com"}, "pw")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	var usage int
 	p.recordUsage = func(orgID uint, metric string, n int64) { usage++ }

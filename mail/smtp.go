@@ -9,6 +9,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
+	"github.com/octarq-org/octarq/server/plugin"
 	"github.com/octarq-org/octarq/server/plugin/safehttp"
 )
 
@@ -68,7 +69,7 @@ func (p *Plugin) listSMTPSenders(ctx context.Context, input *ListSMTPSendersInpu
 	var senders []SMTPSender
 	p.orgDB(r).Order("name ASC").Find(&senders)
 	for i := range senders {
-		senders[i].PassSet = senders[i].Pass != ""
+		senders[i].PassSet = senders[i].VaultItemID > 0
 	}
 	return &ListSMTPSendersOutput{Body: senders}, nil
 }
@@ -116,35 +117,60 @@ func (p *Plugin) createSMTPSender(ctx context.Context, input *CreateSMTPSenderIn
 		return nil, err
 	}
 
-	if p.encrypt == nil {
-		return nil, huma.Error500InternalServerError("Encryption service is unavailable. Verify encryption configuration.")
-	}
-	encPass, err := p.encrypt([]byte(pass))
+	orgID := p.orgID(r)
+	vs, err := p.vault()
 	if err != nil {
-		return nil, huma.Error500InternalServerError("Could not encrypt SMTP sender credentials. Try again later.")
+		return nil, huma.Error500InternalServerError("Credential vault is unavailable. Verify vault configuration.")
+	}
+	var actorID uint
+	if p.host != nil && p.host.Session() != nil {
+		actorID = p.host.Session().UserID(r)
+	}
+	fromEmail := strings.TrimSpace(input.Body.FromEmail)
+	meta, err := vs.PutSecret(ctx, plugin.PutSecretRequest{
+		OrgID:          orgID,
+		Scope:          plugin.VaultScopeOrg,
+		CollectionSlug: "integrations",
+		ItemType:       "integration",
+		ProviderType:   "communication",
+		Provider:       "smtp",
+		Name:           name,
+		Payload: map[string]any{
+			"smtpHost":  host,
+			"smtpPort":  input.Body.Port,
+			"apiKey":    user,
+			"secretKey": pass,
+			"fromEmail": fromEmail,
+		},
+		ActorUserID: actorID,
+	})
+	if err != nil {
+		return nil, huma.Error500InternalServerError("Could not store SMTP sender credentials in vault. Try again later.")
 	}
 
 	sender := SMTPSender{
-		OrgID:     p.orgID(r),
-		Name:      name,
-		Host:      host,
-		Port:      input.Body.Port,
-		User:      user,
-		Pass:      encPass,
-		FromEmail: strings.TrimSpace(input.Body.FromEmail),
+		OrgID:       orgID,
+		Name:        name,
+		Host:        host,
+		Port:        input.Body.Port,
+		User:        user,
+		VaultItemID: meta.ID,
+		FromEmail:   fromEmail,
 	}
 
-	tdb := p.tenantDB(p.orgID(r))
+	tdb := p.tenantDB(orgID)
 	if tdb == nil {
+		_ = vs.DeleteSecret(ctx, orgID, meta.ID)
 		return nil, huma.Error401Unauthorized("Authentication required. Sign in to continue.")
 	}
 	if err := tdb.Create(&sender).Error; err != nil {
+		_ = vs.DeleteSecret(ctx, orgID, meta.ID)
 		return nil, huma.Error500InternalServerError("Could not save SMTP sender. Try again later.")
 	}
 	if p.audit != nil {
 		p.audit(r, "smtp.create", "smtp_sender", sender.ID, map[string]any{"name": sender.Name, "host": sender.Host})
 	}
-	sender.PassSet = sender.Pass != ""
+	sender.PassSet = sender.VaultItemID > 0
 	return &CreateSMTPSenderOutput{Body: sender}, nil
 }
 
@@ -211,15 +237,53 @@ func (p *Plugin) updateSMTPSender(ctx context.Context, input *UpdateSMTPSenderIn
 		return nil, err
 	}
 
+	orgID := p.orgID(r)
+	var actorID uint
+	if p.host != nil && p.host.Session() != nil {
+		actorID = p.host.Session().UserID(r)
+	}
 	if input.Body.Pass != nil && *input.Body.Pass != "" {
-		if p.encrypt == nil {
-			return nil, huma.Error500InternalServerError("Encryption service is unavailable. Verify encryption configuration.")
-		}
-		enc, err := p.encrypt([]byte(*input.Body.Pass))
+		vs, err := p.vault()
 		if err != nil {
-			return nil, huma.Error500InternalServerError("Could not encrypt SMTP sender credentials. Try again later.")
+			return nil, huma.Error500InternalServerError("Credential vault is unavailable. Verify vault configuration.")
 		}
-		sender.Pass = enc
+		payload := map[string]any{
+			"smtpHost":  sender.Host,
+			"smtpPort":  sender.Port,
+			"apiKey":    sender.User,
+			"secretKey": *input.Body.Pass,
+			"fromEmail": sender.FromEmail,
+		}
+		if sender.VaultItemID > 0 {
+			if _, err := vs.UpdateSecret(ctx, orgID, sender.VaultItemID, &sender.Name, nil, payload, nil, "Updated SMTP sender credentials", actorID); err != nil {
+				return nil, huma.Error500InternalServerError("Could not update SMTP sender credentials in vault. Try again later.")
+			}
+		} else {
+			meta, err := vs.PutSecret(ctx, plugin.PutSecretRequest{
+				OrgID:          orgID,
+				Scope:          plugin.VaultScopeOrg,
+				CollectionSlug: "integrations",
+				ItemType:       "integration",
+				ProviderType:   "communication",
+				Provider:       "smtp",
+				Name:           sender.Name,
+				Payload:        payload,
+				ActorUserID:    actorID,
+			})
+			if err != nil {
+				return nil, huma.Error500InternalServerError("Could not store SMTP sender credentials in vault. Try again later.")
+			}
+			sender.VaultItemID = meta.ID
+		}
+	} else if sender.VaultItemID > 0 {
+		if vs, err := p.vault(); err == nil {
+			_, _ = vs.UpdateSecret(ctx, orgID, sender.VaultItemID, &sender.Name, nil, map[string]any{
+				"smtpHost":  sender.Host,
+				"smtpPort":  sender.Port,
+				"apiKey":    sender.User,
+				"fromEmail": sender.FromEmail,
+			}, nil, "Updated SMTP sender settings", actorID)
+		}
 	}
 
 	tdb.Save(&sender)
@@ -236,7 +300,7 @@ func (p *Plugin) updateSMTPSender(ctx context.Context, input *UpdateSMTPSenderIn
 	if p.audit != nil {
 		p.audit(r, "smtp.update", "smtp_sender", sender.ID, meta)
 	}
-	sender.PassSet = sender.Pass != ""
+	sender.PassSet = sender.VaultItemID > 0
 	return &UpdateSMTPSenderOutput{Body: sender}, nil
 }
 
@@ -266,12 +330,22 @@ func (p *Plugin) deleteSMTPSender(ctx context.Context, input *DeleteSMTPSenderIn
 		return nil, huma.Error403Forbidden("Administrator role required to delete an SMTP sender.")
 	}
 
-	tdb := p.tenantDB(p.orgID(r))
+	orgID := p.orgID(r)
+	tdb := p.tenantDB(orgID)
 	if tdb == nil {
 		return nil, huma.Error401Unauthorized("Authentication required. Sign in to continue.")
 	}
+	var sender SMTPSender
+	if tdb.Where("id = ?", input.ID).First(&sender).Error != nil {
+		return nil, huma.Error404NotFound("SMTP sender not found.")
+	}
 	if res := tdb.Where("id = ?", input.ID).Delete(&SMTPSender{}); res.RowsAffected == 0 {
 		return nil, huma.Error404NotFound("SMTP sender not found.")
+	}
+	if sender.VaultItemID > 0 {
+		if vs, err := p.vault(); err == nil {
+			_ = vs.DeleteSecret(ctx, orgID, sender.VaultItemID)
+		}
 	}
 	if p.audit != nil {
 		p.audit(r, "smtp.delete", "smtp_sender", input.ID, nil)

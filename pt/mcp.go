@@ -72,10 +72,10 @@ func (p *Plugin) RegisterMCP(srv *mcp.Server) {
 	}, p.mcpRefreshStats)
 }
 
-// vaultAvailable reports whether this mount can decrypt a stored credential.
+// vaultAvailable reports whether this mount can resolve VaultService.
 func (p *Plugin) vaultAvailable() bool {
-	host := p.hostRef()
-	return host != nil && host.Crypto() != nil
+	_, err := p.vault()
+	return err == nil
 }
 
 type mcpTrackerArgs struct {
@@ -308,11 +308,16 @@ func (p *Plugin) mcpView(ctx context.Context, t *PTTracker) mcpTrackerOut {
 	if ad, err := p.registry().Get(adapter.Schema(t.SchemaKey)); err == nil {
 		out.CanSignin = ad.Capabilities().Signin
 	}
-	if cred, err := p.credentialFor(ctx, t.OrgID, t.ID); err == nil && cred != nil {
-		out.Credential = &mcpCredentialOut{
-			HasLoginSecret: cred.HasLoginSecret,
-			HasCookie:      cred.HasCookie,
-			HasAPIKey:      cred.HasAPIKey,
+	if t.VaultItemID > 0 {
+		if vs, vErr := p.vault(); vErr == nil {
+			if meta, mErr := vs.GetMeta(ctx, t.OrgID, t.VaultItemID); mErr == nil {
+				cv := credentialViewFromMeta(t, meta)
+				out.Credential = &mcpCredentialOut{
+					HasLoginSecret: cv.HasLoginSecret,
+					HasCookie:      cv.HasCookie,
+					HasAPIKey:      cv.HasAPIKey,
+				}
+			}
 		}
 	}
 	if snap, err := p.latestSnapshot(ctx, t.OrgID, t.ID); err == nil && snap != nil {
@@ -348,7 +353,7 @@ func statsOut(snap *PTSnapshot) mcpStatsOut {
 // internals. The workspace and vault cases keep their distinct codes.
 func toolError(err error) error {
 	switch {
-	case errors.Is(err, errTenantUnavailable), errors.Is(err, errCryptoUnavailable):
+	case errors.Is(err, errTenantUnavailable), errors.Is(err, errVaultUnavailable):
 		return plugin.NewAgentError(503, "UNAVAILABLE", "the server cannot complete the call", "Contact your administrator.", true)
 	case errors.Is(err, ErrNotFound):
 		return plugin.NewAgentError(404, "NOT_FOUND", "tracker not found", "Check the id or the name.", false)

@@ -4,8 +4,8 @@ import { NavLink } from "react-router-dom";
 import { dnsApi, ProviderAccount } from "../api";
 import { Cloud, KeyRound, Blocks } from "lucide-react";
 
-// Which registry owns provider accounts. An instance with the Integrations Hub
-// mounted uses hub credentials; standalone Core has no hub and uses the local
+// Which registry owns provider accounts. An instance with Core Vault
+// mounted uses vault items; standalone instances without vault use the local
 // provider_accounts table. Read exactly one, never both: the registries number
 // their rows independently.
 type AccountMode = "integration" | "local" | null;
@@ -23,7 +23,7 @@ export function ProviderAccounts({ embed }: { embed?: boolean }) {
   async function load() {
     setLoading(true);
     try {
-      const res = await fetch("/api/integrations?provider_type=dns", {
+      const res = await fetch("/api/vault/items?provider_type=dns", {
         credentials: "same-origin",
       });
       if (res.status === 404) {
@@ -37,8 +37,9 @@ export function ProviderAccounts({ embed }: { embed?: boolean }) {
         return;
       }
       const data = await res.json();
+      const items = Array.isArray(data) ? data : (data?.body ?? []);
       setMode("integration");
-      setAccounts(Array.isArray(data) ? data : []);
+      setAccounts(Array.isArray(items) ? items : []);
     } catch {
       setMode(null);
       setAccounts([]);

@@ -176,7 +176,7 @@ describe("DNS Forms", () => {
       const urlObj = new URL(rawUrl, "http://localhost");
       const path = urlObj.pathname;
 
-      if (method === "GET" && path === "/api/integrations") {
+      if (method === "GET" && path === "/api/vault/items") {
         return jsonResponse(mockDnsIntegrations);
       }
       if (method === "GET" && path === "/api/dns/providers") {
@@ -537,7 +537,7 @@ describe("DNS Forms", () => {
         const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
         const urlObj = new URL(rawUrl, "http://localhost");
         const path = urlObj.pathname;
-        if (path === "/api/integrations") {
+        if (path === "/api/vault/items") {
           return jsonResponse([]);
         }
         throw new Error(`Unhandled fetch: ${rawUrl}`);
@@ -551,12 +551,30 @@ describe("DNS Forms", () => {
       });
     });
 
-    it("fails closed to empty state without fallback when integrations API fails", async () => {
+    it("unwraps { body: [...] } envelope from Core Vault API", async () => {
+      fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+        const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
+        const urlObj = new URL(rawUrl, "http://localhost");
+        if (urlObj.pathname === "/api/vault/items" && urlObj.searchParams.get("provider_type") === "dns") {
+          return jsonResponse({ body: mockDnsIntegrations });
+        }
+        throw new Error(`Unhandled fetch: ${rawUrl}`);
+      });
+
+      renderWithProviders(<ProviderAccounts />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Cloudflare Production")).toBeDefined();
+        expect(screen.getByText("DNSPod Secondary")).toBeDefined();
+      });
+    });
+
+    it("fails closed to empty state without fallback when vault items API fails", async () => {
       fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
         const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
         const urlObj = new URL(rawUrl, "http://localhost");
         const path = urlObj.pathname;
-        if (path === "/api/integrations") {
+        if (path === "/api/vault/items") {
           return { ok: false, status: 500, json: async () => ({ error: "Internal Server Error" }) } as unknown as Response;
         }
         if (path === "/api/provider-accounts") {
@@ -571,23 +589,22 @@ describe("DNS Forms", () => {
         expect(screen.getByText("Could not load DNS providers. Reload the page to retry.")).toBeDefined();
       });
 
-      // A hub that answers with an error is not "no hub": offer no fallback and
+      // A vault endpoint that answers with an error is not "no vault": offer no fallback and
       // claim nothing about the accounts.
       expect(screen.queryByText("No DNS providers configured yet.")).toBeNull();
       expect(screen.queryByRole("button", { name: "Add Provider" })).toBeNull();
       expect(screen.queryByText("Integrations Hub")).toBeNull();
     });
 
-    // Standalone Core mounts no Integrations Hub: the local registry must be
-    // offered instead of an empty page.
-    it("serves the local provider registry when the Integrations Hub is absent", async () => {
+    // Standalone instances without Core Vault mount the local registry instead of an empty page.
+    it("serves the local provider registry when Core Vault is absent", async () => {
       fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
         const method = (init?.method ?? "GET").toUpperCase();
         const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
         const urlObj = new URL(rawUrl, "http://localhost");
         const path = urlObj.pathname;
 
-        if (method === "GET" && path === "/api/integrations") {
+        if (method === "GET" && path === "/api/vault/items") {
           return { ok: false, status: 404, json: async () => ({ detail: "Not Found" }) } as unknown as Response;
         }
         if (method === "GET" && path === "/api/provider-accounts") return jsonResponse(mockProviderAccounts);

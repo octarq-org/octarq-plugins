@@ -40,8 +40,8 @@ func setupFreshTestDB(t *testing.T) (*Plugin, func(req *http.Request) huma.Conte
 	t.Helper()
 	p := New()
 	p.db = freshMemDB(t)
+	p.vaultSvc = newMockVaultService()
 	p.audit = func(r *http.Request, action, targetType string, targetID uint, meta map[string]any) {}
-	p.decrypt = func(s string) ([]byte, error) { return []byte(s), nil }
 	p.orgID = func(r *http.Request) uint {
 		if val := r.Header.Get("X-Org-ID"); val != "" {
 			var id uint
@@ -68,8 +68,8 @@ func setupFreshGateTestDB(t *testing.T) (*Plugin, func(role string) huma.Context
 	t.Helper()
 	p := New()
 	p.db = freshMemDB(t)
+	p.vaultSvc = newMockVaultService()
 	p.audit = func(r *http.Request, action, targetType string, targetID uint, meta map[string]any) {}
-	p.decrypt = func(s string) ([]byte, error) { return []byte(s), nil }
 	p.orgID = func(r *http.Request) uint {
 		var id uint
 		fmt.Sscanf(r.Header.Get("X-Org-ID"), "%d", &id)

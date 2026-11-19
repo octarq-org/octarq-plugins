@@ -37,11 +37,11 @@ func setupFullDNSTestDB(t *testing.T) (*Plugin, func(req *http.Request) huma.Con
 	}
 	p := New()
 	p.db = db
+	p.vaultSvc = newMockVaultService()
 	if err := db.AutoMigrate(append(p.Models(), &testSetting{}, &testOrgSlugHistory{})...); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 	p.audit = func(r *http.Request, action, targetType string, targetID uint, meta map[string]any) {}
-	p.decrypt = func(s string) ([]byte, error) { return []byte(s), nil }
 	p.orgID = func(r *http.Request) uint {
 		if val := r.Header.Get("X-Org-ID"); val != "" {
 			var id uint

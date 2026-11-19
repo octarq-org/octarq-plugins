@@ -15,9 +15,7 @@ func setupFullMailTestDB(t *testing.T) (*Plugin, func(req *http.Request) huma.Co
 	t.Helper()
 	db, p := setupMailboxTestDB(t)
 
-	// Ensure p.encrypt / p.decrypt / p.requireRole are wired
-	p.encrypt = func(b []byte) (string, error) { return "enc:" + string(b), nil }
-	p.decrypt = func(s string) ([]byte, error) { return []byte(s), nil }
+	p.vaultSvc = newMockVaultService()
 	p.requireRole = func(r *http.Request, role string) bool {
 		return r.Header.Get("X-Role") != "member"
 	}

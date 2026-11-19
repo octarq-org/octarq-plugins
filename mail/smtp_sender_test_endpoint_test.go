@@ -93,9 +93,8 @@ func startTestSMPListener(t *testing.T) (port string, received func() []string) 
 
 func seedTestSender(t *testing.T, p *Plugin, orgID uint, host string, port int) uint {
 	t.Helper()
-	s := SMTPSender{Name: "probe", Host: host, Port: port, User: "u", Pass: "p", FromEmail: fmt.Sprintf("relay@%d.test", orgID)}
-	s.OrgID = orgID
-	if err := p.db.Create(&s).Error; err != nil {
+	s, err := seedVaultSMTPSender(p, SMTPSender{OrgID: orgID, Name: "probe", Host: host, Port: port, User: "u", FromEmail: fmt.Sprintf("relay@%d.test", orgID)}, "p")
+	if err != nil {
 		t.Fatalf("seed sender: %v", err)
 	}
 	return s.ID

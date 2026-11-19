@@ -156,8 +156,10 @@ func TestMCPDNSRecordsLifecycle(t *testing.T) {
 		return mockProv, nil
 	})
 
-	acc := ProviderAccount{OrgID: 1, Name: "acc1", Type: "mock-test", Config: "token123"}
-	p.db.Create(&acc)
+	acc, err := seedVaultProviderAccount(p, 1, "acc1", "mock-test", map[string]any{"apiToken": "token123"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	dom := Domain{OrgID: 1, Name: "api.example.com", ProviderAccountID: acc.ID, ZoneID: "zone-123"}
 	p.db.Create(&dom)
 

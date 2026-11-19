@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -82,16 +83,18 @@ func (p *Plugin) mcpListAccounts(ctx context.Context, _ *mcp.CallToolRequest, in
 		return nil, nil, fmt.Errorf("missing tenant context: unauthorized")
 	}
 
-	if p.ctx == nil || p.ctx.DB == nil {
-		return nil, nil, fmt.Errorf("database unavailable")
+	vs, err := p.vault()
+	if err != nil {
+		return nil, nil, fmt.Errorf("credential vault unavailable: %w", err)
 	}
 
-	var accounts []TwoFAAccount
-	query := p.ctx.DB.WithContext(ctx).Where("org_id = ?", orgID)
-	if in.Tag != "" {
-		query = query.Where("tags LIKE ?", "%"+in.Tag+"%")
+	vaultItems, err := vs.ListItems(ctx, orgID, plugin.VaultFilter{
+		Scope:    plugin.VaultScopeOrg,
+		ItemType: "twofa_totp",
+	})
+	if err != nil {
+		return nil, nil, err
 	}
-	query.Order("pinned DESC, name ASC").Find(&accounts)
 
 	type mcpAccountItem struct {
 		ID      uint   `json:"id"`
@@ -102,17 +105,31 @@ func (p *Plugin) mcpListAccounts(ctx context.Context, _ *mcp.CallToolRequest, in
 		Pinned  bool   `json:"pinned"`
 	}
 
-	items := make([]mcpAccountItem, len(accounts))
-	for i, a := range accounts {
-		items[i] = mcpAccountItem{
+	tagFilter := strings.ToLower(strings.TrimSpace(in.Tag))
+	items := make([]mcpAccountItem, 0, len(vaultItems))
+	for _, vi := range vaultItems {
+		a := metaToAccount(vi)
+		if tagFilter != "" && !strings.Contains(strings.ToLower(a.Tags), tagFilter) {
+			continue
+		}
+		items = append(items, mcpAccountItem{
 			ID:      a.ID,
 			Name:    a.Name,
 			Issuer:  a.Issuer,
 			Account: a.Account,
 			Tags:    a.Tags,
 			Pinned:  a.Pinned,
-		}
+		})
 	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Pinned != items[j].Pinned {
+			return items[i].Pinned
+		}
+		if items[i].Name != items[j].Name {
+			return items[i].Name < items[j].Name
+		}
+		return items[i].ID < items[j].ID
+	})
 
 	buf, err := json.MarshalIndent(items, "", "  ")
 	if err != nil {

@@ -2,7 +2,6 @@ package mail
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -21,56 +20,37 @@ func TestChallenger_MailCrossTenantIsolation(t *testing.T) {
 	ctx := context.Background()
 
 	host, port, gotOrg10 := captureSMTP(t)
+	mv := p.vaultSvc.(*mockVaultService)
 
-	// Host SPI with Org 10 having communication ID 101 (SMTP),
-	// and Org 20 having communication ID 201 (SMTP).
-	th := &plugin.TestHost{
-		LookupCredentialMock: func(ctx context.Context, orgID uint, query plugin.CredentialQuery) (*plugin.Credential, error) {
-			if query.ProviderType != "communication" && query.ProviderType != "" {
-				return nil, plugin.ErrCredentialNotFound
-			}
-			switch orgID {
-			case 10:
-				if query.ID == 101 || (query.ID == 0 && query.ProviderType == "communication") {
-					cfgJSON, _ := json.Marshal(map[string]any{
-						"host":      host,
-						"port":      port,
-						"user":      "org10-user",
-						"fromEmail": "org10@octarq.com",
-					})
-					return &plugin.Credential{
-						ID:           101,
-						OrgID:        10,
-						ProviderType: "communication",
-						Provider:     "smtp",
-						Name:         "Org 10 SMTP",
-						ConfigJSON:   cfgJSON,
-					}, nil
-				}
-			case 20:
-				if query.ID == 201 || (query.ID == 0 && query.ProviderType == "communication") {
-					cfgJSON, _ := json.Marshal(map[string]any{
-						"host":      host,
-						"port":      port,
-						"user":      "org20-user",
-						"fromEmail": "org20@octarq.com",
-					})
-					return &plugin.Credential{
-						ID:           201,
-						OrgID:        20,
-						ProviderType: "communication",
-						Provider:     "smtp",
-						Name:         "Org 20 SMTP",
-						ConfigJSON:   cfgJSON,
-					}, nil
-				}
-			}
-			return nil, plugin.ErrCredentialNotFound
-		},
+	org10Sender, err := seedVaultSMTPSender(p, SMTPSender{
+		OrgID:     10,
+		Name:      "Org 10 SMTP",
+		Host:      host,
+		Port:      port,
+		User:      "org10-user",
+		FromEmail: "org10@octarq.com",
+	}, "p10")
+	if err != nil {
+		t.Fatal(err)
 	}
-	p.host = th
+	if _, err := mv.PutSecret(ctx, plugin.PutSecretRequest{
+		OrgID:        20,
+		Scope:        plugin.VaultScopeOrg,
+		ItemType:     "integration",
+		ProviderType: "communication",
+		Provider:     "smtp",
+		Name:         "Org 20 SMTP",
+		Payload: map[string]any{
+			"host":      host,
+			"port":      port,
+			"user":      "org20-user",
+			"fromEmail": "org20@octarq.com",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
 
-	// Probe 1: Org 20 calls sendEmail referencing Org 10's SMTPSenderID 101
+	// Probe 1: Org 20 calls sendEmail referencing Org 10's SMTPSenderID
 	reqOrg20 := httptest.NewRequest(http.MethodPost, "/api/emails/send", nil)
 	reqOrg20.Header.Set("X-Org-ID", "20")
 	inputCross := &SendEmailInput{
@@ -81,7 +61,7 @@ func TestChallenger_MailCrossTenantIsolation(t *testing.T) {
 			SMTPSenderSource string `json:"smtpSenderSource"`
 			TrackLinks       bool   `json:"trackLinks"`
 		}{
-			SMTPSenderID:     101, // Org 10's ID
+			SMTPSenderID:     org10Sender.ID,
 			SMTPSenderSource: "local",
 			Message: internalmail.Message{
 				To:      []string{"victim@example.com"},
@@ -90,9 +70,9 @@ func TestChallenger_MailCrossTenantIsolation(t *testing.T) {
 			},
 		},
 	}
-	_, err := p.sendEmail(ctx, inputCross)
+	_, err = p.sendEmail(ctx, inputCross)
 	if err == nil {
-		t.Fatalf("CRITICAL SECURITY VULNERABILITY: Org 20 successfully sent an email using Org 10's SMTP sender (ID 101)!")
+		t.Fatalf("CRITICAL SECURITY VULNERABILITY: Org 20 successfully sent an email using Org 10's SMTP sender!")
 	}
 	if !strings.Contains(err.Error(), "could not be found for this workspace") {
 		t.Errorf("expected 400 'could not be found for this workspace', got: %v", err)
@@ -114,55 +94,51 @@ func TestChallenger_MailCrossTenantIsolation(t *testing.T) {
 	}
 }
 
-// TestChallenger_MailFallbackHierarchy tests resolution order between Host SPI,
-// local smtp_senders table, and fail-closed state.
-func TestChallenger_MailFallbackHierarchy(t *testing.T) {
+// TestChallenger_MailVaultSources tests sending via Vault integration and local Vault-backed sender.
+func TestChallenger_MailVaultSources(t *testing.T) {
 	p, mkCtx := setupFullMailTestDB(t)
 	wipeMailTables(t, p)
 	ctx := context.Background()
 
 	hostSPI, portSPI, gotCaptureSPI := captureSMTP(t)
 	hostLocal, portLocal, gotCaptureLocal := captureSMTP(t)
+	mv := p.vaultSvc.(*mockVaultService)
 
-	// Seed local OSS sender with ID 50
-	p.db.Create(&SMTPSender{
+	localSender, err := seedVaultSMTPSender(p, SMTPSender{
 		ID:        50,
 		OrgID:     10,
 		Name:      "Local OSS Sender",
 		Host:      hostLocal,
 		Port:      portLocal,
 		User:      "local-user",
-		Pass:      "local-pass",
 		FromEmail: "local-sender@octarq.com",
-	})
-
-	th := &plugin.TestHost{
-		LookupCredentialMock: func(ctx context.Context, orgID uint, query plugin.CredentialQuery) (*plugin.Credential, error) {
-			if orgID == 10 && query.ID == 100 {
-				cfgJSON, _ := json.Marshal(map[string]any{
-					"host":      hostSPI,
-					"port":      portSPI,
-					"user":      "spi-user",
-					"fromEmail": "spi-sender@octarq.com",
-				})
-				return &plugin.Credential{
-					ID:           100,
-					OrgID:        10,
-					ProviderType: "communication",
-					Provider:     "smtp",
-					Name:         "SPI Sender",
-					ConfigJSON:   cfgJSON,
-				}, nil
-			}
-			return nil, plugin.ErrCredentialNotFound
-		},
+	}, "local-pass")
+	if err != nil {
+		t.Fatal(err)
 	}
-	p.host = th
+
+	intMeta, err := mv.PutSecret(ctx, plugin.PutSecretRequest{
+		OrgID:        10,
+		Scope:        plugin.VaultScopeOrg,
+		ItemType:     "integration",
+		ProviderType: "communication",
+		Provider:     "smtp",
+		Name:         "Vault Integration Sender",
+		Payload: map[string]any{
+			"host":      hostSPI,
+			"port":      portSPI,
+			"user":      "spi-user",
+			"fromEmail": "spi-sender@octarq.com",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/emails/send", nil)
 	req.Header.Set("X-Org-ID", "10")
 
-	// 1. Send via Host SPI ID 100
+	// 1. Send via Vault integration ID
 	inputSPI := &SendEmailInput{
 		Ctx: mkCtx(req),
 		Body: struct {
@@ -171,7 +147,7 @@ func TestChallenger_MailFallbackHierarchy(t *testing.T) {
 			SMTPSenderSource string `json:"smtpSenderSource"`
 			TrackLinks       bool   `json:"trackLinks"`
 		}{
-			SMTPSenderID:     100,
+			SMTPSenderID:     intMeta.ID,
 			SMTPSenderSource: "integration",
 			Message: internalmail.Message{
 				To:      []string{"recipient1@example.com"},
@@ -182,10 +158,10 @@ func TestChallenger_MailFallbackHierarchy(t *testing.T) {
 	}
 	outSPI, err := p.sendEmail(ctx, inputSPI)
 	if err != nil || !outSPI.Body["ok"] {
-		t.Fatalf("sendEmail via Host SPI failed: %v", err)
+		t.Fatalf("sendEmail via Vault integration failed: %v", err)
 	}
 
-	// 2. Send via Local Table fallback ID 50 (SPI returns ErrCredentialNotFound for 50)
+	// 2. Send via Local Table sender
 	inputLocal := &SendEmailInput{
 		Ctx: mkCtx(req),
 		Body: struct {
@@ -194,7 +170,7 @@ func TestChallenger_MailFallbackHierarchy(t *testing.T) {
 			SMTPSenderSource string `json:"smtpSenderSource"`
 			TrackLinks       bool   `json:"trackLinks"`
 		}{
-			SMTPSenderID:     50,
+			SMTPSenderID:     localSender.ID,
 			SMTPSenderSource: "local",
 			Message: internalmail.Message{
 				To:      []string{"recipient2@example.com"},
@@ -205,7 +181,7 @@ func TestChallenger_MailFallbackHierarchy(t *testing.T) {
 	}
 	outLocal, err := p.sendEmail(ctx, inputLocal)
 	if err != nil || !outLocal.Body["ok"] {
-		t.Fatalf("sendEmail via local fallback failed: %v", err)
+		t.Fatalf("sendEmail via local sender failed: %v", err)
 	}
 
 	// 3. Absent ID 9999 -> 400 Bad Request
@@ -231,7 +207,6 @@ func TestChallenger_MailFallbackHierarchy(t *testing.T) {
 		t.Fatalf("expected 400 for absent sender, got success")
 	}
 
-	// Verify both deliveries in captured SMTP streams
 	capturedSPI := gotCaptureSPI()
 	if !strings.Contains(capturedSPI, "spi-sender@octarq.com") {
 		t.Errorf("captured stream missing spi-sender: %s", capturedSPI)
@@ -242,53 +217,31 @@ func TestChallenger_MailFallbackHierarchy(t *testing.T) {
 	}
 }
 
-// TestChallenger_MailInvalidConfigurationAndDualTrackTrap adversarially probes
-// how corrupt/malformed configurations are handled and checks if invalid SPI credentials
-// improperly fall through to local tables (dual-track vulnerability).
-func TestChallenger_MailInvalidConfigurationAndDualTrackTrap(t *testing.T) {
+// TestChallenger_MailInvalidConfigurationFailClosed tests that an invalid Vault
+// integration fails closed and never falls through to a local sender.
+func TestChallenger_MailInvalidConfigurationFailClosed(t *testing.T) {
 	p, mkCtx := setupFullMailTestDB(t)
 	wipeMailTables(t, p)
 	ctx := context.Background()
+	mv := p.vaultSvc.(*mockVaultService)
 
-	host, port, gotLocalCapture := captureSMTP(t)
-
-	// Seed a local SMTP sender with ID 301 for Org 10
-	p.db.Create(&SMTPSender{
-		ID:        301,
-		OrgID:     10,
-		Name:      "Old Local Relay 301",
-		Host:      host,
-		Port:      port,
-		User:      "old-user",
-		Pass:      "old-pass",
-		FromEmail: "old-relay@octarq.com",
+	badResend, err := mv.PutSecret(ctx, plugin.PutSecretRequest{
+		OrgID:        10,
+		Scope:        plugin.VaultScopeOrg,
+		ItemType:     "integration",
+		ProviderType: "communication",
+		Provider:     "resend",
+		Name:         "Broken Resend",
+		Payload:      map[string]any{"apiKey": "", "fromEmail": "broken@octarq.com"},
 	})
-
-	// In Host SPI, ID 301 is an integration with MISSING API KEY (invalid config)
-	th := &plugin.TestHost{
-		LookupCredentialMock: func(ctx context.Context, orgID uint, query plugin.CredentialQuery) (*plugin.Credential, error) {
-			if orgID == 10 && query.ID == 301 {
-				return &plugin.Credential{
-					ID:           301,
-					OrgID:        10,
-					ProviderType: "communication",
-					Provider:     "resend",
-					Name:         "Broken Resend",
-					ConfigJSON:   json.RawMessage(`{"apiKey":"","fromEmail":"broken@octarq.com"}`),
-				}, nil
-			}
-			return nil, plugin.ErrCredentialNotFound
-		},
+	if err != nil {
+		t.Fatal(err)
 	}
-	p.host = th
 
 	req := httptest.NewRequest(http.MethodPost, "/api/emails/send", nil)
 	req.Header.Set("X-Org-ID", "10")
 
-	// Probe: User selects SMTPSenderID 301 intending to send via the Resend integration.
-	// In send.go lines 80-90:
-	// If senderFromCredential fails (sErr != nil), does it silently fall through to local SMTPSender 301?
-	input301 := &SendEmailInput{
+	input := &SendEmailInput{
 		Ctx: mkCtx(req),
 		Body: struct {
 			internalmail.Message
@@ -296,67 +249,59 @@ func TestChallenger_MailInvalidConfigurationAndDualTrackTrap(t *testing.T) {
 			SMTPSenderSource string `json:"smtpSenderSource"`
 			TrackLinks       bool   `json:"trackLinks"`
 		}{
-			SMTPSenderID:     301,
+			SMTPSenderID:     badResend.ID,
 			SMTPSenderSource: "integration",
 			Message: internalmail.Message{
 				To:      []string{"customer@example.com"},
-				Subject: "Dual Track Test",
+				Subject: "Fail Closed Test",
 				Text:    "Test Body",
 			},
 		},
 	}
-
-	out, err := p.sendEmail(ctx, input301)
-	captured := gotLocalCapture()
-
-	if err == nil && out != nil && out.Body["ok"] {
-		t.Logf("FINDING (CONFIRMED): Dual-track fallback trap detected! When Host SPI ID 301 failed validation (missing API key), sendEmail did NOT fail-closed; it silently fell through to the local smtp_senders table with ID 301 and delivered mail via %s!", captured)
-	} else {
-		t.Logf("sendEmail failed closed with error: %v", err)
+	if _, err := p.sendEmail(ctx, input); err == nil {
+		t.Fatal("expected invalid Resend integration to fail closed")
 	}
 }
 
-// TestChallenger_MailReadyCheck tests mailReady against the registry system
-// mail actually uses: the explicitly selected local sender.
+// TestChallenger_MailReadyCheck tests mailReady against the explicitly configured
+// system sender.
 func TestChallenger_MailReadyCheck(t *testing.T) {
 	p, _ := setupFullMailTestDB(t)
 	wipeMailTables(t, p)
+	mv := p.vaultSvc.(*mockVaultService)
 
 	// 1. Initial state: no system sender -> mailReady = false
 	if p.mailReady() {
 		t.Errorf("expected mailReady = false with no senders")
 	}
 
-	// 2. A Hub credential does not answer for system mail: verification and
-	// password-reset flows have no org and only read the local sender.
-	p.host = &plugin.TestHost{
-		LookupCredentialMock: func(ctx context.Context, orgID uint, query plugin.CredentialQuery) (*plugin.Credential, error) {
-			if query.ProviderType == "communication" {
-				return &plugin.Credential{
-					ID:           1,
-					OrgID:        orgID,
-					ProviderType: "communication",
-					Provider:     "smtp",
-					ConfigJSON:   json.RawMessage(`{}`),
-				}, nil
-			}
-			return nil, plugin.ErrCredentialNotFound
-		},
+	// 2. Org-scoped integration does not make mailReady true.
+	if _, err := mv.PutSecret(context.Background(), plugin.PutSecretRequest{
+		OrgID:        1,
+		Scope:        plugin.VaultScopeOrg,
+		ItemType:     "integration",
+		ProviderType: "communication",
+		Provider:     "smtp",
+		Name:         "Org SMTP",
+		Payload:      map[string]any{"smtpHost": "smtp.example.com", "secretKey": "pw"},
+	}); err != nil {
+		t.Fatal(err)
 	}
 	if p.mailReady() {
-		t.Errorf("expected mailReady = false when only a Hub integration exists")
+		t.Errorf("expected mailReady = false when only an org-scoped integration exists")
 	}
 
-	// 3. Selecting a local sender makes system mail deliverable.
-	p.host = nil
-	sender := SMTPSender{
+	// 3. Selecting a system sender makes system mail deliverable.
+	sender, err := seedVaultSMTPSender(p, SMTPSender{
 		OrgID:     1,
 		Name:      "Local",
 		Host:      "localhost",
 		Port:      25,
 		FromEmail: "test@octarq.com",
+	}, "pw")
+	if err != nil {
+		t.Fatal(err)
 	}
-	p.db.Create(&sender)
 	p.getGlobalSetting = func(k string) string {
 		if k == "mail_system_sender_id" {
 			return fmt.Sprint(sender.ID)

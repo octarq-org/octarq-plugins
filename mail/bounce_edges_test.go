@@ -129,6 +129,7 @@ func newBouncePlugin(t *testing.T) (*Plugin, *gorm.DB) {
 		t.Fatalf("open db: %v", err)
 	}
 	p := New()
+	p.vaultSvc = newMockVaultService()
 	if err := db.AutoMigrate(append(testAllModels(), p.Models()...)...); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}

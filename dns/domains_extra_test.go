@@ -52,8 +52,8 @@ func TestCreateDomainVerifyZone(t *testing.T) {
 	p, mkCtx := setupFreshGateTestDB(t)
 	fake := &fakeDNSProvider{verifyName: "verified.example.com"}
 	provName := registerFakeProvider(t, "verify-zone-prov", fake)
-	accID := ProviderAccount{OrgID: 1, Name: "acc", Type: provName, Config: "{}"}
-	if err := p.db.Create(&accID).Error; err != nil {
+	accID, err := seedVaultProviderAccount(p, 1, "acc", provName, map[string]any{"apiToken": "tok"})
+	if err != nil {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
@@ -74,7 +74,7 @@ func TestCreateDomainVerifyZone(t *testing.T) {
 		}{o, n, d.(map[string]any)})
 	}
 	fake.verifyErr = errBoom
-	_, err := p.createDomain(ctx, &CreateDomainInput{Ctx: admin, Body: domainDTO{Name: "v.example.com", ProviderAccountID: accID.ID, ZoneID: "z9"}})
+	_, err = p.createDomain(ctx, &CreateDomainInput{Ctx: admin, Body: domainDTO{Name: "v.example.com", ProviderAccountID: accID.ID, ZoneID: "z9"}})
 	if statusOf(t, err) != http.StatusBadRequest {
 		t.Fatalf("verify failure: want 400, got %v", err)
 	}
@@ -113,13 +113,17 @@ func TestUpdateDomainSwitchesProviderAccount(t *testing.T) {
 	p, mkCtx := setupFreshGateTestDB(t)
 	fake := &fakeDNSProvider{}
 	provName := registerFakeProvider(t, "update-switch-prov", fake)
-	acc1 := ProviderAccount{OrgID: 1, Name: "a1", Type: provName, Config: "{}"}
-	acc2 := ProviderAccount{OrgID: 1, Name: "a2", Type: provName, Config: "{}"}
-	foreign := ProviderAccount{OrgID: 2, Name: "foreign", Type: provName, Config: "{}"}
-	for _, a := range []*ProviderAccount{&acc1, &acc2, &foreign} {
-		if err := p.db.Create(a).Error; err != nil {
-			t.Fatal(err)
-		}
+	acc1, err := seedVaultProviderAccount(p, 1, "a1", provName, map[string]any{"apiToken": "tok"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	acc2, err := seedVaultProviderAccount(p, 1, "a2", provName, map[string]any{"apiToken": "tok"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	foreign, err := seedVaultProviderAccount(p, 2, "foreign", provName, map[string]any{"apiToken": "tok"})
+	if err != nil {
+		t.Fatal(err)
 	}
 	dom := Domain{OrgID: 1, Name: "switch.com", ProviderAccountID: acc1.ID}
 	if err := p.db.Create(&dom).Error; err != nil {
@@ -252,8 +256,8 @@ func TestProviderForErrors(t *testing.T) {
 	}
 
 	// Account exists but belongs to a different org.
-	acc := ProviderAccount{OrgID: 2, Name: "v", Type: "cloudflare", Config: "{}"}
-	if err := p.db.Create(&acc).Error; err != nil {
+	acc, err := seedVaultProviderAccount(p, 2, "v", "cloudflare", map[string]any{"apiToken": "tok"})
+	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = p.providerFor(Domain{OrgID: 1, Name: "x.com", ProviderAccountID: acc.ID})
@@ -261,8 +265,8 @@ func TestProviderForErrors(t *testing.T) {
 		t.Fatalf("cross-org account: %v", err)
 	}
 
-	// Empty stored config.
-	acc1 := ProviderAccount{OrgID: 1, Name: "empty", Type: "cloudflare", Config: ""}
+	// Empty stored config (VaultItemID == 0).
+	acc1 := ProviderAccount{OrgID: 1, Name: "empty", Type: "cloudflare"}
 	if err := p.db.Create(&acc1).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -271,20 +275,21 @@ func TestProviderForErrors(t *testing.T) {
 		t.Fatalf("empty config must be a credential fault: %v", err)
 	}
 
-	// Decryption failure.
-	p.decrypt = func(string) ([]byte, error) { return nil, errBoom }
-	acc2 := ProviderAccount{OrgID: 1, Name: "enc", Type: "cloudflare", Config: "encrypted"}
-	if err := p.db.Create(&acc2).Error; err != nil {
+	// Vault read failure.
+	mv := p.vaultSvc.(*mockVaultService)
+	acc2, err := seedVaultProviderAccount(p, 1, "enc", "cloudflare", map[string]any{"apiToken": "tok"})
+	if err != nil {
 		t.Fatal(err)
 	}
+	mv.getErr = errBoom
 	if _, err := p.providerFor(Domain{OrgID: 1, Name: "x.com", ProviderAccountID: acc2.ID}); !errors.Is(err, errProviderCredentials) {
-		t.Fatalf("decrypt failure must surface as a credential fault, got %v", err)
+		t.Fatalf("vault failure must surface as a credential fault, got %v", err)
 	}
+	mv.getErr = nil
 
 	// Unknown provider type.
-	p.decrypt = func(s string) ([]byte, error) { return []byte(s), nil }
-	acc3 := ProviderAccount{OrgID: 1, Name: "ghost", Type: "nope", Config: "{}"}
-	if err := p.db.Create(&acc3).Error; err != nil {
+	acc3, err := seedVaultProviderAccount(p, 1, "ghost", "nope", map[string]any{"apiToken": "tok"})
+	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := p.providerFor(Domain{OrgID: 1, Name: "x.com", ProviderAccountID: acc3.ID}); err == nil {

@@ -27,13 +27,13 @@ func TestMail_CrossTenantAttack_AntiPenetration(t *testing.T) {
 		Enabled: true,
 	}
 	s1 := SMTPSender{
-		OrgID:     1,
-		Name:      "Org 1 SMTP",
-		Host:      "smtp.org1.com",
-		Port:      587,
-		User:      "u1",
-		Pass:      "p1",
-		FromEmail: "no-reply@org1.example.com",
+		OrgID:       1,
+		Name:        "Org 1 SMTP",
+		Host:        "smtp.org1.com",
+		Port:        587,
+		User:        "u1",
+		VaultItemID: 101,
+		FromEmail:   "no-reply@org1.example.com",
 	}
 	sup1 := MailSuppression{
 		OrgID:   1,
@@ -79,13 +79,13 @@ func TestMail_CrossTenantAttack_AntiPenetration(t *testing.T) {
 		Enabled: true,
 	}
 	s2 := SMTPSender{
-		OrgID:     2,
-		Name:      "Org 2 SMTP",
-		Host:      "smtp.org2.com",
-		Port:      587,
-		User:      "u2",
-		Pass:      "p2",
-		FromEmail: "no-reply@org2.example.com",
+		OrgID:       2,
+		Name:        "Org 2 SMTP",
+		Host:        "smtp.org2.com",
+		Port:        587,
+		User:        "u2",
+		VaultItemID: 201,
+		FromEmail:   "no-reply@org2.example.com",
 	}
 	sup2 := MailSuppression{
 		OrgID:   2,

@@ -9,15 +9,15 @@ import (
 // ProviderAccount represents a DNS provider configuration (e.g. Cloudflare)
 // containing the credentials needed to manage zones.
 type ProviderAccount struct {
-	ID        uint      `gorm:"primaryKey" json:"id"`
-	OrgID     uint      `gorm:"column:owner_id;index;default:1" json:"-"`
-	Name      string    `gorm:"size:255" json:"name"` // e.g. "Personal Cloudflare"
-	Type      string    `gorm:"size:32" json:"type"`  // e.g. "cloudflare", "dnspod"
-	Config    string    `gorm:"type:text" json:"-"`   // AES-GCM encrypted credentials JSON
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
-	// HasCredentials is computed (not persisted): the encrypted Config never
-	// leaves the server, so the dashboard uses this flag to show "credentials are
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	OrgID       uint      `gorm:"column:owner_id;index;default:1" json:"-"`
+	Name        string    `gorm:"size:255" json:"name"` // e.g. "Personal Cloudflare"
+	Type        string    `gorm:"size:32" json:"type"`  // e.g. "cloudflare", "dnspod"
+	VaultItemID uint      `gorm:"index" json:"vaultItemId,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+	// HasCredentials is computed (not persisted): Vault secrets never leave
+	// the server, so the dashboard uses this flag to show "credentials are
 	// set — leave blank to keep" instead of an empty field that looks unconfigured.
 	HasCredentials bool `gorm:"-" json:"hasCredentials"`
 }
