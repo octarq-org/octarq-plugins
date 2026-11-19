@@ -7,7 +7,7 @@ require (
 	github.com/danielgtaylor/huma/v2 v2.38.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
-	github.com/octarq-org/octarq/server v0.8.1-0.20261111110131-ba96f5da7df6
+	github.com/octarq-org/octarq/server v0.8.1-0.20261119055749-cb1493a6e46f
 	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common v1.3.127
 	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/dnspod v1.3.124
 	gorm.io/gorm v1.31.2
