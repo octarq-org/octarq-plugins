@@ -10,6 +10,17 @@ import { KeyRound, Send, Blocks } from "lucide-react";
 // independently, so a page must read exactly one of them.
 type SenderMode = "integration" | "local" | null;
 
+function formatIntegrationSenderSummary(s: any): string {
+  const fromEmail = s.metadata?.fromEmail || s.fromEmail;
+  const host = s.metadata?.smtpHost || s.host;
+  const port = s.metadata?.smtpPort || s.port || 587;
+  if (fromEmail && host) return `${fromEmail} via ${host}:${port}`;
+  if (s.summary) return s.summary;
+  if (fromEmail) return fromEmail;
+  if (host) return `${host}:${port}`;
+  return s.metadata?.fromName || s.provider || s.name || "";
+}
+
 export function SMTPSenders() {
   const { t } = useTranslation();
   const { role, isInstanceAdmin } = useCurrentRole();
@@ -184,7 +195,7 @@ export function SMTPSenders() {
                   </div>
                   <div className="text-xs text-muted-foreground mt-1 font-mono">
                     {mode === "integration"
-                      ? (s.summary || `${s.fromEmail} via ${s.host}:${s.port || 587}`)
+                      ? formatIntegrationSenderSummary(s)
                       : `${s.fromEmail} via ${s.host}:${s.port}`}
                   </div>
                 </div>

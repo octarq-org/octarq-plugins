@@ -39,8 +39,30 @@ const mockIntegrations = [
     provider: "smtp",
     providerType: "communication",
     configured: true,
-    summary: "noreply@acme.com via smtp.mailgun.org:587",
     isDefault: true,
+    metadata: {
+      fromEmail: "noreply@acme.com",
+      fromName: "Acme Mail",
+      smtpHost: "smtp.mailgun.org",
+      smtpPort: 587,
+    },
+  },
+  {
+    id: 2,
+    name: "Transactional Resend",
+    provider: "resend",
+    providerType: "communication",
+    configured: true,
+    metadata: {
+      fromEmail: "alerts@acme.com",
+    },
+  },
+  {
+    id: 3,
+    name: "Bare SMTP",
+    provider: "smtp",
+    providerType: "communication",
+    configured: false,
   },
 ];
 
@@ -92,6 +114,7 @@ const testResources = {
       noSmtpConfigured: "No SMTP outgoing senders configured.",
       noSmtpSenders: "No SMTP outgoing senders configured.",
       smtpPasswordSet: "password set",
+      smtpNoPassword: "no password",
       integrationsHubBanner: "Manage third-party credentials and cloud provider integrations centrally.",
       openIntegrationsHub: "Integrations Hub",
       addSmtpSender: "Add SMTP Sender",
@@ -237,7 +260,9 @@ describe("Mail Forms", () => {
       // Wait for settings & senders to load and checkbox to appear
       await waitFor(() => {
         expect(screen.getByRole("checkbox")).toBeDefined();
+        expect(screen.getAllByText("Corporate Mailgun (noreply@acme.com)").length).toBeGreaterThan(0);
       });
+      expect(document.body.textContent).not.toContain("undefined");
 
       // Fill in recipients, subject, body
       const toInput = screen.getByPlaceholderText("hello@world.com");
@@ -496,12 +521,17 @@ describe("Mail Forms", () => {
       await waitFor(() => {
         expect(screen.getByText("Corporate Mailgun")).toBeDefined();
         expect(screen.getByText("noreply@acme.com via smtp.mailgun.org:587")).toBeDefined();
-        expect(screen.getByText("password set")).toBeDefined();
+        expect(screen.getByText("alerts@acme.com")).toBeDefined();
+        expect(screen.getByText("Bare SMTP")).toBeDefined();
+        expect(screen.getAllByText("password set").length).toBeGreaterThan(0);
+        expect(screen.getByText("no password")).toBeDefined();
         expect(screen.getByText("Manage third-party credentials and cloud provider integrations centrally.")).toBeDefined();
       });
 
+      expect(document.body.textContent).not.toContain("undefined");
+
       // Test connection goes through Core Vault, not the local table.
-      fireEvent.click(screen.getByRole("button", { name: "Test" }));
+      fireEvent.click(screen.getAllByRole("button", { name: "Test" })[0]);
 
       await waitFor(() => {
         const tested = fetchMock.mock.calls.some((c) => {

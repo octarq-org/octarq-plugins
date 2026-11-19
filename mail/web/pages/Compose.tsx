@@ -193,14 +193,18 @@ export function Compose({
                 className="text-sm"
                 value={String(smtpSenderId)}
                 onValueChange={(v) => setSmtpSenderId(Number(v))}
-                options={senders.map((s) => ({
-                  value: String(s.id),
-                  label: s.summary
-                    ? `${s.name} (${s.summary})`
-                    : s.fromEmail
-                      ? `${s.name} (${s.fromEmail})`
-                      : `${s.name} (${s.provider})`,
-                }))}
+                options={senders.map((s) => {
+                  const detail =
+                    s.metadata?.fromEmail ||
+                    s.fromEmail ||
+                    s.summary ||
+                    s.metadata?.smtpHost ||
+                    s.provider;
+                  return {
+                    value: String(s.id),
+                    label: detail ? `${s.name} (${detail})` : s.name,
+                  };
+                })}
               />
             </Field>
           )}
