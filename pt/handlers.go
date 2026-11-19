@@ -62,25 +62,49 @@ func (p *Plugin) allowed(r *http.Request, permKey, minRole string) bool {
 	return ctx.HasPerm(r, permKey, minRole)
 }
 
-// requireOrg resolves the workspace of an authenticated request. A zero value
-// means the request never passed the session guard; the caller must refuse it.
-func (p *Plugin) requireOrg(r *http.Request) (uint, error) {
-	orgID := plugin.OrgIDFromContext(r.Context())
+// session returns the mounted host session, or nil before a real mount.
+func (p *Plugin) session() plugin.HostSession {
+	host := p.hostRef()
+	if host == nil {
+		return nil
+	}
+	return host.Session()
+}
+
+// requirePersonalOrg resolves the caller's personal org. Zero is fail-closed:
+// personal data never falls back to the active team workspace, and a 403 tells
+// the caller the account has no personal space.
+func (p *Plugin) requirePersonalOrg(r *http.Request) (uint, error) {
+	s := p.session()
+	if s == nil {
+		return 0, huma.Error403Forbidden("Personal space is unavailable for this account.")
+	}
+	orgID := s.PersonalOrgID(r)
 	if orgID == 0 {
-		return 0, huma.Error401Unauthorized("Authentication required. Sign in to continue.")
+		return 0, huma.Error403Forbidden("Personal space is unavailable for this account.")
 	}
 	return orgID, nil
 }
 
+// requireUser returns the authenticated account id that owns the request.
+func (p *Plugin) requireUser(r *http.Request) (uint, error) {
+	if s := p.session(); s != nil {
+		if uid := s.UserID(r); uid != 0 {
+			return uid, nil
+		}
+	}
+	return 0, huma.Error401Unauthorized("Authentication required. Sign in to continue.")
+}
+
 // humaErrorFor maps infrastructure errors to responses. A missing vault or
 // tenant handle is a server fault; a missing row is a 404 that also covers
-// cross-workspace ids, so existence never leaks.
+// another owner's id, so existence never leaks.
 func (p *Plugin) humaErrorFor(err error) error {
 	switch {
 	case errors.Is(err, ErrNotFound):
 		return huma.Error404NotFound("Tracker not found.")
 	case errors.Is(err, errTenantUnavailable):
-		return huma.Error503ServiceUnavailable("This server cannot reach workspace data. Contact your administrator.")
+		return huma.Error503ServiceUnavailable("This server cannot reach your data. Contact your administrator.")
 	case errors.Is(err, errVaultUnavailable):
 		return huma.Error503ServiceUnavailable("The credential vault is unavailable. Contact your administrator.")
 	default:
@@ -293,12 +317,8 @@ func (p *Plugin) buildView(ctx context.Context, t *PTTracker) trackerView {
 		view.SchemaLabel = t.SchemaKey
 	}
 
-	if t.VaultItemID > 0 {
-		if vs, vErr := p.vault(); vErr == nil {
-			if meta, mErr := vs.GetMeta(ctx, t.OrgID, t.VaultItemID); mErr == nil {
-				view.Credential = credentialViewFromMeta(t, meta)
-			}
-		}
+	if meta := p.vaultMetaOf(ctx, t); meta != nil {
+		view.Credential = credentialViewFromMeta(t, meta)
 	}
 	if snap, err := p.latestSnapshot(ctx, t.OrgID, t.ID); err == nil && snap != nil {
 		view.LatestSnapshot = snap
@@ -368,9 +388,9 @@ func summarize(views []trackerView) summaryView {
 	return out
 }
 
-// trackersOf loads every tracker of one workspace as views.
-func (p *Plugin) trackersOf(ctx context.Context, orgID uint) ([]trackerView, error) {
-	list, err := p.listTrackers(ctx, orgID)
+// trackersOf loads every tracker of one owner as views.
+func (p *Plugin) trackersOf(ctx context.Context, orgID, ownerUserID uint) ([]trackerView, error) {
+	list, err := p.listTrackers(ctx, orgID, ownerUserID)
 	if err != nil {
 		return nil, err
 	}
@@ -382,8 +402,8 @@ func (p *Plugin) trackersOf(ctx context.Context, orgID uint) ([]trackerView, err
 }
 
 // loadTracker loads one tracker after the permission check.
-func (p *Plugin) loadTracker(ctx context.Context, orgID, id uint) (*PTTracker, error) {
-	t, err := p.findTracker(ctx, orgID, id)
+func (p *Plugin) loadTracker(ctx context.Context, orgID, ownerUserID, id uint) (*PTTracker, error) {
+	t, err := p.findTracker(ctx, orgID, ownerUserID, id)
 	if err != nil {
 		return nil, p.humaErrorFor(err)
 	}
@@ -397,14 +417,18 @@ func (p *Plugin) listTrackersHandler(ctx context.Context, input *listTrackersInp
 	if err != nil {
 		return nil, err
 	}
-	orgID, err := p.requireOrg(r)
+	orgID, err := p.requirePersonalOrg(r)
 	if err != nil {
 		return nil, err
 	}
 	if !p.allowed(r, permRead, roleMember) {
 		return nil, errForbidden
 	}
-	views, err := p.trackersOf(ctx, orgID)
+	uid, err := p.requireUser(r)
+	if err != nil {
+		return nil, err
+	}
+	views, err := p.trackersOf(ctx, orgID, uid)
 	if err != nil {
 		return nil, p.humaErrorFor(err)
 	}
@@ -420,14 +444,18 @@ func (p *Plugin) getOverview(ctx context.Context, input *overviewInput) (*overvi
 	if err != nil {
 		return nil, err
 	}
-	orgID, err := p.requireOrg(r)
+	orgID, err := p.requirePersonalOrg(r)
 	if err != nil {
 		return nil, err
 	}
 	if !p.allowed(r, permRead, roleMember) {
 		return nil, errForbidden
 	}
-	views, err := p.trackersOf(ctx, orgID)
+	uid, err := p.requireUser(r)
+	if err != nil {
+		return nil, err
+	}
+	views, err := p.trackersOf(ctx, orgID, uid)
 	if err != nil {
 		return nil, p.humaErrorFor(err)
 	}
@@ -444,14 +472,18 @@ func (p *Plugin) getTrackerHandler(ctx context.Context, input *trackerInput) (*t
 	if err != nil {
 		return nil, err
 	}
-	orgID, err := p.requireOrg(r)
+	orgID, err := p.requirePersonalOrg(r)
 	if err != nil {
 		return nil, err
 	}
 	if !p.allowed(r, permRead, roleMember) {
 		return nil, errForbidden
 	}
-	t, err := p.loadTracker(ctx, orgID, input.ID)
+	uid, err := p.requireUser(r)
+	if err != nil {
+		return nil, err
+	}
+	t, err := p.loadTracker(ctx, orgID, uid, input.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -464,12 +496,16 @@ func (p *Plugin) createTrackerHandler(ctx context.Context, input *createTrackerI
 	if err != nil {
 		return nil, err
 	}
-	orgID, err := p.requireOrg(r)
+	orgID, err := p.requirePersonalOrg(r)
 	if err != nil {
 		return nil, err
 	}
-	if !p.allowed(r, permCreate, roleAdmin) {
+	if !p.allowed(r, permCreate, roleMember) {
 		return nil, errForbidden
+	}
+	uid, err := p.requireUser(r)
+	if err != nil {
+		return nil, err
 	}
 	body := input.Body
 
@@ -503,7 +539,7 @@ func (p *Plugin) createTrackerHandler(ctx context.Context, input *createTrackerI
 		return nil, err
 	}
 
-	if _, findErr := p.findTrackerByName(ctx, orgID, name); findErr == nil {
+	if _, findErr := p.findTrackerByName(ctx, orgID, uid, name); findErr == nil {
 		return nil, huma.Error409Conflict("A tracker with this name already exists.")
 	} else if !errors.Is(findErr, ErrNotFound) {
 		return nil, p.humaErrorFor(findErr)
@@ -517,6 +553,7 @@ func (p *Plugin) createTrackerHandler(ctx context.Context, input *createTrackerI
 	defaults := ad.Defaults()
 	caps := ad.Capabilities()
 	t := &PTTracker{
+		OwnerUserID:          uid,
 		OrgID:                orgID,
 		Name:                 name,
 		SecretID:             secretID,
@@ -534,7 +571,7 @@ func (p *Plugin) createTrackerHandler(ctx context.Context, input *createTrackerI
 		LimitIntervalSeconds: defaults.LimitIntervalSeconds,
 		LimitCount:           defaults.LimitCount,
 		LimitSeconds:         defaults.LimitSeconds,
-		CreatedByUserID:      plugin.UserIDFromContext(r.Context()),
+		CreatedByUserID:      uid,
 	}
 	if err := applyTrackerBody(t, body); err != nil {
 		return nil, err
@@ -559,7 +596,7 @@ func (p *Plugin) createTrackerHandler(ctx context.Context, input *createTrackerI
 	if !secret.empty() {
 		if err := p.storeSecrets(ctx, t, secret, true); err != nil {
 			_ = p.deleteTrackerCascade(ctx, orgID, t.ID)
-			_ = p.shredSecret(ctx, orgID, t.VaultItemID)
+			_ = p.shredSecret(ctx, orgID, t.VaultItemID, uid)
 			return nil, p.humaErrorFor(err)
 		}
 	}
@@ -617,25 +654,29 @@ func (p *Plugin) updateTrackerHandler(ctx context.Context, input *updateTrackerI
 	if err != nil {
 		return nil, err
 	}
-	orgID, err := p.requireOrg(r)
+	orgID, err := p.requirePersonalOrg(r)
 	if err != nil {
 		return nil, err
 	}
-	if !p.allowed(r, permUpdate, roleAdmin) {
+	if !p.allowed(r, permUpdate, roleMember) {
 		return nil, errForbidden
+	}
+	uid, err := p.requireUser(r)
+	if err != nil {
+		return nil, err
 	}
 	body := input.Body
 	if strings.TrimSpace(body.LoginSecret) != "" || strings.TrimSpace(body.Cookie) != "" || strings.TrimSpace(body.APIKey) != "" {
 		return nil, huma.Error422UnprocessableEntity("Change credentials through the credential endpoint.")
 	}
 
-	t, err := p.loadTracker(ctx, orgID, input.ID)
+	t, err := p.loadTracker(ctx, orgID, uid, input.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	if v := strings.TrimSpace(body.Name); v != "" && v != t.Name {
-		if _, findErr := p.findTrackerByName(ctx, orgID, v); findErr == nil {
+		if _, findErr := p.findTrackerByName(ctx, orgID, uid, v); findErr == nil {
 			return nil, huma.Error409Conflict("A tracker with this name already exists.")
 		} else if !errors.Is(findErr, ErrNotFound) {
 			return nil, p.humaErrorFor(findErr)
@@ -677,14 +718,18 @@ func (p *Plugin) deleteTrackerHandler(ctx context.Context, input *trackerInput) 
 	if err != nil {
 		return nil, err
 	}
-	orgID, err := p.requireOrg(r)
+	orgID, err := p.requirePersonalOrg(r)
 	if err != nil {
 		return nil, err
 	}
-	if !p.allowed(r, permDelete, roleAdmin) {
+	if !p.allowed(r, permDelete, roleMember) {
 		return nil, errForbidden
 	}
-	t, err := p.loadTracker(ctx, orgID, input.ID)
+	uid, err := p.requireUser(r)
+	if err != nil {
+		return nil, err
+	}
+	t, err := p.loadTracker(ctx, orgID, uid, input.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -693,7 +738,7 @@ func (p *Plugin) deleteTrackerHandler(ctx context.Context, input *trackerInput) 
 	}
 	// The rows are gone; a shred failure leaves an orphan key with no
 	// ciphertext, so the deletion still stands.
-	_ = p.shredSecret(ctx, orgID, t.VaultItemID)
+	_ = p.shredSecret(ctx, orgID, t.VaultItemID, uid)
 	return &deleteOutput{Body: map[string]bool{"ok": true}}, nil
 }
 
@@ -702,14 +747,18 @@ func (p *Plugin) setCredentialHandler(ctx context.Context, input *credentialInpu
 	if err != nil {
 		return nil, err
 	}
-	orgID, err := p.requireOrg(r)
+	orgID, err := p.requirePersonalOrg(r)
 	if err != nil {
 		return nil, err
 	}
-	if !p.allowed(r, permUpdate, roleAdmin) {
+	if !p.allowed(r, permUpdate, roleMember) {
 		return nil, errForbidden
 	}
-	t, err := p.loadTracker(ctx, orgID, input.ID)
+	uid, err := p.requireUser(r)
+	if err != nil {
+		return nil, err
+	}
+	t, err := p.loadTracker(ctx, orgID, uid, input.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -808,14 +857,18 @@ func (p *Plugin) loginHandler(ctx context.Context, input *trackerInput) (*action
 	if err != nil {
 		return nil, err
 	}
-	orgID, err := p.requireOrg(r)
+	orgID, err := p.requirePersonalOrg(r)
 	if err != nil {
 		return nil, err
 	}
-	if !p.allowed(r, permUpdate, roleAdmin) {
+	if !p.allowed(r, permUpdate, roleMember) {
 		return nil, errForbidden
 	}
-	t, err := p.loadTracker(ctx, orgID, input.ID)
+	uid, err := p.requireUser(r)
+	if err != nil {
+		return nil, err
+	}
+	t, err := p.loadTracker(ctx, orgID, uid, input.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -835,14 +888,18 @@ func (p *Plugin) signinHandler(ctx context.Context, input *signinInput) (*action
 	if err != nil {
 		return nil, err
 	}
-	orgID, err := p.requireOrg(r)
+	orgID, err := p.requirePersonalOrg(r)
 	if err != nil {
 		return nil, err
 	}
 	if !p.allowed(r, permSignin, roleMember) {
 		return nil, errForbidden
 	}
-	t, err := p.loadTracker(ctx, orgID, input.ID)
+	uid, err := p.requireUser(r)
+	if err != nil {
+		return nil, err
+	}
+	t, err := p.loadTracker(ctx, orgID, uid, input.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -862,14 +919,18 @@ func (p *Plugin) refreshHandler(ctx context.Context, input *trackerInput) (*acti
 	if err != nil {
 		return nil, err
 	}
-	orgID, err := p.requireOrg(r)
+	orgID, err := p.requirePersonalOrg(r)
 	if err != nil {
 		return nil, err
 	}
 	if !p.allowed(r, permRefresh, roleMember) {
 		return nil, errForbidden
 	}
-	t, err := p.loadTracker(ctx, orgID, input.ID)
+	uid, err := p.requireUser(r)
+	if err != nil {
+		return nil, err
+	}
+	t, err := p.loadTracker(ctx, orgID, uid, input.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -956,14 +1017,18 @@ func (p *Plugin) snapshotsHandler(ctx context.Context, input *snapshotsInput) (*
 	if err != nil {
 		return nil, err
 	}
-	orgID, err := p.requireOrg(r)
+	orgID, err := p.requirePersonalOrg(r)
 	if err != nil {
 		return nil, err
 	}
 	if !p.allowed(r, permRead, roleMember) {
 		return nil, errForbidden
 	}
-	t, err := p.loadTracker(ctx, orgID, input.ID)
+	uid, err := p.requireUser(r)
+	if err != nil {
+		return nil, err
+	}
+	t, err := p.loadTracker(ctx, orgID, uid, input.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -983,14 +1048,18 @@ func (p *Plugin) signinsHandler(ctx context.Context, input *signinsInput) (*sign
 	if err != nil {
 		return nil, err
 	}
-	orgID, err := p.requireOrg(r)
+	orgID, err := p.requirePersonalOrg(r)
 	if err != nil {
 		return nil, err
 	}
 	if !p.allowed(r, permRead, roleMember) {
 		return nil, errForbidden
 	}
-	t, err := p.loadTracker(ctx, orgID, input.ID)
+	uid, err := p.requireUser(r)
+	if err != nil {
+		return nil, err
+	}
+	t, err := p.loadTracker(ctx, orgID, uid, input.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -1016,11 +1085,11 @@ func (p *Plugin) detectHandler(ctx context.Context, input *detectInput) (*detect
 	if err != nil {
 		return nil, err
 	}
-	orgID, err := p.requireOrg(r)
+	orgID, err := p.requirePersonalOrg(r)
 	if err != nil {
 		return nil, err
 	}
-	if !p.allowed(r, permCreate, roleAdmin) {
+	if !p.allowed(r, permCreate, roleMember) {
 		return nil, errForbidden
 	}
 	_ = orgID

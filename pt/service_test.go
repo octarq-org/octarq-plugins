@@ -25,6 +25,7 @@ type fakeSession struct{}
 
 func (fakeSession) UserID(*http.Request) uint                      { return 7 }
 func (fakeSession) OrgID(*http.Request) uint                       { return 1 }
+func (fakeSession) PersonalOrgID(*http.Request) uint               { return 1 }
 func (fakeSession) OrgRole(*http.Request) string                   { return "admin" }
 func (fakeSession) RequireRole(*http.Request, string) bool         { return true }
 func (fakeSession) RequirePerm(*http.Request, string, string) bool { return true }
@@ -161,7 +162,7 @@ func newFixture(t *testing.T) *fixture {
 }
 
 // createTracker inserts a tracker row and its Vault-backed credential.
-func (f *fixture) createTracker(t *testing.T, orgID uint, name string, secret storedSecret) *PTTracker {
+func (f *fixture) createTracker(t *testing.T, orgID, ownerUserID uint, name string, secret storedSecret) *PTTracker {
 	t.Helper()
 	ctx := context.Background()
 
@@ -171,6 +172,7 @@ func (f *fixture) createTracker(t *testing.T, orgID uint, name string, secret st
 	}
 
 	tracker := &PTTracker{
+		OwnerUserID:          ownerUserID,
 		OrgID:                orgID,
 		Name:                 name,
 		SecretID:             secretID,
@@ -184,7 +186,7 @@ func (f *fixture) createTracker(t *testing.T, orgID uint, name string, secret st
 		StatsIntervalHours:   6,
 		TimeoutSeconds:       5,
 		LimitIntervalSeconds: 0,
-		CreatedByUserID:      7,
+		CreatedByUserID:      ownerUserID,
 	}
 	if err := f.plugin.createTracker(ctx, tracker); err != nil {
 		t.Fatalf("create tracker: %v", err)
@@ -202,7 +204,7 @@ func (f *fixture) createTracker(t *testing.T, orgID uint, name string, secret st
 func TestLoginStoresEncryptedCookie(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	tracker := f.createTracker(t, 1, "demo", storedSecret{Login: "secret"})
+	tracker := f.createTracker(t, 1, 7, "demo", storedSecret{Login: "secret"})
 
 	out, err := f.plugin.login(ctx, tracker)
 	if err != nil {
@@ -244,7 +246,7 @@ func TestLoginStoresEncryptedCookie(t *testing.T) {
 func TestRefreshStoresSnapshot(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	tracker := f.createTracker(t, 1, "demo", storedSecret{Login: "secret"})
+	tracker := f.createTracker(t, 1, 7, "demo", storedSecret{Login: "secret"})
 
 	snap, err := f.plugin.refresh(ctx, tracker, triggerManual)
 	if err != nil {
@@ -267,7 +269,7 @@ func TestRefreshStoresSnapshot(t *testing.T) {
 func TestSigninIsOncePerDay(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	tracker := f.createTracker(t, 1, "demo", storedSecret{Login: "secret"})
+	tracker := f.createTracker(t, 1, 7, "demo", storedSecret{Login: "secret"})
 
 	first, err := f.plugin.signin(ctx, tracker, triggerManual, false)
 	if err != nil {
@@ -302,8 +304,8 @@ func TestSigninIsOncePerDay(t *testing.T) {
 func TestCredentialIsBoundToWorkspaceAndTracker(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	first := f.createTracker(t, 1, "first", storedSecret{Login: "secret"})
-	second := f.createTracker(t, 1, "second", storedSecret{Login: "other"})
+	first := f.createTracker(t, 1, 7, "first", storedSecret{Login: "secret"})
+	second := f.createTracker(t, 1, 7, "second", storedSecret{Login: "other"})
 
 	// First tracker's Vault item belongs only to org 1 and returns "secret".
 	sec1, err := f.vault.GetSecret(ctx, 1, first.VaultItemID)
@@ -320,12 +322,66 @@ func TestCredentialIsBoundToWorkspaceAndTracker(t *testing.T) {
 	}
 }
 
+// TestVaultRefusesAnotherOwnersItem proves the owner check inside the vault
+// paths: an item id that resolves in the same personal org still refuses to
+// reveal, update, or shred when the owner does not match.
+func TestVaultRefusesAnotherOwnersItem(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	mine := f.createTracker(t, 1, 7, "mine", storedSecret{Login: "secret"})
+	theirs := f.createTracker(t, 1, 8, "theirs", storedSecret{Login: "other"})
+
+	// Simulate a mis-bound row: another owner's item id on this tracker.
+	theirs.VaultItemID = mine.VaultItemID
+
+	sec, err := f.plugin.readVaultSecret(ctx, theirs)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("reveal of another owner's item = %v", err)
+	}
+	if !sec.empty() {
+		t.Fatalf("another owner's payload leaked: %+v", sec)
+	}
+
+	if err := f.plugin.storeVaultSecret(ctx, theirs, storedSecret{Login: "changed"}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("update of another owner's item = %v", err)
+	}
+	if err := f.plugin.shredSecret(ctx, 1, mine.VaultItemID, 8); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("shred of another owner's item = %v", err)
+	}
+
+	// The original item survived and still holds its own payload.
+	kept, err := f.vault.GetSecret(ctx, 1, mine.VaultItemID)
+	if err != nil {
+		t.Fatalf("owner's item was damaged: %v", err)
+	}
+	if kept.Payload["login"] != "secret" {
+		t.Fatalf("owner's payload changed: %+v", kept.Payload)
+	}
+}
+
+// TestListTrackersIsOwnerScoped keeps the owner filter honest even inside one
+// personal org: a mis-bound row never appears in another account's list.
+func TestListTrackersIsOwnerScoped(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	f.createTracker(t, 1, 7, "mine", storedSecret{Login: "secret"})
+	f.createTracker(t, 1, 8, "theirs", storedSecret{Login: "other"})
+
+	rows, err := f.plugin.listTrackers(ctx, 1, 7)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(rows) != 1 || rows[0].Name != "mine" {
+		t.Fatalf("owner 7 list = %+v", rows)
+	}
+}
+
 func TestShredMakesCiphertextUnreadable(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	tracker := f.createTracker(t, 1, "demo", storedSecret{Login: "secret"})
+	tracker := f.createTracker(t, 1, 7, "demo", storedSecret{Login: "secret"})
 
-	if err := f.plugin.shredSecret(ctx, 1, tracker.VaultItemID); err != nil {
+	if err := f.plugin.shredSecret(ctx, 1, tracker.VaultItemID, 7); err != nil {
 		t.Fatalf("shred: %v", err)
 	}
 	if _, err := f.vault.GetSecret(ctx, 1, tracker.VaultItemID); !errors.Is(err, plugin.ErrSecretNotFound) {
@@ -336,13 +392,17 @@ func TestShredMakesCiphertextUnreadable(t *testing.T) {
 func TestTenantIsolation(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	tracker := f.createTracker(t, 1, "demo", storedSecret{Login: "secret"})
+	tracker := f.createTracker(t, 1, 7, "demo", storedSecret{Login: "secret"})
 
-	if _, err := f.plugin.findTracker(ctx, 2, tracker.ID); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("cross-workspace lookup = %v", err)
+	if _, err := f.plugin.findTracker(ctx, 2, 7, tracker.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("cross-org lookup = %v", err)
 	}
-	if _, err := f.plugin.findTracker(ctx, 0, tracker.ID); !errors.Is(err, errTenantUnavailable) {
-		t.Fatalf("zero workspace lookup = %v", err)
+	// Same personal org, another account: the owner filter must hide the row.
+	if _, err := f.plugin.findTracker(ctx, 1, 8, tracker.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("cross-owner lookup = %v", err)
+	}
+	if _, err := f.plugin.findTracker(ctx, 0, 7, tracker.ID); !errors.Is(err, errTenantUnavailable) {
+		t.Fatalf("zero org lookup = %v", err)
 	}
 
 	rows, err := f.plugin.orgIDs(ctx)
@@ -357,7 +417,7 @@ func TestTenantIsolation(t *testing.T) {
 func TestDeleteCascadeLeavesNoRows(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	tracker := f.createTracker(t, 1, "demo", storedSecret{Login: "secret"})
+	tracker := f.createTracker(t, 1, 7, "demo", storedSecret{Login: "secret"})
 	if _, err := f.plugin.refresh(ctx, tracker, triggerManual); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
@@ -389,7 +449,7 @@ func TestValidateRefusesWithoutVault(t *testing.T) {
 func TestCronSignsInDueTracker(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	tracker := f.createTracker(t, 1, "demo", storedSecret{Login: "secret"})
+	tracker := f.createTracker(t, 1, 7, "demo", storedSecret{Login: "secret"})
 
 	// A tracker with no planned run is due immediately.
 	if err := f.plugin.runTick(ctx); err != nil {
@@ -407,7 +467,7 @@ func TestCronSignsInDueTracker(t *testing.T) {
 		t.Fatalf("outcome = %q", last.Outcome)
 	}
 
-	reloaded, err := f.plugin.findTracker(ctx, 1, tracker.ID)
+	reloaded, err := f.plugin.findTracker(ctx, 1, 7, tracker.ID)
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}
@@ -419,7 +479,7 @@ func TestCronSignsInDueTracker(t *testing.T) {
 func TestCronSkipsTrackersOutsideTheWindow(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	tracker := f.createTracker(t, 1, "demo", storedSecret{Login: "secret"})
+	tracker := f.createTracker(t, 1, 7, "demo", storedSecret{Login: "secret"})
 
 	// Window 22:00–23:00 UTC; the fixture clock is 09:00 UTC.
 	tracker.SigninWindowStartMin = 22 * 60
@@ -434,7 +494,7 @@ func TestCronSkipsTrackersOutsideTheWindow(t *testing.T) {
 	if got := f.site.attendance.Load(); got != 0 {
 		t.Fatalf("the site was contacted outside the window %d times", got)
 	}
-	reloaded, err := f.plugin.findTracker(ctx, 1, tracker.ID)
+	reloaded, err := f.plugin.findTracker(ctx, 1, 7, tracker.ID)
 	if err != nil {
 		t.Fatalf("reload: %v", err)
 	}

@@ -88,6 +88,10 @@ func (p *Plugin) sessionFor(ctx context.Context, t *PTTracker) (*adapter.Session
 		}
 		return nil, ad, zero, err
 	}
+	// The payload is used only after the item proves to be this owner's.
+	if err := verifyUserSecret(&sec.Meta, t.OwnerUserID); err != nil {
+		return nil, ad, zero, err
+	}
 	secret := secretFromPayload(sec.Payload)
 	if secret.empty() {
 		return nil, ad, zero, errNoCredential
@@ -516,8 +520,8 @@ func (p *Plugin) markManual(ctx context.Context, t *PTTracker, reason string, no
 	})
 }
 
-// patchTracker writes the given columns in the tracker's workspace and applies
-// them to the in-memory row.
+// patchTracker writes the given columns in the tracker's personal org and
+// applies them to the in-memory row.
 func (p *Plugin) patchTracker(ctx context.Context, t *PTTracker, updates map[string]any) {
 	tdb, err := p.tenantDB(ctx, t.OrgID)
 	if err != nil {

@@ -4,7 +4,7 @@ import { ptI18n } from "./i18n";
 
 const pt: UIPlugin = {
   name: "pt",
-  routes: [{ path: "/pt", Component: lazy(() => import("./Page")) }],
+  routes: [{ path: "/personal/pt", Component: lazy(() => import("./Page")) }],
   i18n: ptI18n,
 };
 

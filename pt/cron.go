@@ -37,7 +37,7 @@ func (p *Plugin) limiterRef() *limiter {
 }
 
 // runTick is the scheduler pass: it works out which trackers are due in every
-// workspace and processes them with bounded concurrency.
+// personal org and processes them with bounded concurrency.
 func (p *Plugin) runTick(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, tickBudget)
 	defer cancel()

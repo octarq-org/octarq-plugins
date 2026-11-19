@@ -9,10 +9,14 @@ import (
 	"gorm.io/gorm"
 )
 
-// ErrNotFound is returned when a row does not exist in the caller's workspace.
-// Handlers translate it to 404; a cross-tenant id must be indistinguishable
-// from a missing one.
+// ErrNotFound is returned when a row does not exist in the caller's personal
+// space. Handlers translate it to 404; another owner's id must be
+// indistinguishable from a missing one.
 var ErrNotFound = errors.New("pt: not found")
+
+// errOwnerRequired refuses a write that carries no owner. Personal data is
+// never stored in a shared row.
+var errOwnerRequired = errors.New("pt: owner user id is required")
 
 // errTenantUnavailable means the host did not wire a tenant-scoped handle.
 // Tenant data is never read or written through the unscoped DB instead.
@@ -38,25 +42,28 @@ func (p *Plugin) tenantDB(ctx context.Context, orgID uint) (*plugin.TenantDB, er
 	return nil, errTenantUnavailable
 }
 
-func (p *Plugin) listTrackers(ctx context.Context, orgID uint) ([]PTTracker, error) {
+// listTrackers returns the trackers of one owner inside that owner's personal
+// org. The owner filter is defense in depth: the org scope already isolates the
+// rows, and a zero owner id matches nothing.
+func (p *Plugin) listTrackers(ctx context.Context, orgID, ownerUserID uint) ([]PTTracker, error) {
 	tdb, err := p.tenantDB(ctx, orgID)
 	if err != nil {
 		return nil, err
 	}
 	var out []PTTracker
-	if err := tdb.Scoped(&PTTracker{}).Order("name ASC").Find(&out).Error; err != nil {
+	if err := tdb.Scoped(&PTTracker{}).Where("owner_user_id = ?", ownerUserID).Order("name ASC").Find(&out).Error; err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (p *Plugin) findTracker(ctx context.Context, orgID, id uint) (*PTTracker, error) {
+func (p *Plugin) findTracker(ctx context.Context, orgID, ownerUserID, id uint) (*PTTracker, error) {
 	tdb, err := p.tenantDB(ctx, orgID)
 	if err != nil {
 		return nil, err
 	}
 	var t PTTracker
-	if err := tdb.Scoped(&PTTracker{}).Where("id = ?", id).First(&t).Error; err != nil {
+	if err := tdb.Scoped(&PTTracker{}).Where("owner_user_id = ? AND id = ?", ownerUserID, id).First(&t).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrNotFound
 		}
@@ -65,13 +72,13 @@ func (p *Plugin) findTracker(ctx context.Context, orgID, id uint) (*PTTracker, e
 	return &t, nil
 }
 
-func (p *Plugin) findTrackerByName(ctx context.Context, orgID uint, name string) (*PTTracker, error) {
+func (p *Plugin) findTrackerByName(ctx context.Context, orgID, ownerUserID uint, name string) (*PTTracker, error) {
 	tdb, err := p.tenantDB(ctx, orgID)
 	if err != nil {
 		return nil, err
 	}
 	var t PTTracker
-	if err := tdb.Scoped(&PTTracker{}).Where("name = ?", name).First(&t).Error; err != nil {
+	if err := tdb.Scoped(&PTTracker{}).Where("owner_user_id = ? AND name = ?", ownerUserID, name).First(&t).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrNotFound
 		}
@@ -81,6 +88,9 @@ func (p *Plugin) findTrackerByName(ctx context.Context, orgID uint, name string)
 }
 
 func (p *Plugin) createTracker(ctx context.Context, t *PTTracker) error {
+	if t.OwnerUserID == 0 {
+		return errOwnerRequired
+	}
 	tdb, err := p.tenantDB(ctx, t.OrgID)
 	if err != nil {
 		return err
@@ -234,7 +244,7 @@ func (p *Plugin) claimRequestSlot(ctx context.Context, orgID, trackerID uint, no
 	return res.RowsAffected > 0, nil
 }
 
-// dueTrackers returns the trackers with work pending for one workspace.
+// dueTrackers returns the trackers with work pending in one personal org.
 func (p *Plugin) dueTrackers(ctx context.Context, orgID uint, now time.Time) ([]PTTracker, error) {
 	tdb, err := p.tenantDB(ctx, orgID)
 	if err != nil {
@@ -253,8 +263,8 @@ func (p *Plugin) dueTrackers(ctx context.Context, orgID uint, now time.Time) ([]
 	return out, nil
 }
 
-// orgIDs returns every workspace that has at least one tracker. It is the only
-// query that runs unscoped, and it reads a column, never tenant data.
+// orgIDs returns every personal org that has at least one tracker. It is the
+// only query that runs unscoped, and it reads a column, never tenant data.
 func (p *Plugin) orgIDs(ctx context.Context) ([]uint, error) {
 	db := p.dbRef()
 	if db == nil {

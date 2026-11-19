@@ -17,14 +17,16 @@ import (
 	"gorm.io/gorm"
 )
 
-// routed is a plugin mounted on a live huma API with an org-stamping front door.
+// routed is a plugin mounted on a live huma API with a session-stamping front
+// door. Each test user maps to its own personal org; one user maps to none.
 type routed struct {
-	plugin  *Plugin
-	handler http.Handler
-	db      *gorm.DB
-	site    *fakeSite
-	vault   *mockVaultService
-	perms   func(r *http.Request, key, minRole string) bool
+	plugin       *Plugin
+	handler      http.Handler
+	db           *gorm.DB
+	site         *fakeSite
+	vault        *mockVaultService
+	perms        func(r *http.Request, key, minRole string) bool
+	personalOrgs map[uint]uint
 }
 
 func newRouted(t *testing.T) *routed {
@@ -44,7 +46,11 @@ func newRouted(t *testing.T) *routed {
 	reg := plugin.NewRegistry()
 	reg.Provide(plugin.ServiceVault, plugin.VaultService(vault))
 
-	r := &routed{db: db, site: site, vault: vault}
+	r := &routed{
+		db: db, site: site, vault: vault,
+		// Two accounts with a personal space, one without.
+		personalOrgs: map[uint]uint{7: 101, 8: 102},
+	}
 	r.perms = func(*http.Request, string, string) bool { return true }
 
 	mux := http.NewServeMux()
@@ -62,8 +68,9 @@ func newRouted(t *testing.T) *routed {
 		Lookup:  reg.Lookup,
 		Host: &plugin.TestHost{
 			SessionMock: &plugin.TestSession{
-				UserIDFn:      func(*http.Request) uint { return 7 },
-				RequirePermFn: func(req *http.Request, key, minRole string) bool { return r.perms(req, key, minRole) },
+				UserIDFn:        func(req *http.Request) uint { return userFromHeader(req) },
+				PersonalOrgIDFn: func(req *http.Request) uint { return r.personalOrgs[userFromHeader(req)] },
+				RequirePermFn:   func(req *http.Request, key, minRole string) bool { return r.perms(req, key, minRole) },
 			},
 			TenantDBMock: func(orgID uint) *plugin.TenantDB {
 				tdb, err := plugin.NewTenantDB(db, orgID)
@@ -75,28 +82,33 @@ func newRouted(t *testing.T) *routed {
 		},
 	})
 
-	// Every real request arrives with the tenant already resolved. The test
-	// front door stands in for internal/auth.
+	// Every real request arrives with a workspace and a user. The team
+	// workspace is shared; the personal org is resolved per account.
 	r.handler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ctx := plugin.WithOrgID(req.Context(), orgFromHeader(req))
-		ctx = plugin.WithUserID(ctx, 7)
+		ctx = plugin.WithUserID(ctx, userFromHeader(req))
 		mux.ServeHTTP(w, req.WithContext(ctx))
 	})
 	return r
 }
 
-func orgFromHeader(r *http.Request) uint {
-	switch r.Header.Get("X-Org-ID") {
-	case "2":
-		return 2
-	case "":
-		return 1
-	default:
-		return 1
+func userFromHeader(r *http.Request) uint {
+	if r.Header.Get("X-User-ID") == "8" {
+		return 8
 	}
+	if r.Header.Get("X-User-ID") == "9" {
+		return 9
+	}
+	return 7
 }
 
-func (r *routed) do(t *testing.T, method, path, org string, body any) (*httptest.ResponseRecorder, string) {
+// orgFromHeader stands in for the session's active team workspace. Every test
+// user shares it; only the personal org differs per account.
+func orgFromHeader(*http.Request) uint { return 1 }
+
+// do sends a request as user userID (default 7) inside the shared team
+// workspace org 1.
+func (r *routed) do(t *testing.T, method, path, userID string, body any) (*httptest.ResponseRecorder, string) {
 	t.Helper()
 	var reader *strings.Reader
 	if body == nil {
@@ -110,8 +122,8 @@ func (r *routed) do(t *testing.T, method, path, org string, body any) (*httptest
 	}
 	req := httptest.NewRequest(method, path, reader)
 	req.Header.Set("Content-Type", "application/json")
-	if org != "" {
-		req.Header.Set("X-Org-ID", org)
+	if userID != "" {
+		req.Header.Set("X-User-ID", userID)
 	}
 	rec := httptest.NewRecorder()
 	r.handler.ServeHTTP(rec, req)
@@ -150,13 +162,72 @@ func TestRouteCreateAndList(t *testing.T) {
 		t.Fatalf("list body = %s", body)
 	}
 
-	// Another workspace sees an empty list and its own summary.
-	rec, body = r.do(t, http.MethodGet, "/api/pt/trackers", "2", nil)
+	// Another account sees an empty list, even in the same team workspace.
+	rec, body = r.do(t, http.MethodGet, "/api/pt/trackers", "8", nil)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("org 2 list -> %d %s", rec.Code, body)
+		t.Fatalf("user 8 list -> %d %s", rec.Code, body)
 	}
 	if !strings.Contains(body, `"tracker_count":0`) || strings.Contains(body, `"demo"`) {
-		t.Fatalf("org 2 sees workspace 1 data: %s", body)
+		t.Fatalf("user 8 sees user 7 data: %s", body)
+	}
+}
+
+// TestRouteSameNameInTwoPersonalSpaces proves the unique name is per owner:
+// two accounts in one team workspace may both call their tracker "demo", and
+// neither list shows the other row.
+func TestRouteSameNameInTwoPersonalSpaces(t *testing.T) {
+	r := newRouted(t)
+
+	mine := createBody(r.site)
+	mine["username"] = "alice"
+	if rec, body := r.do(t, http.MethodPost, "/api/pt/trackers", "", mine); rec.Code != http.StatusCreated {
+		t.Fatalf("user 7 create -> %d %s", rec.Code, body)
+	}
+
+	theirs := createBody(r.site)
+	theirs["username"] = "bob"
+	rec, body := r.do(t, http.MethodPost, "/api/pt/trackers", "8", theirs)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("user 8 create with the same name -> %d %s", rec.Code, body)
+	}
+
+	for _, tc := range []struct{ user, username string }{{"", "alice"}, {"8", "bob"}} {
+		rec, body := r.do(t, http.MethodGet, "/api/pt/trackers", tc.user, nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("user %q list -> %d %s", tc.user, rec.Code, body)
+		}
+		if !strings.Contains(body, `"tracker_count":1`) {
+			t.Fatalf("user %q sees %s", tc.user, body)
+		}
+		if !strings.Contains(body, `"username":"`+tc.username+`"`) {
+			t.Fatalf("user %q does not see its own row: %s", tc.user, body)
+		}
+	}
+}
+
+// TestRouteWithoutPersonalSpaceIsForbidden proves the fail-closed path: an
+// account with no personal org gets 403 and never the team workspace rows.
+func TestRouteWithoutPersonalSpaceIsForbidden(t *testing.T) {
+	r := newRouted(t)
+
+	// Seed a row in the shared team workspace. It must stay invisible.
+	seed := &PTTracker{
+		OwnerUserID: 7, OrgID: 1, Name: "team-row", SecretID: "seed",
+		BaseURL: r.site.server.URL, Domain: "example.test", SchemaKey: "nexusphp",
+	}
+	if err := r.db.Create(seed).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	rec, body := r.do(t, http.MethodGet, "/api/pt/trackers", "9", nil)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("list without a personal org -> %d %s", rec.Code, body)
+	}
+	if strings.Contains(body, "team-row") {
+		t.Fatalf("the team workspace leaked into the refusal: %s", body)
+	}
+	if rec, body := r.do(t, http.MethodPost, "/api/pt/trackers", "9", createBody(r.site)); rec.Code != http.StatusForbidden {
+		t.Fatalf("create without a personal org -> %d %s", rec.Code, body)
 	}
 }
 
@@ -201,7 +272,7 @@ func TestRoutePermissionsFailClosed(t *testing.T) {
 	}
 }
 
-func TestRouteCrossTenantDetailIsNotFound(t *testing.T) {
+func TestRouteCrossOwnerDetailIsNotFound(t *testing.T) {
 	r := newRouted(t)
 	rec, body := r.do(t, http.MethodPost, "/api/pt/trackers", "", createBody(r.site))
 	if rec.Code != http.StatusCreated {
@@ -220,11 +291,11 @@ func TestRouteCrossTenantDetailIsNotFound(t *testing.T) {
 		t.Fatalf("owner read -> %d %s", rec.Code, body)
 	}
 	// Absent, not forbidden: a 403 would confirm the id exists.
-	if rec, body := r.do(t, http.MethodGet, path, "2", nil); rec.Code != http.StatusNotFound {
-		t.Fatalf("cross-workspace read -> %d %s", rec.Code, body)
+	if rec, body := r.do(t, http.MethodGet, path, "8", nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("cross-owner read -> %d %s", rec.Code, body)
 	}
-	if rec, _ := r.do(t, http.MethodDelete, path, "2", nil); rec.Code != http.StatusNotFound {
-		t.Fatalf("cross-workspace delete -> %d", rec.Code)
+	if rec, _ := r.do(t, http.MethodDelete, path, "8", nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("cross-owner delete -> %d", rec.Code)
 	}
 }
 

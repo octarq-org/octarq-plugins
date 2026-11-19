@@ -8,7 +8,8 @@ It replaces the account side of a full downloader stack. The plugin keeps an enc
 
 ## Features
 
-- **Encrypted accounts**: account data, browser cookies, and API keys are encrypted with a per-workspace, per-tracker key. The API never returns stored material.
+- **Encrypted accounts**: account data, browser cookies, and API keys are encrypted with a per-user, per-tracker key. The API never returns stored material.
+- **Personal space**: each tracker belongs to one account and lives in that account's personal org. A team admin cannot see another member's tracker.
 - **One-click login**: the server posts the login form and stores the new session.
 - **Daily sign-in**: a window per site, one attempt per day, a ledger of every attempt.
 - **Account data**: level, upload, download, ratio, bonus points, warnings, seeding and leeching counts.
