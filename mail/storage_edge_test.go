@@ -51,7 +51,6 @@ func TestDBStorageProviderRoundTrip(t *testing.T) {
 		t.Fatalf("Stat: %v size=%d (want 9)", err, size)
 	}
 
-	// Missing keys report not-found.
 	if _, err := p.Get(ctx, "missing.eml"); !errors.Is(err, plugin.ErrStorageNotFound) {
 		t.Errorf("Get missing: %v, want ErrStorageNotFound", err)
 	}
@@ -59,7 +58,6 @@ func TestDBStorageProviderRoundTrip(t *testing.T) {
 		t.Errorf("Stat missing: %v, want ErrStorageNotFound", err)
 	}
 
-	// Delete removes the blob.
 	if err := p.Delete(ctx, "a/b.eml"); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}

@@ -18,7 +18,6 @@ func TestEffectiveHosts(t *testing.T) {
 	if got := sub.EffectiveMailHosts(); len(got) != 1 || got[0] != "mail.example.com" {
 		t.Errorf("mail hosts: %v", got)
 	}
-	// Blocks: a disabled-only host blocks; an enabled or unlisted host does not.
 	if !sub.LinkHosts.Blocks("off.example.com") {
 		t.Error("disabled host should block")
 	}

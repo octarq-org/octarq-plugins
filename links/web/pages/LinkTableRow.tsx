@@ -33,7 +33,6 @@ export function LinkTableRow({
 
   return (
     <TR key={l.id} className="hover:bg-well transition-colors group">
-      {/* Title, Short Slug & Host */}
       <TD>
         <div className="flex flex-col gap-1">
           <div className="text-sm font-medium text-foreground truncate max-w-[260px]" title={displayTitle}>
@@ -86,7 +85,6 @@ export function LinkTableRow({
         </div>
       </TD>
 
-      {/* Destination Target URL & Badges */}
       <TD>
         <div className="flex flex-col gap-1">
           <div className="font-mono text-xs text-foreground truncate max-w-[320px]" title={l.target}>
@@ -116,21 +114,18 @@ export function LinkTableRow({
         </div>
       </TD>
 
-      {/* Clicks */}
       <TD className="text-center font-mono">
         <Badge tone="default" className="text-xs font-semibold">
           {l.clicks || 0}
         </Badge>
       </TD>
 
-      {/* Status */}
       <TD className="text-center">
         <StatusBadge tone={l.archived ? "paused" : "success"} className="text-[10px]">
           {l.archived ? t("links.archived") : t("links.active")}
         </StatusBadge>
       </TD>
 
-      {/* Actions */}
       <TD className="text-right">
         <div className="flex items-center justify-end gap-1.5">
           <Button

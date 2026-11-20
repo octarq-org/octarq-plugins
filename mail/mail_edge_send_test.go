@@ -42,7 +42,6 @@ func TestSendEmailEdgeBranches(t *testing.T) {
 	}
 	_ = send
 
-	// Suppressed recipient refused before any SMTP work.
 	p.db.Create(&MailSuppression{OrgID: 1, Address: "blocked@example.com", Reason: "manual"})
 	suppressed := send()
 	suppressed.Body.To = []string{"blocked@example.com"}
@@ -50,14 +49,11 @@ func TestSendEmailEdgeBranches(t *testing.T) {
 		t.Error("sendEmail to a suppressed address must fail")
 	}
 
-	// Rate limiting: a limit-0 limiter refuses everything.
 	p.sendLimiter = newRateLimiter("", "send2", 0, time.Hour)
 	if _, err := p.sendEmail(ctx, send()); err == nil {
 		t.Error("sendEmail past the rate limit must fail")
 	}
 
-	// Counter store failure: the send is refused, and the caller is told the
-	// check failed rather than a limit the caller never reached.
 	p.sendLimiter = &rateLimiter{store: failStore{}, rate: limiter.Rate{Limit: 100, Period: time.Hour}}
 	_, limitErr := p.sendEmail(ctx, send())
 	var statusErr huma.StatusError
@@ -69,31 +65,26 @@ func TestSendEmailEdgeBranches(t *testing.T) {
 	}
 	p.sendLimiter = newRateLimiter("", "send2", 100, time.Hour)
 
-	// Missing sender id -> 400.
 	noSender := send()
 	noSender.Body.SMTPSenderID = 0
 	if _, err := p.sendEmail(ctx, noSender); err == nil {
 		t.Error("missing sender id must fail")
 	}
-	// Unknown sender id -> 400.
 	unknownSender := send()
 	unknownSender.Body.SMTPSenderID = 999
 	if _, err := p.sendEmail(ctx, unknownSender); err == nil {
 		t.Error("unknown sender id must fail")
 	}
-	// Missing To -> 400.
 	noTo := send()
 	noTo.Body.To = nil
 	if _, err := p.sendEmail(ctx, noTo); err == nil {
 		t.Error("missing To must fail")
 	}
-	// Vault unavailable -> 500.
 	mv := p.vaultSvc.(*mockVaultService)
 	p.vaultSvc = nil
 	if _, err := p.sendEmail(ctx, send()); err == nil {
 		t.Error("missing vault must fail with 500")
 	}
-	// Vault error -> 500.
 	mv.getErr = errBoom
 	p.vaultSvc = mv
 	if _, err := p.sendEmail(ctx, send()); err == nil {
@@ -184,7 +175,6 @@ func TestSendEmailTrackLinksWraps(t *testing.T) {
 		t.Fatalf("sendEmail with trackLinks: %v", err)
 	}
 
-	// A wrapped link row exists, host-agnostic, pointing at the original URL.
 	var lk linkRow
 	if err := p.db.Table("links").Where("target = ?", "https://external.example/page").First(&lk).Error; err != nil {
 		t.Fatalf("wrapped link not created: %v", err)
@@ -195,8 +185,6 @@ func TestSendEmailTrackLinksWraps(t *testing.T) {
 	if usageOrg != 1 || usageMetric != plugin.MetricMailOut {
 		t.Errorf("recordUsage = org %d metric %q, want org 1 metric %s", usageOrg, usageMetric, plugin.MetricMailOut)
 	}
-	// The relay received the message, and every external URL now points at the
-	// short-link host instead of the original destination.
 	body := got()
 	if !strings.Contains(body, "http://mail.example.com/") {
 		t.Errorf("relay payload lacks the tracked short link:\n%s", body)
@@ -427,9 +415,6 @@ func TestResolveMethodsSetContextMail(t *testing.T) {
 
 var errNoCtx = fmt.Errorf("huma context not stored")
 
-// The agent tool reports an unreadable send budget as a failed check, so the
-// model is told to retry rather than that it hit a limit the server cannot
-// see.
 func TestSendEmailToolReportsStoreFailure(t *testing.T) {
 	p, _ := setupFullMailTestDB(t)
 	p.sendLimiter = &rateLimiter{store: failStore{}, rate: limiter.Rate{Limit: 100, Period: time.Hour}}

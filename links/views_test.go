@@ -28,7 +28,6 @@ func TestRegisterViews(t *testing.T) {
 		viewsMap[v.Name] = v
 	}
 
-	// tenant_links
 	tl, ok := viewsMap["tenant_links"]
 	if !ok {
 		t.Fatal("tenant_links view not registered")
@@ -44,7 +43,6 @@ func TestRegisterViews(t *testing.T) {
 		t.Errorf("tenant_links definition missing WHERE owner_id = 42: %s", defTL)
 	}
 
-	// tenant_link_events
 	tle, ok := viewsMap["tenant_link_events"]
 	if !ok {
 		t.Fatal("tenant_link_events view not registered")
@@ -60,7 +58,6 @@ func TestRegisterViews(t *testing.T) {
 		t.Errorf("tenant_link_events definition missing WHERE l.owner_id = 42: %s", defTLE)
 	}
 
-	// Nil ctx or nil RegisterTenantView should not panic
 	links.RegisterViews(nil)
 	links.RegisterViews(&plugin.Context{})
 }

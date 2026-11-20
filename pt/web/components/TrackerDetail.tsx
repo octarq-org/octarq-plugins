@@ -20,8 +20,6 @@ import { formatBytes, formatDateTime, formatRatio, outcomeKey, outcomeTone } fro
 
 type Tab = "overview" | "traffic" | "signins";
 
-// TrackerDetail shows the stored history of one account. Both lists are read
-// only: the page never changes data from here.
 export interface TrackerDetailProps {
   tracker: Tracker;
   onClose: () => void;

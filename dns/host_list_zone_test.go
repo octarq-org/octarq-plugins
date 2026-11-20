@@ -7,11 +7,6 @@ import (
 	"testing"
 )
 
-// Guard 4: host lists are the serving surface of their own domain — every
-// entry must be the domain's Name or a subdomain of it. Domain.Name is unique
-// across the table, so this is what makes it impossible for two orgs to
-// legally claim the same hostname through their lists (the JSON columns have
-// no uniqueness constraint of their own).
 func TestCreateDomainRejectsHostListsOutsideZone(t *testing.T) {
 	p, mkCtx := setupFullDNSTestDB(t)
 	acc := ProviderAccount{OrgID: 1, Name: "P", Type: "cloudflare"}
@@ -24,10 +19,7 @@ func TestCreateDomainRejectsHostListsOutsideZone(t *testing.T) {
 	rejected := []domainDTO{
 		{Name: "example.com", ProviderAccountID: acc.ID, LinkHosts: &[]hostEntry{{Host: "victim.test", Enabled: &enabled}}},
 		{Name: "example.com", ProviderAccountID: acc.ID, MailHosts: &[]hostEntry{{Host: "evil.net", Enabled: &enabled}}},
-		// A bare suffix must not smuggle an outside host in: "notexample.com"
-		// is not a subdomain of "example.com".
 		{Name: "example.com", ProviderAccountID: acc.ID, LinkHosts: &[]hostEntry{{Host: "notexample.com", Enabled: &enabled}}},
-		// Normalization must not smuggle one in either.
 		{Name: "example.com", ProviderAccountID: acc.ID, MailHosts: &[]hostEntry{{Host: "HTTPS://Victim.Test:8443", Enabled: &enabled}}},
 	}
 	for _, dto := range rejected {
@@ -42,7 +34,6 @@ func TestCreateDomainRejectsHostListsOutsideZone(t *testing.T) {
 		}
 	}
 
-	// The apex itself and subdomains of it are inside the zone and accepted.
 	req := httptest.NewRequest(http.MethodPost, "/api/dns/domains", nil)
 	if _, err := p.createDomain(ctx, &CreateDomainInput{
 		Ctx: mkCtx(req),
@@ -54,8 +45,6 @@ func TestCreateDomainRejectsHostListsOutsideZone(t *testing.T) {
 	}
 }
 
-// The same zone rule must hold when an existing domain's host lists are
-// edited, and a rejected edit must not write anything.
 func TestUpdateDomainRejectsHostListsOutsideZone(t *testing.T) {
 	p, mkCtx := setupFullDNSTestDB(t)
 	acc := ProviderAccount{OrgID: 1, Name: "P", Type: "cloudflare"}
@@ -85,7 +74,6 @@ func TestUpdateDomainRejectsHostListsOutsideZone(t *testing.T) {
 		t.Errorf("a rejected update still wrote the host list: %+v", after.LinkHosts)
 	}
 
-	// In-zone hosts still work on update.
 	req2 := httptest.NewRequest(http.MethodPut, "/api/dns/domains/1", nil)
 	if _, err := p.updateDomain(ctx, &UpdateDomainInput{
 		Ctx:  mkCtx(req2),

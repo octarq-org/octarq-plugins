@@ -46,7 +46,6 @@ func TestLinksCRUDHandlers(t *testing.T) {
 	p, mkCtx := setupFullLinksTestDB(t)
 	ctx := context.Background()
 
-	// 1. Create Link
 	reqCreate := httptest.NewRequest(http.MethodPost, "/api/links", nil)
 	createIn := &CreateLinkInput{
 		Ctx: mkCtx(reqCreate),
@@ -63,7 +62,6 @@ func TestLinksCRUDHandlers(t *testing.T) {
 	}
 	linkID := outCreate.Body.ID
 
-	// 2. List Links
 	reqList := httptest.NewRequest(http.MethodGet, "/api/links?q=Promo", nil)
 	listOut, err := p.listLinks(ctx, &ListLinksInput{
 		Ctx: mkCtx(reqList),
@@ -74,7 +72,6 @@ func TestLinksCRUDHandlers(t *testing.T) {
 		t.Fatalf("listLinks error=%v, count=%d", err, len(listOut.Body))
 	}
 
-	// 3. Update Link
 	reqUp := httptest.NewRequest(http.MethodPut, "/api/links/1", nil)
 	upOut, err := p.updateLink(ctx, &UpdateLinkInput{
 		Ctx: mkCtx(reqUp),
@@ -88,14 +85,12 @@ func TestLinksCRUDHandlers(t *testing.T) {
 		t.Fatalf("updateLink error=%v, out=%+v", err, upOut)
 	}
 
-	// 4. Export Links CSV
 	reqExport := httptest.NewRequest(http.MethodGet, "/api/links/export.csv", nil)
 	_, err = p.exportLinksCSV(ctx, &ExportLinksCSVInput{Ctx: mkCtx(reqExport)})
 	if err != nil {
 		t.Fatalf("exportLinksCSV error: %v", err)
 	}
 
-	// 5. Delete Link - member forbidden
 	reqDelMember := httptest.NewRequest(http.MethodDelete, "/api/links/1", nil)
 	reqDelMember.Header.Set("X-Role", "member")
 	_, err = p.deleteLink(ctx, &DeleteLinkInput{Ctx: mkCtx(reqDelMember), ID: linkID})
@@ -103,7 +98,6 @@ func TestLinksCRUDHandlers(t *testing.T) {
 		t.Error("expected 403 when deleting link as member")
 	}
 
-	// Delete Link - admin success
 	reqDelAdmin := httptest.NewRequest(http.MethodDelete, "/api/links/1", nil)
 	reqDelAdmin.Header.Set("X-Role", "admin")
 	delOut, err := p.deleteLink(ctx, &DeleteLinkInput{Ctx: mkCtx(reqDelAdmin), ID: linkID})
@@ -125,9 +119,6 @@ func TestLinksOverview(t *testing.T) {
 	}
 }
 
-// LinkEvent cleanup on delete is scoped through the owned link, so deleting (or
-// attempting to delete) a link can never remove another workspace's analytics
-// rows even if the ownership check above were ever skipped or reordered.
 func TestDeleteLinkCleansOnlyOwnOrgEvents(t *testing.T) {
 	t.Parallel()
 
@@ -189,7 +180,6 @@ func TestLinkPasswordPreservationAndPlaintext(t *testing.T) {
 	p, mkCtx := setupFullLinksTestDB(t)
 	ctx := context.Background()
 
-	// 1. Create link with password
 	pw := "secret123"
 	reqCreate := httptest.NewRequest(http.MethodPost, "/api/links", nil)
 	createIn := &CreateLinkInput{
@@ -213,7 +203,6 @@ func TestLinkPasswordPreservationAndPlaintext(t *testing.T) {
 
 	linkID := outCreate.Body.ID
 
-	// 2. Update other fields without passing Password (Password == nil) -> Password MUST NOT be cleared
 	reqUpdate1 := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/links/%d", linkID), nil)
 	updateIn1 := &UpdateLinkInput{
 		Ctx: mkCtx(reqUpdate1),
@@ -233,7 +222,6 @@ func TestLinkPasswordPreservationAndPlaintext(t *testing.T) {
 		t.Errorf("expected HasPassword to remain true, got false")
 	}
 
-	// 3. Update password explicitly
 	newPw := "updated456"
 	reqUpdate2 := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/links/%d", linkID), nil)
 	updateIn2 := &UpdateLinkInput{
@@ -254,7 +242,6 @@ func TestLinkPasswordPreservationAndPlaintext(t *testing.T) {
 		t.Errorf("expected HasPassword true, got false")
 	}
 
-	// 4. Explicitly clear password with empty string
 	emptyPw := ""
 	reqUpdate3 := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/links/%d", linkID), nil)
 	updateIn3 := &UpdateLinkInput{
@@ -311,7 +298,6 @@ func TestLinkJSONSerializationOmitsPassword(t *testing.T) {
 		t.Fatalf("expected \"hasPassword\": true in JSON, got %v (%s)", createdMap["hasPassword"], rawCreated)
 	}
 
-	// Verify listLinks output as well.
 	reqList := httptest.NewRequest(http.MethodGet, "/api/links", nil)
 	outList, err := p.listLinks(ctx, &ListLinksInput{Ctx: mkCtx(reqList)})
 	if err != nil {

@@ -89,7 +89,6 @@ func TestWrapLinksInEmail(t *testing.T) {
 		},
 	}
 
-	// Set up custom link domain
 	db.Table("domains").Create(&domainRow{
 		OrgID:   1,
 		Name:    "short.mycorp.com",
@@ -109,7 +108,6 @@ func TestWrapLinksInEmail(t *testing.T) {
 
 	p.wrapLinksInEmail(req, &msg)
 
-	// Assertions on text
 	if !strings.Contains(msg.Text, "http://short.mycorp.com/") {
 		t.Errorf("Text links not wrapped correctly: %q", msg.Text)
 	}
@@ -117,7 +115,6 @@ func TestWrapLinksInEmail(t *testing.T) {
 		t.Errorf("Original Google URL still present in Text: %q", msg.Text)
 	}
 
-	// Assertions on HTML
 	if !strings.Contains(msg.HTML, "http://short.mycorp.com/") {
 		t.Errorf("HTML links not wrapped correctly: %q", msg.HTML)
 	}
@@ -125,14 +122,12 @@ func TestWrapLinksInEmail(t *testing.T) {
 		t.Errorf("Original Google URL still present in HTML: %q", msg.HTML)
 	}
 
-	// Check that links are stored in DB
 	var links []linkRow
 	db.Table("links").Find(&links)
 	if len(links) != 2 {
 		t.Errorf("expected 2 links generated in DB, got %d", len(links))
 	}
 
-	// Verify targets are correct
 	targets := map[string]bool{
 		"https://google.com":           true,
 		"http://example.com/some/path": true,
@@ -249,7 +244,6 @@ func TestWrapLinksSlugExhaustionFallback(t *testing.T) {
 
 	p.wrapLinksInEmail(req, &msg)
 
-	// Assertions: original URL returned without shortlink wrapping
 	if !strings.Contains(msg.Text, "https://example.com/target") || strings.Contains(msg.Text, "short.mycorp.com") {
 		t.Errorf("expected original URL in Text on slug exhaustion, got %q", msg.Text)
 	}
@@ -257,7 +251,6 @@ func TestWrapLinksSlugExhaustionFallback(t *testing.T) {
 		t.Errorf("expected original URL in HTML on slug exhaustion, got %q", msg.HTML)
 	}
 
-	// Verify no Link rows were created in DB
 	var allLinks []linkRow
 	db.Table("links").Find(&allLinks)
 	if len(allLinks) != 0 {
@@ -277,7 +270,6 @@ func TestWrapLinksNoServiceGracefulFallback(t *testing.T) {
 	p := New()
 	p.db = db
 	p.orgID = func(r *http.Request) uint { return 1 }
-	// p.ctx is nil, simulating absence of links plugin
 
 	msg := mail.Message{
 		Text: "Hello, visit https://google.com for info.",

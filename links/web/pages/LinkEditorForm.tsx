@@ -77,9 +77,6 @@ export function LinkEditorForm({
   const hosts = rawHosts ?? [];
   const { t } = useTranslation();
   const [slug, setSlug] = useState(link?.slug ?? "");
-  // New links default to the first real link host when one exists; editing an
-  // existing link always keeps its own host. A bare "" default would drop every
-  // new Cloud link into the cross-tenant host='' shared pool.
   const [host, setHost] = useState(() => (link ? (link.host ?? "") : hosts.length > 0 ? hosts[0] : ""));
   const [target, setTarget] = useState(link?.target ?? "");
   const [title, setTitle] = useState(link?.title ?? "");
@@ -125,7 +122,6 @@ export function LinkEditorForm({
       const m = await linksApi.linkMetadata(target);
       if (m.title) setTitle(m.title);
     } catch {
-      /* ignore */
     } finally {
       setFetching(false);
     }
@@ -155,9 +151,6 @@ export function LinkEditorForm({
       else res = await linksApi.createLink(payload);
       onSaved(res);
     } catch (e: any) {
-      // The backend refuses hostless links on multi-tenant instances. That
-      // specific 400 gets a localized line; everything else keeps the server's
-      // own message (FormError's normal contract).
       if (e?.status === 400 && typeof e?.message === "string" && e.message.includes("host is required")) {
         setErr({ message: t("links.hostRequired"), status: 400, requestId: e.requestId });
       } else {
@@ -231,9 +224,6 @@ export function LinkEditorForm({
             value={host}
             onValueChange={setHost}
             options={[
-              // The hostless "Default (Apex Domain)" option is only offered when
-              // no link host exists; once one does, exposing it would let users
-              // drop their links back into the shared host='' pool.
               ...(hosts.length === 0 ? [{ value: "", label: t("links.defaultApexDomain") }] : []),
               ...hosts.map((h) => ({ value: h, label: h })),
               ...(host && !hosts.includes(host) ? [{ value: host, label: host }] : []),
@@ -329,7 +319,6 @@ function UtmBuilder({ target, onApply }: { target: string; onApply: (url: string
       }
       onApply(u.toString());
     } catch {
-      /* ignore */
     }
   }
   const fields: [keyof typeof utm, string][] = [

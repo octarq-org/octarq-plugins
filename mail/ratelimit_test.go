@@ -20,7 +20,6 @@ func TestRateLimiterMemory(t *testing.T) {
 		t.Errorf("expected allow to be false after 2 failures")
 	}
 
-	// Different IP should still be allowed
 	if ok, err := rl.allow("5.6.7.8"); !ok || err != nil {
 		t.Errorf("expected different IP to be allowed, got ok=%v err=%v", ok, err)
 	}

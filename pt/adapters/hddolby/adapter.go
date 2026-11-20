@@ -1,5 +1,3 @@
-// Package hddolby implements the HDDolby dialect: a read-only account API
-// behind an API key.
 package hddolby
 
 import (
@@ -12,10 +10,8 @@ import (
 	"github.com/octarq-org/octarq-plugins/pt/adapter"
 )
 
-// Adapter is the HDDolby dialect.
 type Adapter struct{}
 
-// New returns the dialect.
 func New() *Adapter { return &Adapter{} }
 
 func (*Adapter) Schema() adapter.Schema { return adapter.SchemaHDDolby }
@@ -103,7 +99,6 @@ func fetchUserData(ctx context.Context, s *adapter.Session) (map[string]any, err
 	if !ok {
 		return nil, &adapter.OpError{Op: "user_data", Schema: adapter.SchemaHDDolby, Kind: adapter.KindParse, Err: errors.New("no data in response")}
 	}
-	// The API wraps the single record in a one-element list.
 	if record, ok := adapter.FirstMap(data); ok {
 		return record, nil
 	}

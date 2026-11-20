@@ -14,13 +14,6 @@ import (
 	"github.com/octarq-org/octarq-plugins/pt/adapter"
 )
 
-// The fixtures below are synthetic. They reproduce the NexusPHP shape that
-// matters — a form login, a 302 with session cookies, Chinese traffic labels —
-// and carry no real site data, account, or cookie.
-//
-// The form field names are interpolated from the package constants so the file
-// never spells the protocol's secret field literally.
-
 var (
 	loginFields = `<input type="text" name="` + loginFieldName + `" />
   <input type="` + passwordInputType + `" name="` + loginFieldPass + `" />`
@@ -73,7 +66,6 @@ var (
 </body></html>`
 )
 
-// passwordInputType is the input type the login form uses for the secret.
 const passwordInputType = "password"
 
 type fakeSite struct {
@@ -333,8 +325,6 @@ func TestCloudflareChallengeIsManualAction(t *testing.T) {
 	}
 }
 
-// TestVisibleTextDropsScripts guards the evidence source: script bodies contain
-// words like "signin" that would otherwise be reported as page evidence.
 func TestVisibleTextDropsScripts(t *testing.T) {
 	body := `<html><head><script>var signin = true;</script></head><body><p>欢迎回来</p></body></html>`
 	doc, err := parseDoc([]byte(body))

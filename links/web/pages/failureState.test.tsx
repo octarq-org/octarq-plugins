@@ -1,7 +1,4 @@
 // @vitest-environment happy-dom
-// A failed first page used to be swallowed (`catch` only handled 402/404), so
-// `links` stayed empty and the page rendered "This workspace has no short links
-// yet." over a 500 — telling the operator their links were gone.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";

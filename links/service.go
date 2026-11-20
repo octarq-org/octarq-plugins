@@ -9,10 +9,6 @@ import (
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
-// CreateLink implements plugin.LinkCreator: it creates an enabled short link for
-// targetURL in orgID's workspace on the default host with a random slug and
-// returns the slug. It is the programmatic entry behind the "links.create"
-// service (Provide/LookupAs), mirroring POST /api/links without a request.
 func (p *Plugin) CreateLink(ctx context.Context, orgID uint, targetURL string) (string, error) {
 	if orgID == 0 {
 		return "", fmt.Errorf("orgID is required")
@@ -42,5 +38,4 @@ func (p *Plugin) CreateLink(ctx context.Context, orgID uint, targetURL string) (
 	return l.Slug, nil
 }
 
-// Compile-time assertion that the links plugin satisfies the public seam.
 var _ plugin.LinkCreator = (*Plugin)(nil)

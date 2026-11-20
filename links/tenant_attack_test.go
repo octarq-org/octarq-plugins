@@ -19,7 +19,6 @@ func TestLinks_CrossTenantAttack_AntiPenetration(t *testing.T) {
 	p, mkCtx := setupFullLinksTestDB(t)
 	ctx := context.Background()
 
-	// Seed links for Org 1 and Org 2
 	link1 := Link{
 		OrgID:   1,
 		Slug:    "org1-slug",
@@ -41,7 +40,6 @@ func TestLinks_CrossTenantAttack_AntiPenetration(t *testing.T) {
 		t.Fatalf("failed to seed link2: %v", err)
 	}
 
-	// Attack Scenario 1: Tenant 1 attempts to UPDATE Tenant 2's link (ID privilege escalation)
 	t.Run("UpdateOtherTenantLink_Returns404", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPut, "/api/links/update", nil)
 		req.Header.Set("X-Org-ID", "1")
@@ -67,7 +65,6 @@ func TestLinks_CrossTenantAttack_AntiPenetration(t *testing.T) {
 			t.Fatalf("expected 404 NotFound, got: %v", err)
 		}
 
-		// Verify link2 in DB was NOT tampered with
 		var check Link
 		if err := p.db.First(&check, link2.ID).Error; err != nil {
 			t.Fatalf("failed to reload link2: %v", err)
@@ -77,7 +74,6 @@ func TestLinks_CrossTenantAttack_AntiPenetration(t *testing.T) {
 		}
 	})
 
-	// Attack Scenario 2: Tenant 1 attempts to DELETE Tenant 2's link
 	t.Run("DeleteOtherTenantLink_Returns404", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodDelete, "/api/links/delete", nil)
 		req.Header.Set("X-Org-ID", "1")
@@ -98,14 +94,12 @@ func TestLinks_CrossTenantAttack_AntiPenetration(t *testing.T) {
 			t.Fatalf("expected 404 NotFound, got: %v", err)
 		}
 
-		// Verify link2 still exists in DB
 		var check Link
 		if err := p.db.First(&check, link2.ID).Error; err != nil {
 			t.Fatalf("link2 was deleted by tenant 1: %v", err)
 		}
 	})
 
-	// Attack Scenario 3: Tenant 1 exports CSV; must NOT see Tenant 2's links
 	t.Run("ExportCSV_DoesNotExposeOtherTenant", func(t *testing.T) {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/api/links/export", nil)
@@ -128,14 +122,12 @@ func TestLinks_CrossTenantAttack_AntiPenetration(t *testing.T) {
 		}
 	})
 
-	// Attack Scenario 4: Direct TenantDB injection / privilege escalation
 	t.Run("DirectTenantDB_FailClosedEnforcement", func(t *testing.T) {
 		tdb1 := p.tenantDB(1)
 		if tdb1 == nil {
 			t.Fatalf("tenantDB(1) is nil")
 		}
 
-		// Attacker attempts to insert record with mismatched OrgID
 		spoofedLink := Link{
 			OrgID:   2,
 			Slug:    "spoofed-slug",
@@ -146,7 +138,6 @@ func TestLinks_CrossTenantAttack_AntiPenetration(t *testing.T) {
 			t.Fatalf("expected error when inserting OrgID 2 into TenantDB(1), got nil")
 		}
 
-		// Attacker attempts to overwrite tenant 2 record via Save
 		spoofedSave := Link{
 			ID:      link2.ID,
 			OrgID:   2,
@@ -158,7 +149,6 @@ func TestLinks_CrossTenantAttack_AntiPenetration(t *testing.T) {
 			t.Fatalf("expected error when saving OrgID 2 into TenantDB(1), got nil")
 		}
 
-		// Attacker attempts to query Tenant 2 link via Scoped handle
 		var forbidden Link
 		if err := tdb1.Where("id = ?", link2.ID).First(&forbidden).Error; err == nil {
 			t.Fatalf("tenant 1 TenantDB read tenant 2 link: %+v", forbidden)
@@ -166,13 +156,11 @@ func TestLinks_CrossTenantAttack_AntiPenetration(t *testing.T) {
 			t.Fatalf("expected gorm.ErrRecordNotFound, got: %v", err)
 		}
 
-		// Attacker attempts map update with mismatched OrgID
 		if err := tdb1.Model(&Link{}).Where("id = ?", link1.ID).Updates(map[string]any{"org_id": 2}).Error; err == nil {
 			t.Fatalf("expected error when updating org_id to 2 via TenantDB(1), got nil")
 		}
 	})
 
-	// Attack Scenario 5: High-concurrency cross-tenant reads and mutations (-race test)
 	t.Run("ConcurrentCrossTenantAccess_NoStateLeak", func(t *testing.T) {
 		var wg sync.WaitGroup
 		errCh := make(chan error, 40)
@@ -180,7 +168,6 @@ func TestLinks_CrossTenantAttack_AntiPenetration(t *testing.T) {
 		for i := 0; i < 20; i++ {
 			wg.Add(2)
 
-			// Goroutine Tenant 1
 			go func() {
 				defer wg.Done()
 				tdb := p.tenantDB(1)
@@ -196,7 +183,6 @@ func TestLinks_CrossTenantAttack_AntiPenetration(t *testing.T) {
 				}
 			}()
 
-			// Goroutine Tenant 2
 			go func() {
 				defer wg.Done()
 				tdb := p.tenantDB(2)

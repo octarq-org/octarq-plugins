@@ -29,7 +29,6 @@ type cfCreds struct {
 	APIToken string `json:"apiToken"`
 }
 
-// Cloudflare implements Provider using the official Cloudflare Go SDK.
 type Cloudflare struct {
 	api *cloudflare.API
 }

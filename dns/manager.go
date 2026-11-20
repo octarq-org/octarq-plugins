@@ -8,20 +8,10 @@ import (
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
-// dnsManager adapts the plugin's per-domain DNS provider to the stable
-// plugin.DNSManager seam, so Pro plugins (e.g. the AI MCP tools) can change real
-// DNS records without importing internal/provider. It resolves each domain's
-// zone and credentials via the same providerFor() the dashboard uses.
 type dnsManager struct{ p *Plugin }
 
-// DNSManager returns the plugin-facing DNS manager backed by this plugin. The
-// app provides it as the "dns.manager" service and wires ctx.DNS to it.
 func (p *Plugin) DNSManager() plugin.DNSManager { return dnsManager{p} }
 
-// resolve loads a domain owned by orgID and builds its DNS provider. The org
-// scope is the seam's own tenant boundary: a caller that forgets to check
-// ownership gets "domain not found" here rather than a write into someone
-// else's zone. An unset orgID is a caller bug, not a wildcard.
 func (m dnsManager) resolve(orgID, domainID uint) (Domain, provider.Provider, error) {
 	var dom Domain
 	if orgID == 0 {
@@ -34,8 +24,6 @@ func (m dnsManager) resolve(orgID, domainID uint) (Domain, provider.Provider, er
 	return dom, prov, err
 }
 
-// errOrgRequired is returned when a caller passes no org, which would otherwise
-// silently widen the lookup to every tenant's domains.
 var errOrgRequired = errors.New("dns: an org id is required to resolve a domain")
 
 func (m dnsManager) List(ctx context.Context, orgID, domainID uint) ([]plugin.DNSRecord, error) {

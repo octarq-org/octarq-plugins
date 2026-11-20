@@ -12,14 +12,11 @@ var snsHostRegex = regexp.MustCompile(`^sns\.[a-z0-9-]+\.amazonaws\.com$`)
 
 type bounceEvent struct {
 	Email      string
-	Event      string // "bounce" or "complaint"
-	BounceType string // "Permanent", "Transient", "Undetermined"
+	Event      string
+	BounceType string
 	Details    string
 }
 
-// isAWSSNSURL reports whether u is a legitimate AWS SNS confirmation URL: https
-// to an sns.<region>.amazonaws.com host. This blocks the SubscribeURL (which is
-// attacker-influenced) from pointing the server at arbitrary/internal hosts.
 func isAWSSNSURL(u string) bool {
 	parsed, err := url.Parse(u)
 	if err != nil || parsed.Scheme != "https" {
@@ -61,7 +58,6 @@ func extractBounceEvents(body []byte) []bounceEvent {
 	parseMap := func(m map[string]any) []bounceEvent {
 		var results []bounceEvent
 
-		// 1. SES Format
 		if nType, ok := m["notificationType"].(string); ok {
 			switch nType {
 			case "Bounce":
@@ -108,7 +104,6 @@ func extractBounceEvents(body []byte) []bounceEvent {
 			}
 		}
 
-		// 2. Mailgun Format
 		if edVal, ok := m["event-data"].(map[string]any); ok {
 			ev, _ := edVal["event"].(string)
 			recipient, _ := edVal["recipient"].(string)
@@ -134,7 +129,6 @@ func extractBounceEvents(body []byte) []bounceEvent {
 			}
 		}
 
-		// 3. SendGrid / Generic Format
 		var email, rawEvent, details, rawType string
 		for _, key := range []string{"email", "recipient", "address", "rcpt"} {
 			if eVal, ok := m[key].(string); ok && eVal != "" {

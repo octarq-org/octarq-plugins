@@ -177,7 +177,6 @@ type ReadAllEmailsOutput struct {
 	Body map[string]any
 }
 
-// readAllEmails marks every email read, optionally scoped to one mailbox.
 func (p *Plugin) readAllEmails(ctx context.Context, input *ReadAllEmailsInput) (*ReadAllEmailsOutput, error) {
 	if input.Ctx == nil {
 		return nil, huma.Error500InternalServerError("An unexpected error occurred while processing the request context.")

@@ -19,19 +19,14 @@ const (
 	triggerManual = "manual"
 )
 
-// errNoCredential means the tracker has no stored credential at all. It is a
-// configuration fault; asking the site would only produce a misleading answer.
 var errNoCredential = errors.New("pt: tracker has no stored credential")
 
-// errManualAction carries the machine reason a human must act.
 type errManualAction struct{ Reason string }
 
 func (e *errManualAction) Error() string {
 	return "pt: manual action required: " + e.Reason
 }
 
-// actionOutcome is the result of a login, sign-in, or refresh, as the API and
-// the scheduler see it.
 type actionOutcome struct {
 	Outcome      string     `json:"outcome"`
 	Reason       string     `json:"reason,omitempty"`
@@ -44,7 +39,6 @@ type actionOutcome struct {
 	NextStatsAt  *time.Time `json:"next_stats_at,omitempty"`
 }
 
-// siteOf converts a tracker row into the dialect's view of the site.
 func siteOf(t *PTTracker) adapter.Site {
 	timeout := time.Duration(t.TimeoutSeconds) * time.Second
 	if timeout <= 0 {
@@ -65,7 +59,6 @@ func siteOf(t *PTTracker) adapter.Site {
 	}
 }
 
-// sessionFor builds an adapter session, resolving the credential from VaultService first.
 func (p *Plugin) sessionFor(ctx context.Context, t *PTTracker) (*adapter.Session, adapter.Adapter, storedSecret, error) {
 	var zero storedSecret
 
@@ -88,7 +81,6 @@ func (p *Plugin) sessionFor(ctx context.Context, t *PTTracker) (*adapter.Session
 		}
 		return nil, ad, zero, err
 	}
-	// The payload is used only after the item proves to be this owner's.
 	if err := verifyUserSecret(&sec.Meta, t.OwnerUserID); err != nil {
 		return nil, ad, zero, err
 	}
@@ -116,15 +108,12 @@ func (p *Plugin) sessionFor(ctx context.Context, t *PTTracker) (*adapter.Session
 	}, ad, secret, nil
 }
 
-// ensureSession proves the stored session works, and signs in again when the
-// dialect can do so without a human.
 func (p *Plugin) ensureSession(ctx context.Context, t *PTTracker, s *adapter.Session, ad adapter.Adapter, secret storedSecret) error {
 	res, err := ad.CheckSession(ctx, s)
 	switch {
 	case err == nil && res != nil && res.LoggedIn:
 		return nil
 	case err != nil && !errors.Is(err, adapter.ErrAuth) && !errors.Is(err, adapter.ErrCookieGone):
-		// A transport fault says nothing about the credential.
 		return err
 	}
 
@@ -154,7 +143,6 @@ func (p *Plugin) ensureSession(ctx context.Context, t *PTTracker, s *adapter.Ses
 	return nil
 }
 
-// login refreshes the session on request.
 func (p *Plugin) login(ctx context.Context, t *PTTracker) (*actionOutcome, error) {
 	s, ad, secret, err := p.sessionFor(ctx, t)
 	if err != nil {
@@ -206,7 +194,6 @@ func (p *Plugin) login(ctx context.Context, t *PTTracker) (*actionOutcome, error
 	return out, nil
 }
 
-// refresh reads statistics and stores a snapshot.
 func (p *Plugin) refresh(ctx context.Context, t *PTTracker, trigger string) (*PTSnapshot, error) {
 	s, ad, secret, err := p.sessionFor(ctx, t)
 	if err != nil {
@@ -278,8 +265,6 @@ func (p *Plugin) refresh(ctx context.Context, t *PTTracker, trigger string) (*PT
 	return snap, nil
 }
 
-// signin performs the daily sign-in. force skips the once-per-day check that
-// manual retries need.
 func (p *Plugin) signin(ctx context.Context, t *PTTracker, trigger string, force bool) (*PTSigninResult, error) {
 	now := p.clock()
 
@@ -324,7 +309,6 @@ func (p *Plugin) signin(ctx context.Context, t *PTTracker, trigger string, force
 				p.patchTracker(ctx, t, map[string]any{"next_signin_at": next})
 				return nil, err
 			}
-			// A manual attempt is a recorded verdict, not a silent deferral.
 			res := &PTSigninResult{
 				OrgID: t.OrgID, TrackerID: t.ID, AttemptedAt: now, Trigger: trigger,
 				Outcome: string(adapter.OutcomeRateLimited),
@@ -372,7 +356,6 @@ func (p *Plugin) signin(ctx context.Context, t *PTTracker, trigger string, force
 	return record, nil
 }
 
-// applySigninOutcome updates the tracker's schedule and health from a verdict.
 func (p *Plugin) applySigninOutcome(ctx context.Context, t *PTTracker, r *PTSigninResult, now time.Time) {
 	updates := map[string]any{
 		"last_signin_at":       now,
@@ -426,7 +409,6 @@ func (p *Plugin) applySigninOutcome(ctx context.Context, t *PTTracker, r *PTSign
 	p.patchTracker(ctx, t, updates)
 }
 
-// recordSigninFailure stores a failure and returns the row.
 func (p *Plugin) recordSigninFailure(ctx context.Context, t *PTTracker, trigger string, err error, now time.Time) *PTSigninResult {
 	res := &PTSigninResult{
 		OrgID:       t.OrgID,
@@ -444,8 +426,6 @@ func (p *Plugin) recordSigninFailure(ctx context.Context, t *PTTracker, trigger 
 	return res
 }
 
-// gateRequest applies the per-domain limiter and the DB-backed minimum-gap
-// claim before any request that the site would notice.
 func (p *Plugin) gateRequest(ctx context.Context, t *PTTracker, now time.Time) error {
 	_, ad, _, err := p.sessionFor(ctx, t)
 	if err != nil {
@@ -470,7 +450,6 @@ func (p *Plugin) gateRequest(ctx context.Context, t *PTTracker, now time.Time) e
 	return nil
 }
 
-// recordSessionError updates health from a session or transport failure.
 func (p *Plugin) recordSessionError(ctx context.Context, t *PTTracker, err error, now time.Time) {
 	updates := map[string]any{
 		"consecutive_failures": t.ConsecutiveFailures + 1,
@@ -520,8 +499,6 @@ func (p *Plugin) markManual(ctx context.Context, t *PTTracker, reason string, no
 	})
 }
 
-// patchTracker writes the given columns in the tracker's personal org and
-// applies them to the in-memory row.
 func (p *Plugin) patchTracker(ctx context.Context, t *PTTracker, updates map[string]any) {
 	tdb, err := p.tenantDB(ctx, t.OrgID)
 	if err != nil {
@@ -538,8 +515,6 @@ func (p *Plugin) patchTracker(ctx context.Context, t *PTTracker, updates map[str
 	}
 }
 
-// notify emits a user-visible alert, deduplicated by outcome transition and a
-// 24 hour window.
 func (p *Plugin) notify(ctx context.Context, t *PTTracker, outcome, message string, now time.Time) {
 	if p.emit == nil || outcome == "" {
 		return
@@ -587,8 +562,6 @@ func signinCountsAsDone(outcome string) bool {
 	return false
 }
 
-// encodeExtras stores dialect-specific data (for example the numeric role id a
-// site reports instead of a level name) without a schema change.
 func encodeExtras(extras map[string]any) string {
 	if len(extras) == 0 {
 		return ""

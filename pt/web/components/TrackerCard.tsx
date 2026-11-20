@@ -14,9 +14,6 @@ import {
 import type { Tracker } from "../types";
 import { formatBytes, formatDateTime, formatRatio, outcomeKey, outcomeTone } from "../format";
 
-// TrackerCard is one account: what the site says, when the plugin runs next,
-// and the actions the site type actually supports. A site without a public
-// sign-in endpoint never shows a sign-in button.
 export interface TrackerCardProps {
   tracker: Tracker;
   t: TFunc;

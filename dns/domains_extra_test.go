@@ -21,7 +21,6 @@ func TestListDomainsPaginationAndSearch(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/domains", nil)
 
-	// Search narrows by name or note.
 	out, err := p.listDomains(ctx, &ListDomainsInput{Ctx: mkCtx(req), Q: "order-"})
 	if err != nil || len(out.Body) != 5 {
 		t.Fatalf("list by note: %v, %d rows", err, len(out.Body))
@@ -31,7 +30,6 @@ func TestListDomainsPaginationAndSearch(t *testing.T) {
 		t.Fatalf("list by name: %v, %+v", err, out.Body)
 	}
 
-	// Limit and offset page through the rows.
 	out, err = p.listDomains(ctx, &ListDomainsInput{Ctx: mkCtx(req), Limit: 2})
 	if err != nil || len(out.Body) != 2 {
 		t.Fatalf("limit=2: %v, %d rows", err, len(out.Body))
@@ -40,8 +38,6 @@ func TestListDomainsPaginationAndSearch(t *testing.T) {
 	if err != nil || len(out.Body) != 1 {
 		t.Fatalf("offset=4 limit=2: %v, %d rows", err, len(out.Body))
 	}
-	// Out-of-range limits clamp to the 500 cap and a negative request falls
-	// back to the default of 50.
 	out, err = p.listDomains(ctx, &ListDomainsInput{Ctx: mkCtx(req), Limit: 5000})
 	if err != nil || len(out.Body) != 5 {
 		t.Fatalf("clamped limit: %v, %d rows", err, len(out.Body))
@@ -59,8 +55,6 @@ func TestCreateDomainVerifyZone(t *testing.T) {
 	ctx := context.Background()
 	admin := mkCtx("admin")
 
-	// A zone id present triggers a best-effort VerifyZone before the row is
-	// written; failure blocks creation and fires domain.verify_failed.
 	var events []struct {
 		org  uint
 		name string
@@ -87,7 +81,6 @@ func TestCreateDomainVerifyZone(t *testing.T) {
 		t.Errorf("verify-failed create still wrote a row")
 	}
 
-	// A successful verify allows creation.
 	fake.verifyErr = nil
 	out, err := p.createDomain(ctx, &CreateDomainInput{Ctx: admin, Body: domainDTO{Name: "ok.example.com", ProviderAccountID: accID.ID, ZoneID: "z9"}})
 	if err != nil || out.Body.ID == 0 {
@@ -132,14 +125,11 @@ func TestUpdateDomainSwitchesProviderAccount(t *testing.T) {
 	ctx := context.Background()
 	admin := mkCtx("admin")
 
-	// Switching to the org's own second account works.
 	out, err := p.updateDomain(ctx, &UpdateDomainInput{Ctx: admin, ID: dom.ID, Body: domainDTO{ProviderAccountID: acc2.ID}})
 	if err != nil || out.Body.ProviderAccountID != acc2.ID {
 		t.Fatalf("switch account: %v %+v", err, out.Body)
 	}
 
-	// Binding another org's account is refused with 404 and leaves the row
-	// pointing at the original account.
 	_, err = p.updateDomain(ctx, &UpdateDomainInput{Ctx: admin, ID: dom.ID, Body: domainDTO{ProviderAccountID: foreign.ID}})
 	if statusOf(t, err) != http.StatusNotFound {
 		t.Fatalf("foreign account: want 404, got %v", err)
@@ -150,7 +140,6 @@ func TestUpdateDomainSwitchesProviderAccount(t *testing.T) {
 		t.Errorf("foreign account was bound to the domain: %+v", after)
 	}
 
-	// A nonexistent domain is a 404 too.
 	_, err = p.updateDomain(ctx, &UpdateDomainInput{Ctx: admin, ID: 99999, Body: domainDTO{ProviderAccountID: acc1.ID}})
 	if statusOf(t, err) != http.StatusNotFound {
 		t.Fatalf("missing domain: want 404, got %v", err)
@@ -170,11 +159,9 @@ func TestDeleteDomainGates(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	// Member -> 403.
 	if _, err := p.deleteDomain(ctx, &DeleteDomainInput{Ctx: mkCtx("member"), ID: dom.ID}); statusOf(t, err) != http.StatusForbidden {
 		t.Fatalf("member delete: want 403")
 	}
-	// Another org's domain -> 404, and the row survives.
 	if _, err := p.deleteDomain(ctx, &DeleteDomainInput{Ctx: mkCtx("admin"), ID: foreign.ID}); statusOf(t, err) != http.StatusNotFound {
 		t.Fatalf("cross-org delete: want 404")
 	}
@@ -183,7 +170,6 @@ func TestDeleteDomainGates(t *testing.T) {
 	if n != 1 {
 		t.Errorf("cross-org delete removed the row")
 	}
-	// Admin delete of own domain succeeds and drops the row.
 	if _, err := p.deleteDomain(ctx, &DeleteDomainInput{Ctx: mkCtx("admin"), ID: dom.ID}); err != nil {
 		t.Fatalf("admin delete: %v", err)
 	}
@@ -212,8 +198,6 @@ func TestVerifyDomainDNSFiresFailureEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("verifyDomainDNS: %v", err)
 	}
-	// SPF is healthy but DMARC is missing on the apex, so the failure event
-	// must list the host.
 	if len(events) == 0 || events[0] != "domain.verify_failed" {
 		t.Fatalf("expected domain.verify_failed, got %v", events)
 	}
@@ -221,7 +205,6 @@ func TestVerifyDomainDNSFiresFailureEvent(t *testing.T) {
 	if len(hosts) != 1 || hosts[0] != "flaky.com" {
 		t.Errorf("failure event hosts = %v, want [flaky.com]", hosts)
 	}
-	// The response still reports what it found.
 	body := out.Body
 	spf := body["spf"].(dnsRecordStatus)
 	if !spf.Healthy {
@@ -249,13 +232,11 @@ func TestVerifyDomainDNSGates(t *testing.T) {
 func TestProviderForErrors(t *testing.T) {
 	p, _ := setupFreshTestDB(t)
 
-	// No provider account configured.
 	_, err := p.providerFor(Domain{OrgID: 1, Name: "x.com"})
 	if err == nil || err.Error() != "domain has no provider account configured" {
 		t.Fatalf("no account: %v", err)
 	}
 
-	// Account exists but belongs to a different org.
 	acc, err := seedVaultProviderAccount(p, 2, "v", "cloudflare", map[string]any{"apiToken": "tok"})
 	if err != nil {
 		t.Fatal(err)
@@ -265,7 +246,6 @@ func TestProviderForErrors(t *testing.T) {
 		t.Fatalf("cross-org account: %v", err)
 	}
 
-	// Empty stored config (VaultItemID == 0).
 	acc1 := ProviderAccount{OrgID: 1, Name: "empty", Type: "cloudflare"}
 	if err := p.db.Create(&acc1).Error; err != nil {
 		t.Fatal(err)
@@ -275,7 +255,6 @@ func TestProviderForErrors(t *testing.T) {
 		t.Fatalf("empty config must be a credential fault: %v", err)
 	}
 
-	// Vault read failure.
 	mv := p.vaultSvc.(*mockVaultService)
 	acc2, err := seedVaultProviderAccount(p, 1, "enc", "cloudflare", map[string]any{"apiToken": "tok"})
 	if err != nil {
@@ -287,7 +266,6 @@ func TestProviderForErrors(t *testing.T) {
 	}
 	mv.getErr = nil
 
-	// Unknown provider type.
 	acc3, err := seedVaultProviderAccount(p, 1, "ghost", "nope", map[string]any{"apiToken": "tok"})
 	if err != nil {
 		t.Fatal(err)

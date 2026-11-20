@@ -51,20 +51,16 @@ func setupMailboxTestDB(t *testing.T) (*gorm.DB, *Plugin) {
 func TestMailboxScopeAndDomainValidation(t *testing.T) {
 	db, p := setupMailboxTestDB(t)
 
-	// Org B (orgID=2) owns victim.example with mail host "victim.example"
 	db.Create(&testDomain{
 		OrgID:   2,
 		Name:    "victim.example",
 		ForMail: true,
 		MailHosts: hostlist.HostList{
 			hostlist.Host{Host: "victim.example", Enabled: true},
-			// Domain.Name is globally unique but MailHosts entries are not, so two
-			// tenants can legitimately list the same mail host on their own domains.
 			hostlist.Host{Host: "shared.example", Enabled: true},
 		},
 	})
 
-	// Org A (orgID=1) owns mymail.example with mail host "mymail.example"
 	db.Create(&testDomain{
 		OrgID:   1,
 		Name:    "mymail.example",
@@ -77,7 +73,6 @@ func TestMailboxScopeAndDomainValidation(t *testing.T) {
 
 	ctx := context.Background()
 
-	// 1. Org A creates address under its own mail host -> 201 (success)
 	{
 		req := httptest.NewRequest(http.MethodPost, "/api/mailboxes", nil)
 		req.Header.Set("X-Org-ID", "1")
@@ -96,10 +91,6 @@ func TestMailboxScopeAndDomainValidation(t *testing.T) {
 		}
 	}
 
-	// 2. Both orgs create the same local-part on a hostname each owns on its own
-	// domain -> both succeed, proving the unique index is (owner_id, address) and
-	// no longer global. Each uses a domain it actually owns: creating a mailbox on
-	// an unclaimed domain is refused, same as the catch-all path refuses delivery.
 	{
 		req1 := httptest.NewRequest(http.MethodPost, "/api/mailboxes", nil)
 		req1.Header.Set("X-Org-ID", "1")
@@ -126,7 +117,6 @@ func TestMailboxScopeAndDomainValidation(t *testing.T) {
 		}
 	}
 
-	// 3. Org A tries to create billing@victim.example (domain owned by Org B) -> 403
 	{
 		req := httptest.NewRequest(http.MethodPost, "/api/mailboxes", nil)
 		req.Header.Set("X-Org-ID", "1")
@@ -144,11 +134,6 @@ func TestMailboxScopeAndDomainValidation(t *testing.T) {
 	}
 }
 
-// Catch-all auto-creates a mailbox from an inbound message with no operator in
-// the loop, so it applies the strict rule: the recipient host must be one of
-// THIS workspace's own mail hosts. The looser "not another tenant's" rule that
-// governs manual creation would let anything routed at this org's webhook
-// materialise a mailbox on a domain it never registered.
 func TestCatchAllOnlyCreatesOnOwnedMailHosts(t *testing.T) {
 	db, p := setupMailboxTestDB(t)
 	p.getWorkspaceSetting = func(orgID uint, key string) string {
@@ -168,14 +153,10 @@ func TestCatchAllOnlyCreatesOnOwnedMailHosts(t *testing.T) {
 		},
 	})
 
-	// Own mail host -> catch-all creates it.
 	if _, ok := p.resolveMailbox(orgA, "anyone@owned.example"); !ok {
 		t.Fatal("catch-all should create a mailbox on the workspace's own mail host")
 	}
 
-	// A domain this workspace has not registered -> refused, even though no other
-	// tenant owns it either. This is the assertion that separates the strict rule
-	// from the loose one.
 	if _, ok := p.resolveMailbox(orgA, "anyone@unclaimed.example"); ok {
 		t.Fatal("catch-all must not create a mailbox on a domain the workspace does not own")
 	}
@@ -185,7 +166,6 @@ func TestDeleteMailboxTenantIsolation(t *testing.T) {
 	db, p := setupMailboxTestDB(t)
 	ctx := context.Background()
 
-	// Org B (orgID=2) owns a mailbox with an email
 	mbOrg2 := Mailbox{
 		OrgID:   2,
 		Address: "secret@victim.example",
@@ -211,7 +191,6 @@ func TestDeleteMailboxTenantIsolation(t *testing.T) {
 		}
 	})
 
-	// 1. Org A (orgID=1) attempts to delete Org B's mailbox -> must fail with 404
 	req1 := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/mailboxes/%d", mbOrg2.ID), nil)
 	req1.Header.Set("X-Org-ID", "1")
 	input1 := &DeleteMailboxInput{
@@ -226,7 +205,6 @@ func TestDeleteMailboxTenantIsolation(t *testing.T) {
 		t.Fatal("emails table was queried before verifying mailbox tenant ownership")
 	}
 
-	// Mailbox and email must remain intact
 	var mbCount int64
 	db.Model(&Mailbox{}).Where("id = ?", mbOrg2.ID).Count(&mbCount)
 	if mbCount == 0 {
@@ -238,7 +216,6 @@ func TestDeleteMailboxTenantIsolation(t *testing.T) {
 		t.Fatal("Org 2 email was deleted by Org 1")
 	}
 
-	// 2. Org B (orgID=2) deletes its own mailbox -> must succeed
 	req2 := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/mailboxes/%d", mbOrg2.ID), nil)
 	req2.Header.Set("X-Org-ID", "2")
 	input2 := &DeleteMailboxInput{

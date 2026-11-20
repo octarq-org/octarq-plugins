@@ -12,7 +12,6 @@ import (
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
-// AttachmentDTO carries metadata of an email attachment.
 type AttachmentDTO struct {
 	Filename    string `json:"filename"`
 	ContentType string `json:"contentType"`
@@ -20,7 +19,6 @@ type AttachmentDTO struct {
 	Rejected    string `json:"rejected,omitempty"`
 }
 
-// ReadEmailInput is the argument contract for mail_get / read_email_body.
 type ReadEmailInput struct {
 	ID           uint `path:"id" query:"id" json:"id,omitempty" jsonschema:"The unique ID of the email to read"`
 	EmailID      uint `json:"email_id,omitempty" jsonschema:"Alternative snake_case email ID"`
@@ -37,7 +35,6 @@ func (in ReadEmailInput) resolveID() uint {
 	return in.EmailIDCamel
 }
 
-// ReadEmailOutput carries email details including plain text inside untrusted fences.
 type ReadEmailOutput struct {
 	ID          uint            `json:"id"`
 	MessageID   string          `json:"messageId,omitempty"`
@@ -52,7 +49,6 @@ type ReadEmailOutput struct {
 	Guard       string          `json:"guard,omitempty"`
 }
 
-// CreateDraftInput is the argument contract for mail_draft_create / create_email_draft.
 type CreateDraftInput struct {
 	MailboxID      uint     `json:"mailbox_id,omitempty" jsonschema:"Mailbox ID to draft from"`
 	MailboxIDCamel uint     `json:"mailboxId,omitempty" jsonschema:"Alternative camelCase mailbox ID"`
@@ -66,7 +62,6 @@ type CreateDraftInput struct {
 	InReplyToCamel uint     `json:"inReplyToId,omitempty" jsonschema:"Alternative camelCase in_reply_to_id"`
 }
 
-// CreateDraftOutput reports the saved draft record.
 type CreateDraftOutput struct {
 	ID          uint      `json:"id"`
 	MailboxID   uint      `json:"mailboxId,omitempty"`
@@ -78,7 +73,6 @@ type CreateDraftOutput struct {
 	CreatedAt   time.Time `json:"createdAt"`
 }
 
-// SendEmailToolInput is the argument contract for mail_send_reply / send_email.
 type SendEmailToolInput struct {
 	SMTPSenderID     uint     `json:"smtp_sender_id,omitempty" jsonschema:"ID of the sender to use"`
 	SMTPSenderSource string   `json:"smtp_sender_source,omitempty" jsonschema:"Registry that owns the sender ID: local or integration"`
@@ -90,7 +84,6 @@ type SendEmailToolInput struct {
 	InReplyToID      uint     `json:"in_reply_to_id,omitempty" jsonschema:"Optional email ID being replied to"`
 }
 
-// SendEmailToolOutput reports result of the outbound email delivery.
 type SendEmailToolOutput struct {
 	Success bool   `json:"success"`
 	To      string `json:"to"`
@@ -321,8 +314,6 @@ func (p *Plugin) handleSendEmail(ctx context.Context, in SendEmailToolInput) (*S
 
 	subject := in.Subject
 	if in.InReplyToID != 0 && subject == "" {
-		// The reply subject comes from the original message, so the lookup must
-		// be tenant-scoped: a bare ID would read another workspace's subject.
 		orig, origErr := p.getEmailForOrg(ctx, in.InReplyToID, orgID)
 		if origErr != nil {
 			return nil, origErr
@@ -364,7 +355,6 @@ func (p *Plugin) handleSendEmail(ctx context.Context, in SendEmailToolInput) (*S
 }
 
 func (p *Plugin) registerDeclarativeEndpoints(ctx *plugin.Context) {
-	// 1. mail_get / read_email_body (RiskLevelRead)
 	_ = plugin.RegisterEndpoint(ctx, plugin.EndpointSpec[ReadEmailInput, ReadEmailOutput]{
 		Name:        "read_email_body",
 		MCPToolName: "mail_get",
@@ -391,7 +381,6 @@ func (p *Plugin) registerDeclarativeEndpoints(ctx *plugin.Context) {
 		Handler:     p.handleReadEmailBody,
 	})
 
-	// 2. mail_draft_create / create_email_draft (RiskLevelWrite)
 	_ = plugin.RegisterEndpoint(ctx, plugin.EndpointSpec[CreateDraftInput, CreateDraftOutput]{
 		Name:        "create_email_draft",
 		MCPToolName: "mail_draft_create",
@@ -418,7 +407,6 @@ func (p *Plugin) registerDeclarativeEndpoints(ctx *plugin.Context) {
 		Handler:     p.handleCreateDraft,
 	})
 
-	// 3. mail_send_reply / send_email (RiskLevelDestructive, RequireApproval: true)
 	_ = plugin.RegisterEndpoint(ctx, plugin.EndpointSpec[SendEmailToolInput, SendEmailToolOutput]{
 		Name:            "send_email",
 		MCPToolName:     "mail_send_reply",

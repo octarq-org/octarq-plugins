@@ -1,9 +1,3 @@
-// Package nexusphp implements the NexusPHP site family: the PHP/BIT tracker
-// skin used by most Chinese private trackers.
-//
-// The dialect is HTML-driven. It logs in through the site's own login form,
-// signs in through attendance.php, and reads statistics from the index page,
-// userdetails.php, and the seeding list.
 package nexusphp
 
 import (
@@ -15,19 +9,12 @@ import (
 	"github.com/octarq-org/octarq-plugins/pt/adapter"
 )
 
-// loginFieldPass is the NexusPHP login form field name for the account secret.
-// It is assembled from two halves on purpose: secret scanners rewrite the
-// literal into their own token when it appears verbatim, which would silently
-// break a real protocol constant.
 const loginFieldPass = "pass" + "word"
 
-// loginFieldName is the login form field name for the account name.
 const loginFieldName = "username"
 
-// Adapter is the NexusPHP dialect.
 type Adapter struct{}
 
-// New returns the dialect.
 func New() *Adapter { return &Adapter{} }
 
 func (*Adapter) Schema() adapter.Schema { return adapter.SchemaNexusPHP }
@@ -55,8 +42,6 @@ func (*Adapter) Defaults() adapter.Defaults {
 	}
 }
 
-// defaultUserAgent mirrors a normal desktop browser. Sites bind sessions to the
-// UA, so a tracker created with a stale UA needs the field edited, not retried.
 const defaultUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 
 func (a *Adapter) Login(ctx context.Context, s *adapter.Session) (*adapter.LoginResult, error) {
@@ -75,8 +60,6 @@ func (a *Adapter) Stats(ctx context.Context, s *adapter.Session) (*adapter.UserS
 	return stats(ctx, s)
 }
 
-// page issues a GET and converts a hard anti-bot interstitial into a typed
-// error, so every caller handles Cloudflare in one place.
 func page(ctx context.Context, s *adapter.Session, path string) (*adapter.Page, error) {
 	p, err := s.Client.Get(ctx, path, nil)
 	if err != nil {
@@ -95,8 +78,6 @@ func statusOf(p *adapter.Page) int {
 	return p.Status
 }
 
-// isOK reports a usable page: 2xx, or 403 which many NexusPHP skins return with
-// a full page body for logged-in users.
 func isOK(p *adapter.Page) bool {
 	if p == nil {
 		return false
@@ -104,7 +85,6 @@ func isOK(p *adapter.Page) bool {
 	return (p.Status >= 200 && p.Status < 300) || p.Status == http.StatusForbidden
 }
 
-// siteTimezone returns the tracker's timezone, defaulting to UTC when unset.
 func siteTimezone(s *adapter.Session) *time.Location {
 	if s.Site.Timezone != nil {
 		return s.Site.Timezone

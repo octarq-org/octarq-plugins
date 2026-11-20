@@ -10,7 +10,6 @@ export function DDNSView({ domains }: { domains: Domain[] }) {
   const [tokens, setTokens] = useState<DDNSToken[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // New Token Modal State
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [domainId, setDomainId] = useState<number>(domains[0]?.id || 0);
   const [recordName, setRecordName] = useState("");
@@ -18,7 +17,6 @@ export function DDNSView({ domains }: { domains: Domain[] }) {
   const [label, setLabel] = useState("");
   const [creating, setCreating] = useState(false);
 
-  // Secret Modal State
   const [createdResult, setCreatedResult] = useState<CreateDDNSTokenResult | null>(null);
   const [copiedSecret, setCopiedSecret] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
@@ -42,7 +40,6 @@ export function DDNSView({ domains }: { domains: Domain[] }) {
     }
   }, [domains]);
 
-  // Auto-complete FQDN prefix when domain selection changes
   function handleDomainChange(newDomainId: number) {
     setDomainId(newDomainId);
     const dom = domains.find((d) => d.id === newDomainId);
@@ -218,7 +215,6 @@ export function DDNSView({ domains }: { domains: Domain[] }) {
         </PageSection>
       )}
 
-      {/* Create Token Modal */}
       {showCreateModal && (
         <Modal
           title={t("domains.createDdnsToken")}
@@ -279,7 +275,6 @@ export function DDNSView({ domains }: { domains: Domain[] }) {
         </Modal>
       )}
 
-      {/* Secret Display Modal (Shown ONCE) */}
       {createdResult && (
         <Modal
           title={t("domains.ddnsCreatedTitle")}

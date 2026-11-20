@@ -48,14 +48,12 @@ func TestLinksPluginMetaPurgeExportAndMCP(t *testing.T) {
 		t.Errorf("mcpExportLinks failed: %v, %+v", err, lkExp)
 	}
 
-	// MCP Tool Calls with context org 1
 	ctxOrg := plugin.WithOrgID(ctx, 1)
 	_, lksOut, err := p.mcpListLinks(ctxOrg, nil, listLinksInput{})
 	if err != nil || lksOut == nil {
 		t.Errorf("mcpListLinks error=%v, out=%+v", err, lksOut)
 	}
 
-	// MCP Tool Calls without org context -> error
 	if _, _, err := p.mcpListLinks(ctx, nil, listLinksInput{}); err == nil {
 		t.Error("expected error when calling mcpListLinks with no org")
 	}

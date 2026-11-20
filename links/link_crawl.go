@@ -40,8 +40,6 @@ func fetchPageMeta(ctx context.Context, rawURL string) (title, desc string) {
 	return parsePageMeta(body)
 }
 
-// parsePageMeta is split from fetchPageMeta so extraction is testable without
-// a network round-trip (the SSRF-guarded client refuses loopback by design).
 func parsePageMeta(body []byte) (title, desc string) {
 	if m := reOgTitle.FindSubmatch(body); m != nil {
 		title = strings.TrimSpace(html.UnescapeString(string(m[1])))
@@ -70,8 +68,6 @@ type LinkMetadataOutput struct {
 	Body map[string]any
 }
 
-// linkMetadata fetches the target page's <title>, description, and favicon so
-// the dashboard can prefill a link's title (dub-style). Best-effort.
 func (p *Plugin) linkMetadata(ctx context.Context, input *LinkMetadataInput) (*LinkMetadataOutput, error) {
 	if input.Ctx == nil {
 		return nil, huma.Error500InternalServerError("Request context is unavailable. Try again.")

@@ -253,11 +253,9 @@ describe("DNS Forms", () => {
       const saveBtn = screen.getByRole("button", { name: "Save Basic Info" }) as HTMLButtonElement;
       expect(saveBtn.disabled).toBe(true);
 
-      // Cancel button
       fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
       expect(onCancel).toHaveBeenCalledTimes(1);
 
-      // Fill form
       fireEvent.change(nameInput, { target: { value: "mynewdomain.org" } });
       expect(saveBtn.disabled).toBe(false);
 
@@ -348,7 +346,6 @@ describe("DNS Forms", () => {
         expect(screen.getByText("Inbound mail server")).toBeDefined();
       });
 
-      // Filter by search query
       const searchInput = screen.getByPlaceholderText("Filter name / content / comment…");
       fireEvent.change(searchInput, { target: { value: "192.0.2.1" } });
 
@@ -357,17 +354,14 @@ describe("DNS Forms", () => {
         expect(screen.queryByText("Shortlink proxy")).toBeNull();
       });
 
-      // Clear search
       fireEvent.change(searchInput, { target: { value: "" } });
 
-      // Open custom record modal
       const customBtn = screen.getByRole("button", { name: "Custom" });
       fireEvent.click(customBtn);
 
       expect(screen.getByText("Create Record")).toBeDefined();
       expect(screen.getByPlaceholderText("@ or subdomain")).toBeDefined();
 
-      // Fill custom record form
       fireEvent.change(screen.getByPlaceholderText("@ or subdomain"), { target: { value: "api" } });
       const contentInput = document.querySelector('input[required]') as HTMLInputElement;
       expect(contentInput).toBeDefined();
@@ -377,7 +371,6 @@ describe("DNS Forms", () => {
         target: { value: "API gateway" },
       });
 
-      // Save custom record
       fireEvent.click(screen.getByRole("button", { name: "Save Record" }));
 
       await waitFor(() => {
@@ -392,7 +385,6 @@ describe("DNS Forms", () => {
         expect(screen.getByText("192.0.2.1")).toBeDefined();
       });
 
-      // Open preset modal
       const presetBtn = screen.getByRole("button", { name: "Preset" });
       fireEvent.click(presetBtn);
 
@@ -400,13 +392,11 @@ describe("DNS Forms", () => {
       expect(screen.getByRole("button", { name: "Set Link CNAME" })).toBeDefined();
       expect(screen.getByRole("button", { name: "Set MX records" })).toBeDefined();
 
-      // Click Set Link CNAME
       fireEvent.click(screen.getByRole("button", { name: "Set Link CNAME" }));
 
       const commentInput = screen.getByPlaceholderText("e.g. DNS verified token or note") as HTMLInputElement;
       expect(commentInput.value).toBe("octarq short-link host");
 
-      // Cancel modal
       fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
       expect(screen.queryByText("Preset Configurator")).toBeNull();
     });
@@ -418,7 +408,6 @@ describe("DNS Forms", () => {
         expect(screen.getByText("192.0.2.1")).toBeDefined();
       });
 
-      // Edit record
       const editButtons = screen.getAllByRole("button", { name: "Edit" });
       fireEvent.click(editButtons[0]);
 
@@ -434,11 +423,9 @@ describe("DNS Forms", () => {
         expect(screen.queryByText("Modify Record")).toBeNull();
       });
 
-      // Delete record with confirmation
       const delButtons = screen.getAllByRole("button", { name: "Delete" });
       fireEvent.click(delButtons[0]);
 
-      // Confirm dialog appears
       await waitFor(() => {
         expect(screen.getByText("Delete A example.com?")).toBeDefined();
       });
@@ -462,7 +449,6 @@ describe("DNS Forms", () => {
         expect(screen.getByText("203.0.113.42")).toBeDefined();
       });
 
-      // Click + New DDNS Token
       const newBtn = screen.getByRole("button", { name: "New DDNS Token" });
       fireEvent.click(newBtn);
 
@@ -475,11 +461,9 @@ describe("DNS Forms", () => {
         target: { value: "NAS Server" },
       });
 
-      // Submit token creation form
       const genBtn = screen.getByRole("button", { name: "Generate Token" });
       fireEvent.click(genBtn);
 
-      // Secret modal should open
       await waitFor(() => {
         expect(screen.getByText("DDNS Token Created")).toBeDefined();
         expect(screen.getByText("Copy your secret token now. It will never be displayed again.")).toBeDefined();
@@ -488,13 +472,11 @@ describe("DNS Forms", () => {
       const secretInput = screen.getByDisplayValue("ddns_sec_abcdef123456");
       expect(secretInput).toBeDefined();
 
-      // Close secret modal
       const doneBtn = screen.getByRole("button", { name: "Done" });
       fireEvent.click(doneBtn);
 
       expect(screen.queryByText("DDNS Token Created")).toBeNull();
 
-      // Revoke token with confirm
       const revokeBtn = screen.getByRole("button", { name: "Revoke Token" });
       fireEvent.click(revokeBtn);
 
@@ -523,10 +505,8 @@ describe("DNS Forms", () => {
         expect(screen.getByText("Manage third-party credentials and cloud provider integrations centrally.")).toBeDefined();
       });
 
-      // Verify deep link action button to Integrations Hub
       expect(screen.getAllByText("Integrations Hub").length).toBeGreaterThan(0);
 
-      // Verify standalone CRUD buttons are eliminated
       expect(screen.queryByRole("button", { name: "Add Provider" })).toBeNull();
       expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
       expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
@@ -589,14 +569,11 @@ describe("DNS Forms", () => {
         expect(screen.getByText("Could not load DNS providers. Reload the page to retry.")).toBeDefined();
       });
 
-      // A vault endpoint that answers with an error is not "no vault": offer no fallback and
-      // claim nothing about the accounts.
       expect(screen.queryByText("No DNS providers configured yet.")).toBeNull();
       expect(screen.queryByRole("button", { name: "Add Provider" })).toBeNull();
       expect(screen.queryByText("Integrations Hub")).toBeNull();
     });
 
-    // Standalone instances without Core Vault mount the local registry instead of an empty page.
     it("serves the local provider registry when Core Vault is absent", async () => {
       fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
         const method = (init?.method ?? "GET").toUpperCase();

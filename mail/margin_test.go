@@ -22,7 +22,6 @@ func TestRawEmailDerivesKeyAndFallsBackToDBBlob(t *testing.T) {
 	e := Email{MailboxID: mb.ID, ReceivedAt: time.Now()}
 	p.db.Create(&e)
 
-	// No Raw, no StorageKey -> the derived key resolves from the database blob.
 	dbProv := NewDBStorageProvider(p.db)
 	key := fmt.Sprintf("mail/%d/%d.eml", mb.OrgID, e.ID)
 	if err := dbProv.Put(ctx, key, []byte("derived blob")); err != nil {
@@ -47,8 +46,6 @@ func TestPurgeFallsBackWhenStorageProviderUnavailable(t *testing.T) {
 	wipeMailTables(t, p)
 	ctx := context.Background()
 
-	// Force getStorageProvider to error (Pro backend with no registered
-	// provider): purge must still delete the database rows and blobs.
 	p.getGlobalSetting = func(key string) string {
 		if key == "mail_storage_backend" {
 			return "s3"
@@ -105,7 +102,6 @@ func TestCreateMailboxCrossTenantDomainForbidden(t *testing.T) {
 	wipeMailTables(t, p)
 	ctx := context.Background()
 
-	// Another tenant owns victim.example as a mail host.
 	p.db.Create(&testDomain{OrgID: 2, Name: "victim.example", ForMail: true,
 		MailHosts: hostlist.HostList{{Host: "victim.example", Enabled: true}}})
 

@@ -33,16 +33,12 @@ func mountHTTP(t *testing.T, p *Plugin, lookup func(string) (any, bool)) {
 	})
 }
 
-// The stdio MCP path validates against a no-op host after the server mount has
-// already captured the real context. The captured vault is the one the tools use,
-// so the plugin must boot there instead of stopping the whole MCP endpoint.
 func TestValidateKeepsTheVaultAcrossTheMCPRemount(t *testing.T) {
 	p := &Plugin{}
 	reg := plugin.NewRegistry()
 	reg.Provide(plugin.ServiceVault, plugin.VaultService(newMockVaultService()))
 	mountHTTP(t, p, reg.Lookup)
 
-	// The MCP composition re-mounts with a nil mux and a stub host.
 	p.Mount(nil, &plugin.Context{DB: mcpTestDB(t)})
 
 	if err := p.Validate(context.Background(), plugin.EnsureHost(nil)); err != nil {
@@ -53,7 +49,6 @@ func TestValidateKeepsTheVaultAcrossTheMCPRemount(t *testing.T) {
 	}
 }
 
-// A real server mount without a vault must refuse to start.
 func TestValidateRefusesHTTPMountWithoutVault(t *testing.T) {
 	p := &Plugin{}
 	mountHTTP(t, p, nil)
@@ -66,7 +61,6 @@ func TestValidateRefusesHTTPMountWithoutVault(t *testing.T) {
 	}
 }
 
-// A plugin that never saw a real mount has nothing to serve, so it refuses.
 func TestValidateRefusesWithoutAnyHost(t *testing.T) {
 	p := &Plugin{}
 	p.Mount(nil, &plugin.Context{DB: mcpTestDB(t)})
@@ -79,8 +73,6 @@ func TestValidateRefusesWithoutAnyHost(t *testing.T) {
 	}
 }
 
-// TestMCPToolsUseThePersonalOrg proves the tools read the caller's personal
-// org, never the active team workspace, and refuse an account without one.
 func TestMCPToolsUseThePersonalOrg(t *testing.T) {
 	db := mcpTestDB(t)
 	p := &Plugin{db: db, vaultSvc: newMockVaultService()}
@@ -117,13 +109,11 @@ func TestMCPToolsUseThePersonalOrg(t *testing.T) {
 		t.Fatalf("list = %+v", list)
 	}
 
-	// An account without a personal org is refused, not given the team rows.
 	ctx = plugin.WithUserID(plugin.WithOrgID(context.Background(), 1), 9)
 	if _, _, err := p.mcpListTrackers(ctx, nil, mcpTrackerArgs{}); !errors.Is(err, errNoPersonalSpace) {
 		t.Fatalf("no personal org = %v", err)
 	}
 
-	// A call with no user at all is refused too.
 	if _, _, err := p.mcpListTrackers(context.Background(), nil, mcpTrackerArgs{}); !errors.Is(err, errNoActor) {
 		t.Fatalf("no actor = %v", err)
 	}

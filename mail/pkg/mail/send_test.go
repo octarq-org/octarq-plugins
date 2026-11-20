@@ -18,7 +18,6 @@ func TestSMTPSender(t *testing.T) {
 		t.Error("expected error dialing mock address, got nil")
 	}
 
-	// Test HTML mail format
 	htmlMsg := Message{
 		From:    "custom@example.com",
 		To:      []string{"user@example.com"},
@@ -43,7 +42,6 @@ func TestResendSender(t *testing.T) {
 		Text:    "Resend Body Text",
 	}
 
-	// Sending without a valid API key will fail against real API, but exercises payload formatting
 	_ = s.Send(msg)
 
 	msgHTML := Message{

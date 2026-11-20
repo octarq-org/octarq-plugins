@@ -54,7 +54,6 @@ func TestMailPluginMetaPurgeExportAndMCP(t *testing.T) {
 		t.Errorf("mcpExportEmails failed: %v, %+v", err, emExp)
 	}
 
-	// MCP Tool Calls with context org 1
 	ctxOrg := plugin.WithOrgID(ctx, 1)
 	_, mbsOut, err := p.mcpListMailboxes(ctxOrg, nil, listMailboxesInput{})
 	if err != nil || mbsOut == nil {
@@ -66,7 +65,6 @@ func TestMailPluginMetaPurgeExportAndMCP(t *testing.T) {
 		t.Errorf("mcpListEmails error=%v, out=%+v", err, emsOut)
 	}
 
-	// MCP Tool Calls without org context -> error
 	if _, _, err := p.mcpListMailboxes(ctx, nil, listMailboxesInput{}); err == nil {
 		t.Error("expected error when calling mcpListMailboxes with no org")
 	}

@@ -111,7 +111,6 @@ func TestGetAttachment_NotFound(t *testing.T) {
 	}
 	p.db.Create(&email)
 
-	// Index out of range -> 404
 	req := httptest.NewRequest(http.MethodGet, "/api/emails/1/attachments/5", nil)
 	req.Header.Set("X-Org-ID", "1")
 	rec := httptest.NewRecorder()
@@ -122,7 +121,6 @@ func TestGetAttachment_NotFound(t *testing.T) {
 		return
 	}
 
-	// Negative index -> 404
 	req2 := httptest.NewRequest(http.MethodGet, "/api/emails/1/attachments/-1", nil)
 	req2.Header.Set("X-Org-ID", "1")
 	rec2 := httptest.NewRecorder()
@@ -133,14 +131,12 @@ func TestGetAttachment_NotFound(t *testing.T) {
 		return
 	}
 
-	// Nil context -> 500
 	_, err = p.getAttachment(ctx, &GetAttachmentInput{Ctx: nil, ID: email.ID, Index: 0})
 	if err == nil {
 		t.Fatal("expected error for nil context")
 		return
 	}
 
-	// Non-existent email -> 404
 	req4 := httptest.NewRequest(http.MethodGet, "/api/emails/9999/attachments/0", nil)
 	req4.Header.Set("X-Org-ID", "1")
 	rec4 := httptest.NewRecorder()

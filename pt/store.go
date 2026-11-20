@@ -9,21 +9,12 @@ import (
 	"gorm.io/gorm"
 )
 
-// ErrNotFound is returned when a row does not exist in the caller's personal
-// space. Handlers translate it to 404; another owner's id must be
-// indistinguishable from a missing one.
 var ErrNotFound = errors.New("pt: not found")
 
-// errOwnerRequired refuses a write that carries no owner. Personal data is
-// never stored in a shared row.
 var errOwnerRequired = errors.New("pt: owner user id is required")
 
-// errTenantUnavailable means the host did not wire a tenant-scoped handle.
-// Tenant data is never read or written through the unscoped DB instead.
 var errTenantUnavailable = errors.New("pt: tenant database unavailable")
 
-// tenantDB is the single place that binds the tenant column. TenantDB defaults
-// to owner_id, so every call must name org_id explicitly or scoping is wrong.
 func (p *Plugin) tenantDB(ctx context.Context, orgID uint) (*plugin.TenantDB, error) {
 	if orgID == 0 {
 		return nil, errTenantUnavailable
@@ -42,9 +33,6 @@ func (p *Plugin) tenantDB(ctx context.Context, orgID uint) (*plugin.TenantDB, er
 	return nil, errTenantUnavailable
 }
 
-// listTrackers returns the trackers of one owner inside that owner's personal
-// org. The owner filter is defense in depth: the org scope already isolates the
-// rows, and a zero owner id matches nothing.
 func (p *Plugin) listTrackers(ctx context.Context, orgID, ownerUserID uint) ([]PTTracker, error) {
 	tdb, err := p.tenantDB(ctx, orgID)
 	if err != nil {
@@ -106,8 +94,6 @@ func (p *Plugin) saveTracker(ctx context.Context, t *PTTracker) error {
 	return tdb.Scoped(&PTTracker{}).Where("id = ?", t.ID).Updates(trackerUpdates(t)).Error
 }
 
-// trackerUpdates lists the mutable columns. Secrets and SecretID are not
-// included: they must never be written through a config update path.
 func trackerUpdates(t *PTTracker) map[string]any {
 	return map[string]any{
 		"name":                    t.Name,
@@ -131,9 +117,6 @@ func trackerUpdates(t *PTTracker) map[string]any {
 	}
 }
 
-// deleteTrackerCascade hard-deletes the tracker and every row that references
-// it. Hard, because soft-deleted rows would keep encrypted secrets on disk
-// after the user asked for deletion.
 func (p *Plugin) deleteTrackerCascade(ctx context.Context, orgID, trackerID uint) error {
 	tdb, err := p.tenantDB(ctx, orgID)
 	if err != nil {
@@ -211,7 +194,6 @@ func (p *Plugin) listSignins(ctx context.Context, orgID, trackerID uint, limit i
 	return out, nil
 }
 
-// latestSignin returns the most recent attempt, or ErrNotFound.
 func (p *Plugin) latestSignin(ctx context.Context, orgID, trackerID uint) (*PTSigninResult, error) {
 	tdb, err := p.tenantDB(ctx, orgID)
 	if err != nil {
@@ -227,9 +209,6 @@ func (p *Plugin) latestSignin(ctx context.Context, orgID, trackerID uint) (*PTSi
 	return &r, nil
 }
 
-// claimRequestSlot atomically takes the per-tracker minimum-interval slot.
-// RowsAffected == 0 means another request (possibly in another instance) won
-// the race, and the caller must defer instead of hitting the site.
 func (p *Plugin) claimRequestSlot(ctx context.Context, orgID, trackerID uint, now, earliest time.Time) (bool, error) {
 	tdb, err := p.tenantDB(ctx, orgID)
 	if err != nil {
@@ -244,7 +223,6 @@ func (p *Plugin) claimRequestSlot(ctx context.Context, orgID, trackerID uint, no
 	return res.RowsAffected > 0, nil
 }
 
-// dueTrackers returns the trackers with work pending in one personal org.
 func (p *Plugin) dueTrackers(ctx context.Context, orgID uint, now time.Time) ([]PTTracker, error) {
 	tdb, err := p.tenantDB(ctx, orgID)
 	if err != nil {
@@ -263,8 +241,6 @@ func (p *Plugin) dueTrackers(ctx context.Context, orgID uint, now time.Time) ([]
 	return out, nil
 }
 
-// orgIDs returns every personal org that has at least one tracker. It is the
-// only query that runs unscoped, and it reads a column, never tenant data.
 func (p *Plugin) orgIDs(ctx context.Context) ([]uint, error) {
 	db := p.dbRef()
 	if db == nil {
@@ -277,7 +253,6 @@ func (p *Plugin) orgIDs(ctx context.Context) ([]uint, error) {
 	return out, nil
 }
 
-// pruneOldRows deletes snapshots and sign-in rows past their retention.
 func (p *Plugin) pruneOldRows(ctx context.Context, orgID uint, snapshotBefore, signinBefore time.Time) error {
 	tdb, err := p.tenantDB(ctx, orgID)
 	if err != nil {

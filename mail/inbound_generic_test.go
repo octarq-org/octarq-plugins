@@ -14,7 +14,6 @@ import (
 	"github.com/octarq-org/octarq/server/pkg/hostlist"
 )
 
-// 1. Guard Test: Auth
 func TestGenericInboundAuth(t *testing.T) {
 	db, p := setupMailboxTestDB(t)
 
@@ -31,7 +30,6 @@ func TestGenericInboundAuth(t *testing.T) {
 	ctx := context.Background()
 	rawEML := []byte("From: alice@example.com\r\nTo: bob@acme.example\r\nSubject: Test\r\n\r\nHello")
 
-	// Case 1.1: Missing token -> 401
 	{
 		req := httptest.NewRequest(http.MethodPost, "/api/webhook/acme/email/inbound/raw/tok", bytes.NewReader(rawEML))
 		input := &InboundGenericInput{
@@ -46,7 +44,6 @@ func TestGenericInboundAuth(t *testing.T) {
 		}
 	}
 
-	// Case 1.2: Wrong token -> 401
 	{
 		req := httptest.NewRequest(http.MethodPost, "/api/webhook/acme/email/inbound/raw/tok", bytes.NewReader(rawEML))
 		input := &InboundGenericInput{
@@ -61,7 +58,6 @@ func TestGenericInboundAuth(t *testing.T) {
 		}
 	}
 
-	// Case 1.3: Non-existent org slug with valid looking token -> 401 without leaking org existence
 	{
 		req := httptest.NewRequest(http.MethodPost, "/api/webhook/nonexistent-org/email/inbound/raw/tok", bytes.NewReader(rawEML))
 		input := &InboundGenericInput{
@@ -76,7 +72,6 @@ func TestGenericInboundAuth(t *testing.T) {
 		}
 	}
 
-	// Case 1.4: Valid token via X-Octarq-Token -> accepted
 	{
 		mb := Mailbox{OrgID: 1, Address: "bob@acme.example", Enabled: true}
 		db.Create(&mb)
@@ -97,7 +92,6 @@ func TestGenericInboundAuth(t *testing.T) {
 	}
 }
 
-// 2. Guard Test: Ownership Validation (ownsMailHost must execute)
 func TestGenericInboundOwnership(t *testing.T) {
 	db, p := setupMailboxTestDB(t)
 
@@ -108,7 +102,6 @@ func TestGenericInboundOwnership(t *testing.T) {
 		return ""
 	}
 
-	// Org A (orgID=1) owns mymail.example
 	orgA := testOrg{ID: 1, Slug: "org-a", InboundToken: "tok-a"}
 	db.Create(&orgA)
 	db.Create(&testDomain{
@@ -120,7 +113,6 @@ func TestGenericInboundOwnership(t *testing.T) {
 		},
 	})
 
-	// Org B (orgID=2) owns victim.example
 	orgB := testOrg{ID: 2, Slug: "org-b", InboundToken: "tok-b"}
 	db.Create(&orgB)
 	db.Create(&testDomain{
@@ -134,7 +126,6 @@ func TestGenericInboundOwnership(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Org A attempts generic inbound delivery to an unowned domain (victim.example)
 	rawEML := []byte("From: attacker@external.com\r\nTo: someone@victim.example\r\nSubject: Exploit\r\n\r\nBody")
 	req := httptest.NewRequest(http.MethodPost, "/api/webhook/org-a/email/inbound/raw/tok", bytes.NewReader(rawEML))
 	input := &InboundGenericInput{
@@ -151,7 +142,6 @@ func TestGenericInboundOwnership(t *testing.T) {
 		t.Fatal("SECURITY ERROR: generic inbound delivered mail for an unowned domain! ownsMailHost check failed!")
 	}
 
-	// Verify no Email record was created in the database
 	var count int64
 	db.Model(&Email{}).Where("to_addr = ?", "someone@victim.example").Count(&count)
 	if count != 0 {
@@ -159,7 +149,6 @@ func TestGenericInboundOwnership(t *testing.T) {
 	}
 }
 
-// 3. Guard Test: Parsing real EML with attachment, non-ASCII subject, and multipart
 func TestGenericInboundParsing(t *testing.T) {
 	db, p := setupMailboxTestDB(t)
 
@@ -168,7 +157,6 @@ func TestGenericInboundParsing(t *testing.T) {
 	mb := Mailbox{OrgID: 1, Address: "user@example.com", Enabled: true}
 	db.Create(&mb)
 
-	// Complex EML with UTF-8 subject, multipart text + HTML, and attachment
 	rawEML := []byte("From: Sender Name <sender@example.com>\r\n" +
 		"To: user@example.com\r\n" +
 		"Subject: =?UTF-8?B?5rWL6K+V6YKu5Lu2IFRlc3QgRW1haWwg8J+aow==?=\r\n" +
@@ -190,7 +178,6 @@ func TestGenericInboundParsing(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Test 3.1: Raw EML POST with Authorization header
 	req := httptest.NewRequest(http.MethodPost, "/api/webhook/acme/email/inbound/raw/tok", bytes.NewReader(rawEML))
 	req.Header.Set("Content-Type", "message/rfc822")
 	input := &InboundGenericInput{
@@ -241,7 +228,6 @@ func TestGenericInboundParsing(t *testing.T) {
 		t.Errorf("attachment mismatch: got %#v", atts[0])
 	}
 
-	// Test 3.2: Multipart Form POST (SendGrid Inbound Parse / Mailgun Routes format)
 	var mpBuf bytes.Buffer
 	writer := multipart.NewWriter(&mpBuf)
 	part, _ := writer.CreateFormFile("email", "raw.eml")
@@ -265,7 +251,6 @@ func TestGenericInboundParsing(t *testing.T) {
 	}
 }
 
-// 4. Guard Test: Equivalence between Cloudflare Route and Generic Route
 func TestInboundEquivalence(t *testing.T) {
 	db, p := setupMailboxTestDB(t)
 
@@ -282,7 +267,6 @@ func TestInboundEquivalence(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Path 1: Cloudflare route
 	reqCF := httptest.NewRequest(http.MethodPost, "/api/webhook/acme/email/inbound/shared-token", bytes.NewReader(rawCF))
 	inputCF := &InboundInput{
 		Ctx:     humago.NewContext(nil, reqCF, httptest.NewRecorder()),
@@ -294,7 +278,6 @@ func TestInboundEquivalence(t *testing.T) {
 		t.Fatalf("Cloudflare inbound route error: %v", err)
 	}
 
-	// Path 2: Generic route
 	reqGen := httptest.NewRequest(http.MethodPost, "/api/webhook/acme/email/inbound/raw/tok", bytes.NewReader(rawGen))
 	inputGen := &InboundGenericInput{
 		Ctx:     humago.NewContext(nil, reqGen, httptest.NewRecorder()),

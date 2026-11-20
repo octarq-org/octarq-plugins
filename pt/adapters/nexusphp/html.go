@@ -8,14 +8,10 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-// parseDoc builds a goquery document from a response body.
 func parseDoc(body []byte) (*goquery.Document, error) {
 	return goquery.NewDocumentFromReader(bytes.NewReader(body))
 }
 
-// visibleText returns the page text with scripts, styles, templates and form
-// controls removed, so evidence matching cannot fire on a hidden element or on
-// an inline script string.
 func visibleText(doc *goquery.Document) string {
 	if doc == nil {
 		return ""
@@ -25,8 +21,6 @@ func visibleText(doc *goquery.Document) string {
 	return strings.Join(strings.Fields(clone.Text()), " ")
 }
 
-// hasLoginForm reports whether the page still shows a login form, which is the
-// most reliable "not authenticated" signal across NexusPHP skins.
 func hasLoginForm(doc *goquery.Document) bool {
 	if doc == nil {
 		return false
@@ -44,8 +38,6 @@ func hasLoginForm(doc *goquery.Document) bool {
 	return found
 }
 
-// hasLogoutLink reports a logout affordance, the positive "authenticated"
-// signal in NexusPHP.
 func hasLogoutLink(doc *goquery.Document) bool {
 	if doc == nil {
 		return false
@@ -67,7 +59,6 @@ func hasLogoutLink(doc *goquery.Document) bool {
 	return found
 }
 
-// loggedIn combines the two signals: no login form and a logout/usercp link.
 func loggedIn(doc *goquery.Document) bool {
 	if doc == nil || hasLoginForm(doc) {
 		return false
@@ -77,7 +68,6 @@ func loggedIn(doc *goquery.Document) bool {
 
 var userIDRe = regexp.MustCompile(`userdetails\.php\?id=(\d+)`)
 
-// userIDFromHTML extracts the site user id from any link on the page.
 func userIDFromHTML(body []byte) string {
 	if m := userIDRe.FindSubmatch(body); len(m) == 2 {
 		return string(m[1])
@@ -85,7 +75,6 @@ func userIDFromHTML(body []byte) string {
 	return ""
 }
 
-// usernameFromDoc reads the display name next to the userdetails link.
 func usernameFromDoc(doc *goquery.Document) string {
 	if doc == nil {
 		return ""
@@ -105,8 +94,6 @@ func usernameFromDoc(doc *goquery.Document) string {
 	return name
 }
 
-// detectCaptcha reports whether the page demands a captcha. A captcha is a hard
-// stop: guessing one gets the account flagged, and OCR is out of scope.
 func detectCaptcha(doc *goquery.Document, body []byte) bool {
 	if doc != nil {
 		found := false
@@ -141,7 +128,6 @@ func detectCaptcha(doc *goquery.Document, body []byte) bool {
 	return strings.Contains(lower, "imagestring") || strings.Contains(lower, "验证码") || strings.Contains(lower, "驗證碼")
 }
 
-// containsAny reports whether text contains any marker.
 func containsAny(text string, markers ...string) bool {
 	for _, m := range markers {
 		if m != "" && strings.Contains(text, m) {

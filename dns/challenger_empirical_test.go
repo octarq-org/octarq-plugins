@@ -10,15 +10,10 @@ import (
 	"github.com/octarq-org/octarq-plugins/dns/provider"
 )
 
-// TestFinding4_SyncDomainsIgnoresDBCreateConflict demonstrates that when
-// syncDomains encounters a unique constraint conflict (e.g. domain registered by Org 1),
-// it ignores p.db.Create error, increments created++, reports false positive success,
-// and evicts the cache of the existing domain.
 func TestFinding4_SyncDomainsIgnoresDBCreateConflict(t *testing.T) {
 	t.Parallel()
 	p, mkCtx := setupFreshTestDB(t)
 
-	// 1. Org 1 legitimately owns "contested.com"
 	domOrg1 := Domain{
 		OrgID: 1,
 		Name:  "contested.com",
@@ -27,7 +22,6 @@ func TestFinding4_SyncDomainsIgnoresDBCreateConflict(t *testing.T) {
 		t.Fatalf("setup Org 1 domain: %v", err)
 	}
 
-	// 2. Org 2 has a provider account that lists "contested.com"
 	fake := &fakeDNSProvider{
 		zones: []provider.Zone{
 			{ID: "z-contested", Name: "contested.com"},
@@ -39,7 +33,6 @@ func TestFinding4_SyncDomainsIgnoresDBCreateConflict(t *testing.T) {
 		t.Fatalf("setup Org 2 provider: %v", err)
 	}
 
-	// 3. Org 2 runs syncDomains
 	req := httptest.NewRequest(http.MethodPost, "/api/domains/sync", nil)
 	req.Header.Set("X-Org-ID", "2")
 	req.Header.Set("X-Role", "admin")
@@ -69,13 +62,10 @@ func TestFinding4_SyncDomainsIgnoresDBCreateConflict(t *testing.T) {
 	}
 }
 
-// TestFinding6_OrphanedDDNSTokensOnDomainDelete demonstrates that deleting
-// a Domain leaves orphaned DDNSToken records in the database.
 func TestFinding6_OrphanedDDNSTokensOnDomainDelete(t *testing.T) {
 	t.Parallel()
 	p, mkCtx := setupFreshTestDB(t)
 
-	// 1. Create a domain for Org 1
 	dom := Domain{
 		OrgID: 1,
 		Name:  "ddns-domain.com",
@@ -84,7 +74,6 @@ func TestFinding6_OrphanedDDNSTokensOnDomainDelete(t *testing.T) {
 		t.Fatalf("create domain: %v", err)
 	}
 
-	// 2. Create DDNS tokens associated with this domain
 	tok1 := DDNSToken{
 		OrgID:      1,
 		DomainID:   dom.ID,
@@ -112,7 +101,6 @@ func TestFinding6_OrphanedDDNSTokensOnDomainDelete(t *testing.T) {
 		t.Fatalf("expected 2 tokens before delete, got %d", tokenCountBefore)
 	}
 
-	// 3. Delete Domain
 	reqDel := httptest.NewRequest(http.MethodDelete, "/api/domains/1", nil)
 	reqDel.Header.Set("X-Org-ID", "1")
 	reqDel.Header.Set("X-Role", "admin")

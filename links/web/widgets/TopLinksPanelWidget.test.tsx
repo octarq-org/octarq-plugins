@@ -53,24 +53,20 @@ describe("TopLinksPanelWidget title priority", () => {
       </MemoryRouter>
     );
 
-    // Link 1: title priority
     const titleEl = screen.getByText("Summer Promotion");
     expect(titleEl).toBeDefined();
     expect(titleEl.className).toContain("text-foreground");
     expect(titleEl.className).toContain("font-medium");
 
-    // Link 1: secondary slug
     const secondarySlug = screen.getByText("go.octarq.com/promo-2026");
     expect(secondarySlug).toBeDefined();
     expect(secondarySlug.className).toContain("text-muted-foreground");
 
-    // Link 1: tags (first 2 badges visible + overflow badge "+1")
     expect(screen.getByTitle("marketing")).toBeDefined();
     expect(screen.getByTitle("summer")).toBeDefined();
-    expect(screen.getByTitle("campaign")).toBeDefined(); // overflow title
+    expect(screen.getByTitle("campaign")).toBeDefined();
     expect(screen.getByText("+1")).toBeDefined();
 
-    // Link 2: fallback to slug when title is empty
     expect(screen.getByText("untitled-link")).toBeDefined();
     expect(screen.getByText("/untitled-link")).toBeDefined();
   });

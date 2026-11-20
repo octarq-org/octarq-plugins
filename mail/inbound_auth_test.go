@@ -12,34 +12,14 @@ import (
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 )
 
-// The generic inbound endpoint authenticates on a token in the URL path, the
-// shape n8n and every hosted webhook receiver uses. It has to: this route
-// exists for providers whose entire configuration surface is one URL field
-// (SendGrid Inbound Parse, Mailgun routes), so requiring a custom header would
-// leave them unable to call it at all. The trade is that a URL-borne secret can
-// end up in an access log, and the answer to that is rotation — an empty
-// inboundToken in Mail settings mints a fresh UUID, and one URL gets repasted.
-//
-// These tests pin the two properties that make that trade safe: nothing gets in
-// without the right token, and a wrong token leaves a trail.
-
 type recordedAudit struct {
 	action   string
 	targetID uint
 	meta     map[string]any
 }
 
-// nextInboundAuthOrgID hands out org ids well clear of the low ones other
-// tests in this package assign explicitly.
 var nextInboundAuthOrgID atomic.Uint32
 
-// setupTestDB hands every test in this package the SAME shared in-memory
-// database. Two things follow, and both have already broken a build here:
-// a hardcoded slug collides with another test's org, and so does a hardcoded
-// id — storage_test.go inserts its org with an explicit ID of 1, which fails
-// silently if something else took that id first, leaving its lookup to 404.
-// So the slug comes from the test name and the id from a counter starting far
-// above anything assigned by hand.
 func inboundAuthFixture(t *testing.T) (*Plugin, *[]recordedAudit, string, uint) {
 	t.Helper()
 	db := setupTestDB(t)
@@ -68,8 +48,6 @@ func genericInput(slug, token string) *InboundGenericInput {
 	}
 }
 
-// A header that used to be accepted must not be a way in any more. The token
-// travels in the path; anything else is an unauthenticated request.
 func TestGenericInboundRejectsHeaderToken(t *testing.T) {
 	p, _, slug, _ := inboundAuthFixture(t)
 
@@ -81,7 +59,7 @@ func TestGenericInboundRejectsHeaderToken(t *testing.T) {
 	_, err := p.inboundGeneric(context.Background(), &InboundGenericInput{
 		Ctx:     humago.NewContext(nil, req, httptest.NewRecorder()),
 		OrgSlug: slug,
-		Token:   "", // nothing in the path
+		Token:   "",
 	})
 	if err == nil {
 		t.Fatal("a correct token in a header must not authenticate — the path segment is the credential")
@@ -97,9 +75,6 @@ func TestGenericInboundRejectsWrongPathToken(t *testing.T) {
 	}
 }
 
-// A wrong token has to leave a trail. Guessing the org token buys the ability
-// to inject mail into any mailbox in the workspace, so a silent 401 means
-// someone can grind the token space indefinitely with nothing to notice.
 func TestInboundAuthFailureIsAudited(t *testing.T) {
 	p, seen, slug, orgID := inboundAuthFixture(t)
 
@@ -119,9 +94,6 @@ func TestInboundAuthFailureIsAudited(t *testing.T) {
 		t.Errorf("audit targetID = %d, want the org id", got.targetID)
 	}
 
-	// The attempted token must never be recorded. An operator pasting their
-	// real token into the wrong tenant's URL would otherwise write that
-	// credential into an audit log they do not control.
 	for k, v := range got.meta {
 		if s, ok := v.(string); ok && s == "wrong-token" {
 			t.Errorf("audit meta[%q] contains the attempted token — it must never be stored", k)
@@ -129,8 +101,6 @@ func TestInboundAuthFailureIsAudited(t *testing.T) {
 	}
 }
 
-// The Cloudflare-worker route carries the same token in its own path segment
-// and must audit the same way.
 func TestPathTokenRouteAuthFailureIsAudited(t *testing.T) {
 	p, seen, slug, _ := inboundAuthFixture(t)
 

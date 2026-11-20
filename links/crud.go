@@ -134,7 +134,6 @@ func (p *Plugin) updateLink(ctx context.Context, input *UpdateLinkInput) (*Updat
 	if tdb.Where("id = ?", input.ID).First(&l).Error != nil {
 		return nil, huma.Error404NotFound("Link not found")
 	}
-	// Capture BEFORE mutation so cache invalidation targets the original key.
 	oldHost := l.Host
 	oldSlug := l.Slug
 

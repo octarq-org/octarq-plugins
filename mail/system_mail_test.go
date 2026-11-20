@@ -15,8 +15,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// captureSMTP speaks just enough ESMTP to complete a send and returns the DATA
-// payload so tests can assert what actually left the instance.
 func captureSMTP(t *testing.T) (host string, port int, got func() string) {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -94,9 +92,6 @@ func captureSMTP(t *testing.T) (host string, port int, got func() string) {
 	}
 }
 
-// newSystemMailTestPlugin builds a mail plugin over a fresh DB with the
-// pass-through decrypt seam used across this package's send tests and a
-// configurable global-setting reader for the system-sender setting.
 func newSystemMailTestPlugin(t *testing.T, globalSetting func(string) string) (*Plugin, *gorm.DB) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
@@ -106,8 +101,6 @@ func newSystemMailTestPlugin(t *testing.T, globalSetting func(string) string) (*
 	if err := db.AutoMigrate(&SMTPSender{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	// The shared in-memory cache is reused across tests in this package, so
-	// wipe rows a previous test may have left.
 	db.Where("1 = 1").Delete(&SMTPSender{})
 	p := New()
 	p.db = db
@@ -118,11 +111,6 @@ func newSystemMailTestPlugin(t *testing.T, globalSetting func(string) string) (*
 	return p, db
 }
 
-// TestSendSystemMailNoSenderReturnsClearError pins the fail-closed half of the
-// system sender: with zero SMTP senders the send must fail with a message that
-// says what is missing, and mailReady must answer false — the state a fresh
-// `docker run` instance is in, where registration 503s instead of promising an
-// email that can never arrive.
 func TestSendSystemMailNoSenderReturnsClearError(t *testing.T) {
 	p, _ := newSystemMailTestPlugin(t, nil)
 
@@ -139,12 +127,6 @@ func TestSendSystemMailNoSenderReturnsClearError(t *testing.T) {
 	}
 }
 
-// TestSendSystemMailDeliversWithoutOrg pins the send path itself: a sender on
-// some workspace delivers system mail to the fake relay. The send carries no
-// orgID — the recipient's membership (or lack of one) must not matter.
-// TestSendSystemMailDeliversWithoutOrg pins the send path itself: an explicitly
-// configured system sender delivers system mail to the fake relay. The send carries no
-// orgID — the recipient's membership (or lack of one) must not matter.
 func TestSendSystemMailDeliversWithoutOrg(t *testing.T) {
 	host, port, got := captureSMTP(t)
 	p, _ := newSystemMailTestPlugin(t, func(key string) string {
@@ -170,9 +152,6 @@ func TestSendSystemMailDeliversWithoutOrg(t *testing.T) {
 	}
 }
 
-// TestSystemSenderResolution pins the fail-closed resolution order: the
-// explicitly configured sender (mail_system_sender_id) wins when it exists;
-// unset or stale ids fail closed without falling back to arbitrary tenant senders.
 func TestSystemSenderResolution(t *testing.T) {
 	settings := map[string]string{}
 	p, db := newSystemMailTestPlugin(t, func(key string) string { return settings[key] })
@@ -185,12 +164,10 @@ func TestSystemSenderResolution(t *testing.T) {
 		t.Fatalf("seed second: %v", err)
 	}
 
-	// Unset → fail closed.
 	if _, err := p.systemSender(); err == nil {
 		t.Fatal("unset setting must fail closed without fallback to lowest id")
 	}
 
-	// Configured → that sender.
 	settings["mail_system_sender_id"] = "2"
 	s, err := p.systemSender()
 	if err != nil {
@@ -200,7 +177,6 @@ func TestSystemSenderResolution(t *testing.T) {
 		t.Fatalf("configured setting resolved sender %d, want 2", s.ID)
 	}
 
-	// Stale id (sender deleted) → fail closed.
 	settings["mail_system_sender_id"] = "999"
 	if _, err := p.systemSender(); err == nil {
 		t.Fatal("stale setting must fail closed without fallback to lowest id")
@@ -210,7 +186,6 @@ func TestSystemSenderResolution(t *testing.T) {
 func TestVaultService_MailCredentialResolution(t *testing.T) {
 	p, _ := newSystemMailTestPlugin(t, func(string) string { return "" })
 
-	// 1. Initially no senders -> not ready
 	if p.mailReady() {
 		t.Fatal("expected mailReady = false initially")
 	}
@@ -218,7 +193,6 @@ func TestVaultService_MailCredentialResolution(t *testing.T) {
 	host, port, got := captureSMTP(t)
 	mv := p.vaultSvc.(*mockVaultService)
 
-	// 2. Wire org-scoped communication secret in VaultService
 	if _, err := mv.PutSecret(context.Background(), plugin.PutSecretRequest{
 		OrgID:        1,
 		Scope:        plugin.VaultScopeOrg,
@@ -235,12 +209,10 @@ func TestVaultService_MailCredentialResolution(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Org-scoped integration is not a system sender until mail_system_sender_id is selected.
 	if p.mailReady() {
 		t.Fatal("expected mailReady = false while only an org-scoped integration exists")
 	}
 
-	// 3. sendMail delivers via VaultService
 	if err := p.sendMail(1, "recipient@example.com", "Test Subject Via Vault", "<p>Body</p>", "Body"); err != nil {
 		t.Fatalf("sendMail via VaultService failed: %v", err)
 	}
@@ -253,7 +225,6 @@ func TestVaultService_MailCredentialResolution(t *testing.T) {
 		t.Fatalf("SMTP relay did not receive expected from address: %s", captured)
 	}
 
-	// 4. Instance-scoped system sender (orgID == 0, scope = instance) works via ResolveInstanceSecret
 	hostInst, portInst, gotInst := captureSMTP(t)
 	instMeta, err := mv.PutInstanceSecret(context.Background(), plugin.PutSecretRequest{
 		Scope:        plugin.VaultScopeInstance,
@@ -289,7 +260,6 @@ func TestVaultService_MailCredentialResolution(t *testing.T) {
 		t.Fatalf("instance relay did not receive expected from address: %s", gotInst())
 	}
 
-	// 5. Test Resend credential resolution
 	resendSec := &plugin.VaultSecret{
 		Meta:    plugin.VaultItemMeta{ID: 102, OrgID: 1, ProviderType: "communication", Provider: "resend"},
 		Payload: map[string]any{"apiKey": "re_123456", "fromEmail": "resend@octarq.com"},

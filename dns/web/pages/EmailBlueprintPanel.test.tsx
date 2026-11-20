@@ -7,7 +7,6 @@ import * as roleModule from "@octarq/plugin-sdk";
 import { EmailBlueprintPanel } from "./EmailBlueprintPanel";
 import * as apiModule from "../api";
 
-// --- mocks -----------------------------------------------------------------
 vi.mock("../api", async (importOriginal) => {
   const actual = await importOriginal<typeof apiModule>();
   return {
@@ -58,13 +57,11 @@ function wrapper({ children }: { children: React.ReactNode }) {
   );
 }
 
-// --- tests -----------------------------------------------------------------
 describe("EmailBlueprintPanel", () => {
   it("renders blueprint records after loading", async () => {
     vi.mocked(apiModule.dnsApi.emailBlueprint).mockResolvedValue(missingRecords);
     render(<EmailBlueprintPanel domainId={1} hasProvider onClose={noop} onApplied={noop} />, { wrapper });
     await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
-    // Each missing record should show a status badge
     const missing = screen.getAllByText(/blueprintStatus_missing/);
     expect(missing.length).toBeGreaterThanOrEqual(4);
   });

@@ -23,19 +23,16 @@ func BenchmarkEmailBounceWebhook(b *testing.B) {
 		b.Fatalf("failed to create test db: %v", err)
 	}
 
-	// Migrate schemas
 	db.AutoMigrate(&testOrg{}, &Mailbox{}, &testAuditLog{}, &MailSuppression{}, &testNotificationChannel{})
 
 	p := &Plugin{db: db}
 
-	// Create org
 	org := &testOrg{
 		Slug:         "acme",
 		InboundToken: "tok",
 	}
 	db.Create(org)
 
-	// Create a bunch of mailboxes
 	var emails []string
 	for i := 0; i < 100; i++ {
 		email := fmt.Sprintf("user%d@acme.example", i)
@@ -46,7 +43,6 @@ func BenchmarkEmailBounceWebhook(b *testing.B) {
 		})
 	}
 
-	// Create payload with many bounce events
 	type snsRecipient struct {
 		EmailAddress string `json:"emailAddress"`
 	}

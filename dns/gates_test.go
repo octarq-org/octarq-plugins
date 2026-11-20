@@ -13,8 +13,6 @@ import (
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
-// TestResolveMethods pins the trivial input.Resolve contract every handler
-// depends on: it stores the huma.Context on the input and reports no errors.
 func TestResolveMethods(t *testing.T) {
 	ctx := huma.Context(nil)
 
@@ -45,7 +43,6 @@ func TestResolveMethods(t *testing.T) {
 	}
 }
 
-// withOrgCtx builds a huma.Context from a request with the given org header.
 func withOrgCtx(t *testing.T, org string) huma.Context {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -103,8 +100,6 @@ func TestReadHandlerGateMatrix(t *testing.T) {
 	ctx := context.Background()
 	accID := seedProviderAccount(t, p)
 
-	// Records list + domains list + provider-account list + ddns list: the
-	// shared gates are nil context (500) and org 0 (401).
 	if _, err := p.listRecords(ctx, &ListRecordsInput{Ctx: noCtx(), ID: domID}); statusOf(t, err) != 500 {
 		t.Errorf("listRecords nil ctx")
 	}
@@ -142,7 +137,6 @@ func TestWriteDomainGateMatrix(t *testing.T) {
 	accID := seedProviderAccount(t, p)
 	ctx := context.Background()
 
-	// createDomain gates: nil ctx, org 0, member.
 	for _, c := range []struct {
 		wal  string
 		org  string
@@ -174,7 +168,6 @@ func TestWriteDomainGateMatrix(t *testing.T) {
 	}
 	_ = p
 
-	// Blank name with an admin + account still rejects with 400.
 	adminReq := httptest.NewRequest(http.MethodPost, "/", nil)
 	adminReq.Header.Set("X-Org-ID", "1")
 	adminReq.Header.Set("X-Role", "admin")
@@ -182,7 +175,6 @@ func TestWriteDomainGateMatrix(t *testing.T) {
 	if statusOf(t, err) != 400 {
 		t.Errorf("blank domain name: want 400, got %v", err)
 	}
-	// ProviderAccountID 0 fails validation with 400 before any ownership check.
 	_, err = p.createDomain(ctx, &CreateDomainInput{Ctx: humago.NewContext(nil, adminReq, httptest.NewRecorder()), Body: domainDTO{Name: "ok.example.com"}})
 	if statusOf(t, err) != 400 {
 		t.Errorf("account 0 validation: want 400, got %v", err)
@@ -198,7 +190,6 @@ func TestDeleteDomainAndSyncGates(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// deleteDomain: nil ctx (500) and org 0 (401).
 	if _, err := p.deleteDomain(ctx, &DeleteDomainInput{Ctx: noCtx(), ID: dom.ID}); statusOf(t, err) != 500 {
 		t.Errorf("deleteDomain nil ctx")
 	}
@@ -206,7 +197,6 @@ func TestDeleteDomainAndSyncGates(t *testing.T) {
 		t.Errorf("deleteDomain org0")
 	}
 
-	// syncDomains: nil ctx (500), org 0 (401), member (403).
 	body := struct {
 		ProviderAccountID uint `json:"providerAccountId,omitempty"`
 	}{0}
@@ -223,14 +213,12 @@ func TestDeleteDomainAndSyncGates(t *testing.T) {
 		t.Errorf("syncDomains member")
 	}
 
-	// createDDNSToken: nil ctx (500) and org 0 (401).
 	if _, err := p.createDDNSToken(ctx, &createDDNSTokenInput{Ctx: noCtx()}); statusOf(t, err) != 500 {
 		t.Errorf("createDDNSToken nil ctx")
 	}
 	if _, err := p.createDDNSToken(ctx, &createDDNSTokenInput{Ctx: withOrgCtx(t, "0")}); statusOf(t, err) != 401 {
 		t.Errorf("createDDNSToken org0")
 	}
-	// deleteDDNSToken: nil ctx (500).
 	if _, err := p.deleteDDNSToken(ctx, &deleteDDNSTokenInput{Ctx: noCtx(), ID: 1}); statusOf(t, err) != 500 {
 		t.Errorf("deleteDDNSToken nil ctx")
 	}
@@ -251,8 +239,6 @@ func TestUpdateDDNSMissingIP(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Valid token but no IP anywhere (no query, no form, empty RemoteAddr) ->
-	// dnserr through the empty-ip fallback.
 	req := httptest.NewRequest(http.MethodGet, "/api/dns/ddns/update?token="+secret, nil)
 	req.RemoteAddr = ""
 	rec := httptest.NewRecorder()
@@ -269,11 +255,9 @@ func TestManagerSetProviderFailure(t *testing.T) {
 	_, domID := seedDomainForProvider(t, p, "mgr-fail.example.com", "z", provName)
 	ctx := context.Background()
 
-	// Update branch.
 	if _, err := p.DNSManager().Set(ctx, 1, domID, plugin.DNSRecord{ID: "r1", Type: "A", Name: "x", Content: "1.1.1.1"}); err == nil {
 		t.Error("Set(update) must propagate provider error")
 	}
-	// Create branch.
 	if _, err := p.DNSManager().Set(ctx, 1, domID, plugin.DNSRecord{Type: "A", Name: "x", Content: "1.1.1.1"}); err == nil {
 		t.Error("Set(create) must propagate provider error")
 	}

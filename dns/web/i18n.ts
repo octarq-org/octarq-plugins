@@ -1,20 +1,15 @@
 export const domainsI18n = {
   en: {
-    // Shared-namespace contribution: this plugin's description in the
-    // plugin manager (core chrome looks up settings.pluginDesc.dns).
     _shared: { settings: { pluginDesc: { dns: "Domain lifecycle and DNS management across Cloudflare and DNSPod." } } },
-    // Page header
     pageTitle: "DNS",
     pageDescription: "Sync & manage DNS records across Cloudflare and DNSPod",
     syncCloudflare: "Sync Cloudflare",
     addDomain: "Add Domain",
 
-    // Tabs
     tabDns: "DNS",
     tabDdns: "Dynamic DNS",
     tabSettings: "Settings",
 
-    // DDNS
     ddnsTitle: "Dynamic DNS (DDNS) Tokens",
     ddnsDescription: "Keep A/AAAA records updated with your home router or dynamic IP server using standard Dyndns2 protocol.",
     createDdnsToken: "New DDNS Token",
@@ -38,22 +33,18 @@ export const domainsI18n = {
     copyUrl: "Copy Update URL",
     copied: "Copied",
 
-    // Domain list
     searchDomains: "Search domains…",
-    // Query renders beside emptyFilteredReason in mono.
     emptyFilteredReason: "No domains match",
     emptyFilteredAction: "Clear search",
     toggleLinkRouting: "Toggle Link routing",
     toggleMailRouting: "Toggle Mail routing",
     loading: "Loading…",
 
-    // Domain editor / detail
     addDomainZone: "Add Domain Zone",
     removeConfirm: "Delete {{name}}?",
     delete: "Delete",
     managedHosts: "Managed Hosts",
 
-    // DNS verification
     dnsSetupVerification: "DNS Setup Verification",
     verifying: "Verifying…",
     verifyDnsSetup: "Verify DNS Setup",
@@ -64,7 +55,6 @@ export const domainsI18n = {
     mailHosts: "Mail hosts",
     shortLinkHosts: "Short-link hosts",
 
-    // Email Reputation & DNS Health Check
     dnsHealthScore: "Deliverability & DNS Health Score",
     dnsHealthScoreDesc: "Calculated from SPF, DKIM, and DMARC posture across all verified mail hosts.",
     scoreGrade_excellent: "Excellent",
@@ -102,10 +92,8 @@ export const domainsI18n = {
 
     dnsRecords: "DNS Records",
 
-    // Empty states
     addFirstDomain: "Add your first domain",
     addFirstDomainHint: "Import every zone from a connected DNS provider in one step, or add a domain manually.",
-    // Zero provider accounts is the real blocker, not the absence of domains.
     providerBlockerDetail: "DNS changes run through a provider account — none is connected yet. Connect one to import or manage zones.",
     connectedProvidersPre: "Connected provider accounts:",
     syncFrom: "Sync from {{name}}",
@@ -114,19 +102,16 @@ export const domainsI18n = {
     orAddManually: "or add a domain manually",
     selectDomainHint: "Select a domain from the sidebar list to manage DNS & routing.",
 
-    // DnsStatusBadge
     configured: "✓ Configured",
     misconfigured: "! Misconfigured",
     missing: "✗ Missing",
 
-    // LinkHostRow
     pointsToZone: "✓ Points to zone",
     unverified: "! Unverified",
     notResolving: "✗ Not resolving",
     resolvesNoCname: "resolves, but no CNAME into {{target}}",
     addCname: "add a CNAME → {{target}}",
 
-    // LinkHostGuide
     guideTitle: "How to point a short-link host at this app",
     guideIntro: "needs a DNS record so visitors reach this server:",
     guideEachHost: "Each short-link host (e.g. ",
@@ -143,7 +128,6 @@ export const domainsI18n = {
     guideSubdomainPreset: "Subdomain",
     guideTipEnd: "preset in DNS Records → “Set Link CNAME” to create this record automatically.",
 
-    // DomainEditorForm
     domainName: "Domain Name",
     dnsProviderConnection: "DNS Provider Connection",
     noAccountsAvailable: "No accounts available",
@@ -159,7 +143,6 @@ export const domainsI18n = {
     saving: "Saving...",
     saveBasicInfo: "Save Basic Info",
 
-    // DomainHostManager
     noActiveHosts: "No active hosts registered. Add one below.",
     thHost: "Host",
     thLink: "🔗 Link",
@@ -173,11 +156,9 @@ export const domainsI18n = {
     addHostFailed: "Failed to add host",
     removeHostFailed: "Failed to remove host",
 
-    // AddHostRow
     hostDraftPlaceholder: "e.g. blog or cname",
     addHostButton: "Add Host",
 
-    // SyncModal
     syncDnsZones: "Sync DNS Zones",
     zonesDetected: "{{count}} zones detected",
     createdPrefix: "Created",
@@ -193,7 +174,6 @@ export const domainsI18n = {
     queryingApi: "Querying API…",
     syncZones: "Sync Zones",
 
-    // RecordsView
     allTypes: "All types",
     filterPlaceholder: "Filter name / content / comment…",
     presetButton: "Preset",
@@ -210,7 +190,6 @@ export const domainsI18n = {
     del: "Delete",
     deleteRecordConfirm: "Delete {{type}} {{name}}?",
 
-    // RecordEditor
     modifyRecord: "Modify Record",
     presetConfigurator: "Preset Configurator",
     createRecord: "Create Record",
@@ -226,7 +205,6 @@ export const domainsI18n = {
     proxiedLabel: "Proxied (Cloudflare Caching and SSL Proxy)",
     saveRecord: "Save Record",
 
-    // contentHint
     hintIpv4: "IPv4 address",
     hintIpv6: "IPv6 address",
     hintCname: "target hostname",
@@ -234,7 +212,6 @@ export const domainsI18n = {
     hintMx: "mail server hostname",
     hintNs: "nameserver hostname",
 
-    // Navigation & Workspace Layout
     backToDomains: "Back to Domains",
     domainRecords: "DNS Records",
     domainRouting: "Routing & Subdomains",
@@ -246,7 +223,6 @@ export const domainsI18n = {
     mailEnabledCount: "{{count}} mail enabled",
     providerManual: "Manual / Other",
 
-    // Email DNS Blueprint
     emailSetupButton: "Email DNS Setup",
     emailBlueprintTitle: "Email DNS Blueprint",
     emailBlueprintDesc: "Recommended DNS records for email routing (MX, SPF, DMARC). Apply them automatically via your DNS provider or copy each value for manual setup.",
@@ -263,18 +239,15 @@ export const domainsI18n = {
   },
   zh: {
     _shared: { settings: { pluginDesc: { dns: "跨 Cloudflare 和 DNSPod 管理域名生命周期与 DNS 记录。" } } },
-    // Page header
     pageTitle: "DNS",
     pageDescription: "跨 Cloudflare 与 DNSPod 同步并管理 DNS 记录",
     syncCloudflare: "同步 Cloudflare",
     addDomain: "添加域名",
 
-    // Tabs
     tabDns: "DNS",
     tabDdns: "动态 DNS (DDNS)",
     tabSettings: "设置",
 
-    // DDNS
     ddnsTitle: "动态域名解析 (DDNS) Token",
     ddnsDescription: "使用标准的 Dyndns2 协议，让路由器或家宽脚本自动将 A/AAAA 记录更新为当前公网 IP。",
     createDdnsToken: "新建 DDNS Token",
@@ -298,7 +271,6 @@ export const domainsI18n = {
     copyUrl: "复制更新 URL",
     copied: "已复制",
 
-    // Domain list
     searchDomains: "搜索域名…",
     emptyFilteredReason: "没有域名匹配",
     emptyFilteredAction: "清除搜索",
@@ -306,13 +278,11 @@ export const domainsI18n = {
     toggleMailRouting: "切换邮件路由",
     loading: "加载中…",
 
-    // Domain editor / detail
     addDomainZone: "添加域名区域",
     removeConfirm: "确定删除 {{name}}？",
     delete: "删除",
     managedHosts: "已管理主机",
 
-    // DNS verification
     dnsSetupVerification: "DNS 配置校验",
     verifying: "校验中…",
     verifyDnsSetup: "校验 DNS 配置",
@@ -323,7 +293,6 @@ export const domainsI18n = {
     mailHosts: "邮件主机",
     shortLinkHosts: "短链主机",
 
-    // Email Reputation & DNS Health Check
     dnsHealthScore: "发信信誉与 DNS 体检评分",
     dnsHealthScoreDesc: "综合评估所有邮件主机的 SPF、DKIM、DMARC 解析有效性与投递信誉。",
     scoreGrade_excellent: "卓越",
@@ -361,7 +330,6 @@ export const domainsI18n = {
 
     dnsRecords: "DNS 记录",
 
-    // Empty states
     addFirstDomain: "添加你的第一个域名",
     addFirstDomainHint: "一步从已连接的 DNS 服务商导入所有区域，或手动添加域名。",
     providerBlockerDetail: "DNS 变更需要经过服务商账号 —— 当前尚未连接任何账号。先连接一个，才能导入或管理域名。",
@@ -372,19 +340,16 @@ export const domainsI18n = {
     orAddManually: "或手动添加域名",
     selectDomainHint: "从左侧列表选择一个域名以管理 DNS 与路由。",
 
-    // DnsStatusBadge
     configured: "✓ 已配置",
     misconfigured: "! 配置错误",
     missing: "✗ 缺失",
 
-    // LinkHostRow
     pointsToZone: "✓ 指向区域",
     unverified: "! 未验证",
     notResolving: "✗ 未解析",
     resolvesNoCname: "已解析，但没有指向 {{target}} 的 CNAME",
     addCname: "添加 CNAME → {{target}}",
 
-    // LinkHostGuide
     guideTitle: "如何将短链主机指向本应用",
     guideIntro: "需要一条 DNS 记录，访问者才能到达本服务器：",
     guideEachHost: "每个短链主机（例如 ",
@@ -401,7 +366,6 @@ export const domainsI18n = {
     guideSubdomainPreset: "子域名",
     guideTipEnd: "预设，在 DNS 记录 →“设置短链 CNAME”中自动创建此记录。",
 
-    // DomainEditorForm
     domainName: "域名",
     dnsProviderConnection: "DNS 服务商连接",
     noAccountsAvailable: "暂无可用账户",
@@ -417,7 +381,6 @@ export const domainsI18n = {
     saving: "保存中...",
     saveBasicInfo: "保存基本信息",
 
-    // DomainHostManager
     noActiveHosts: "尚未注册活动主机。请在下方添加。",
     thHost: "主机",
     thLink: "🔗 短链",
@@ -431,11 +394,9 @@ export const domainsI18n = {
     addHostFailed: "添加主机失败",
     removeHostFailed: "删除主机失败",
 
-    // AddHostRow
     hostDraftPlaceholder: "例如 blog 或 cname",
     addHostButton: "添加主机",
 
-    // SyncModal
     syncDnsZones: "同步 DNS 区域",
     zonesDetected: "检测到 {{count}} 个区域",
     createdPrefix: "新建",
@@ -451,7 +412,6 @@ export const domainsI18n = {
     queryingApi: "查询 API 中…",
     syncZones: "同步区域",
 
-    // RecordsView
     allTypes: "全部类型",
     filterPlaceholder: "按名称 / 内容 / 备注筛选…",
     presetButton: "预设",
@@ -468,7 +428,6 @@ export const domainsI18n = {
     del: "删除",
     deleteRecordConfirm: "删除 {{type}} {{name}}？",
 
-    // RecordEditor
     modifyRecord: "修改记录",
     presetConfigurator: "预设配置器",
     createRecord: "创建记录",
@@ -484,7 +443,6 @@ export const domainsI18n = {
     proxiedLabel: "代理（Cloudflare 缓存与 SSL 代理）",
     saveRecord: "保存记录",
 
-    // contentHint
     hintIpv4: "IPv4 地址",
     hintIpv6: "IPv6 地址",
     hintCname: "目标主机名",
@@ -492,7 +450,6 @@ export const domainsI18n = {
     hintMx: "邮件服务器主机名",
     hintNs: "名称服务器主机名",
 
-    // Navigation & Workspace Layout
     backToDomains: "返回域名列表",
     domainRecords: "DNS 记录",
     domainRouting: "子域名路由",
@@ -504,7 +461,6 @@ export const domainsI18n = {
     mailEnabledCount: "{{count}} 个邮件路由",
     providerManual: "手动 / 其他",
 
-    // Email DNS Blueprint
     emailSetupButton: "邮件 DNS 配置",
     emailBlueprintTitle: "邮件 DNS 蓝图",
     emailBlueprintDesc: "邮件路由推荐 DNS 记录（MX、SPF、DMARC）。通过 DNS 服务商一键下发，或逐条复制手动配置。",
@@ -570,7 +526,6 @@ export const domainsI18n = {
     mailHosts: "Hosts de correo",
     shortLinkHosts: "Hosts de enlaces cortos",
 
-    // Email Reputation & DNS Health Check
     dnsHealthScore: "Puntuación de reputación y salud de DNS",
     dnsHealthScoreDesc: "Calculado a partir de la postura de SPF, DKIM y DMARC en todos los hosts de correo verificados.",
     scoreGrade_excellent: "Excelente",
@@ -716,7 +671,6 @@ export const domainsI18n = {
     hintMx: "nombre de host del servidor de correo",
     hintNs: "nombre de host del servidor de nombres",
 
-    // Navigation & Workspace Layout
     backToDomains: "Volver a dominios",
     domainRecords: "Registros DNS",
     domainRouting: "Enrutamiento de subdominios",
@@ -728,7 +682,6 @@ export const domainsI18n = {
     mailEnabledCount: "{{count}} con correo",
     providerManual: "Manual / Otro",
 
-    // Email DNS Blueprint
     emailSetupButton: "Configuración de email DNS",
     emailBlueprintTitle: "Esquema de DNS para email",
     emailBlueprintDesc: "Registros DNS recomendados para el enrutamiento de correo (MX, SPF, DMARC). Aplíquelos automáticamente a través de su proveedor DNS o copie cada valor para configuración manual.",
@@ -794,7 +747,6 @@ export const domainsI18n = {
     mailHosts: "Hosts de e-mail",
     shortLinkHosts: "Hosts de links curtos",
 
-    // Email Reputation & DNS Health Check
     dnsHealthScore: "Pontuação de reputação e saúde de DNS",
     dnsHealthScoreDesc: "Calculado a partir da postura de SPF, DKIM e DMARC em todos os hosts de e-mail verificados.",
     scoreGrade_excellent: "Excelente",
@@ -940,7 +892,6 @@ export const domainsI18n = {
     hintMx: "nome de host do servidor de e-mail",
     hintNs: "nome de host do servidor de nomes",
 
-    // Navigation & Workspace Layout
     backToDomains: "Voltar para domínios",
     domainRecords: "Registros DNS",
     domainRouting: "Roteamento de subdomínios",
@@ -952,7 +903,6 @@ export const domainsI18n = {
     mailEnabledCount: "{{count}} com e-mail",
     providerManual: "Manual / Outro",
 
-    // Email DNS Blueprint
     emailSetupButton: "Configuração de email DNS",
     emailBlueprintTitle: "Esquema de DNS para email",
     emailBlueprintDesc: "Registros DNS recomendados para roteamento de e-mail (MX, SPF, DMARC). Aplique-os automaticamente via seu provedor DNS ou copie cada valor para configuração manual.",
@@ -1018,7 +968,6 @@ export const domainsI18n = {
     mailHosts: "メールホスト",
     shortLinkHosts: "短縮リンクホスト",
 
-    // Email Reputation & DNS Health Check
     dnsHealthScore: "送信レピュテーションと DNS ヘルススコア",
     dnsHealthScoreDesc: "検証されたすべてのメールホストの SPF、DKIM、DMARC の設定状況から算出されます。",
     scoreGrade_excellent: "極めて良好",
@@ -1164,7 +1113,6 @@ export const domainsI18n = {
     hintMx: "メール サーバー ホスト名",
     hintNs: "ネーム サーバー ホスト名",
 
-    // Navigation & Workspace Layout
     backToDomains: "ドメイン一覧に戻る",
     domainRecords: "DNS レコード",
     domainRouting: "サブドメインルーティング",
@@ -1176,7 +1124,6 @@ export const domainsI18n = {
     mailEnabledCount: "{{count}} メール",
     providerManual: "手動 / その他",
 
-    // Email DNS Blueprint
     emailSetupButton: "メール DNS 設定",
     emailBlueprintTitle: "メール DNS ブループリント",
     emailBlueprintDesc: "メールルーティングに推奨される DNS レコード（MX、SPF、DMARC）。DNS プロバイダーへ自動適用するか、各値をコピーして手動設定できます。",

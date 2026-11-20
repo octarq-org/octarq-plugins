@@ -36,9 +36,9 @@ func TestNormalizeHostsUnit(t *testing.T) {
 
 	entries := []hostEntry{
 		{Host: "  HTTPS://A.COM/path ", Enabled: &tTrue},
-		{Host: "a.com", Enabled: &fFalse}, // duplicate, should be skipped
+		{Host: "a.com", Enabled: &fFalse},
 		{Host: "B.COM:80", Enabled: &fFalse},
-		{Host: "   ", Enabled: &tTrue}, // empty, skipped
+		{Host: "   ", Enabled: &tTrue},
 	}
 
 	out := normalizeHosts(entries)
@@ -59,9 +59,6 @@ func TestProviderErrUnit(t *testing.T) {
 
 	p := &Plugin{}
 
-	// "upstream timeout" has no auth/auth/invalid/exists keywords → falls through
-	// to the default bucket. The response must NOT contain the raw provider text,
-	// but providerErr still returns a non-nil error.
 	err := p.providerErr("create domain", errors.New("upstream timeout"))
 	if err == nil {
 		t.Fatal("expected non-nil error")
@@ -71,12 +68,10 @@ func TestProviderErrUnit(t *testing.T) {
 	if msg := err.Error(); msg == "create domain: "+raw {
 		t.Errorf("provider raw text leaked into response: %v", msg)
 	}
-	// The sanitised response must still include the action name.
 	if msg := err.Error(); len(msg) == 0 || msg == "create domain: " {
 		t.Errorf("providerErr returned empty message: %v", msg)
 	}
 
-	// Auth-related errors are classified as a credential hint.
 	errAuth := p.providerErr("list zones", errors.New("401 Unauthorized: invalid token xyz-secret-abc"))
 	if errAuth == nil {
 		t.Fatal("expected non-nil error for auth failure")
@@ -85,7 +80,6 @@ func TestProviderErrUnit(t *testing.T) {
 	if msg := errAuth.Error(); msg != "list zones: authentication failed. Check your API token or credentials" {
 		t.Errorf("unexpected auth error message: %v", msg)
 	}
-	// The raw secret must not appear in the response.
 	if msg := errAuth.Error(); len(msg) > 0 {
 		for _, leaked := range []string{"xyz-secret-abc", "invalid token"} {
 			if contains(msg, leaked) {
@@ -94,9 +88,6 @@ func TestProviderErrUnit(t *testing.T) {
 		}
 	}
 
-	// Absence must not be reported as a duplicate: "does not exist" contains
-	// "exist", so an existence test placed first silently inverts the meaning
-	// and tells the user a missing record is already taken.
 	for _, absent := range []string{
 		"record does not exist",
 		"Record not found",
@@ -108,7 +99,6 @@ func TestProviderErrUnit(t *testing.T) {
 		}
 	}
 
-	// The duplicate bucket still works for genuine collisions.
 	if got := p.providerErr("create record", errors.New("record already exists")).Error(); got != "create record: record already exists" {
 		t.Errorf("providerErr on a duplicate = %q, want the already-exists classification", got)
 	}

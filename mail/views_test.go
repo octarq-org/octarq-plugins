@@ -36,7 +36,6 @@ func TestRegisterViews(t *testing.T) {
 		t.Errorf("tenant_emails definition missing WHERE m.owner_id = 99: %s", defTE)
 	}
 
-	// Nil ctx or nil RegisterTenantView should not panic
 	mail.RegisterViews(nil)
 	mail.RegisterViews(&plugin.Context{})
 }

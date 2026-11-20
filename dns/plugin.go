@@ -1,12 +1,3 @@
-// Package dns manages domains and DNS: the operator's zones, per-zone
-// DNS-provider credentials (Cloudflare, …), live record CRUD through the
-// provider, and the DNS-verification posture (SPF/DMARC/DKIM for mail hosts,
-// CNAME health for link hosts).
-//
-// It mounts through the same plugin contract Pro features use. The links and
-// mail plugins consume the domain's host lists, and Pro plugins reach live DNS
-// through the plugin.DNSManager this plugin provides as the "dns.manager"
-// service.
 package dns
 
 import (
@@ -25,27 +16,14 @@ import (
 	"gorm.io/gorm"
 )
 
-// ServiceDNSManager is the registry name under which this plugin provides the
-// plugin.DNSManager seam. The app wires ctx.DNS to resolve it, so Pro plugins
-// (infra, ai MCP tools) reach live DNS without importing this package.
-//
-// It is an alias of plugin.ServiceDNSManager, not a second spelling of the same
-// literal: the name is one coordinate shared by this provider and every
-// consumer, so it gets one declaration. Two constants holding "dns.manager"
-// compile fine after either is edited, and the wiring silently stops resolving.
 const ServiceDNSManager = plugin.ServiceDNSManager
 
 var (
-	errNotFound = errors.New("not found")
-	// errProviderAccountNotFound means the selected account exists in neither
-	// registry: the caller's ID is stale or belongs to another workspace.
+	errNotFound                = errors.New("not found")
 	errProviderAccountNotFound = errors.New("provider account not found")
-	// errProviderCredentials means the account exists but its credentials could
-	// not be loaded or decrypted. That is a server-side fault, never a 400.
-	errProviderCredentials = errors.New("provider credentials unavailable")
+	errProviderCredentials     = errors.New("provider credentials unavailable")
 )
 
-// Plugin implements the octarq plugin contract for domain/DNS management.
 type Plugin struct {
 	db          *gorm.DB
 	orgID       func(*http.Request) uint
@@ -57,18 +35,14 @@ type Plugin struct {
 	host         plugin.Host
 	vaultSvc     plugin.VaultService
 
-	// DNS resolvers, injectable so tests can stub them; default to net.
 	lookupTXT   func(string) ([]string, error)
 	lookupCNAME func(string) (string, error)
 }
 
-// Host returns the host runtime interface.
 func (p *Plugin) Host() plugin.Host { return p.host }
 
-// SetHost sets the host runtime interface.
 func (p *Plugin) SetHost(h plugin.Host) { p.host = h }
 
-// Compile-time capability checks.
 var (
 	_ plugin.Plugin       = (*Plugin)(nil)
 	_ plugin.Describer    = (*Plugin)(nil)
@@ -76,9 +50,6 @@ var (
 	_ plugin.HelpDocsFS   = (*Plugin)(nil)
 )
 
-// Compile-time service contract assertions: these methods are provided to the
-// registry under the named contract types in Mount. A signature drift here
-// fails the build instead of silently breaking consumers' LookupServiceAs.
 var (
 	_ plugin.ExportFunc   = (*Plugin)(nil).exportData
 	_ plugin.PurgeFunc    = (*Plugin)(nil).purge
@@ -86,7 +57,6 @@ var (
 	_ plugin.MCPExporter  = (*Plugin)(nil).mcpExportDomains
 )
 
-// New constructs the dns plugin.
 func New() *Plugin {
 	return &Plugin{
 		lookupTXT:   net.LookupTXT,
@@ -106,41 +76,27 @@ func (p *Plugin) Describe() plugin.Info {
 	}
 }
 
-// Models are the domain/DNS tables. In phase 1 they still live in
-// internal/models and are migrated by the core; returning them here is harmless
-// (idempotent AutoMigrate) and readies phase 2, where the types move into this
-// package and this becomes their sole migration owner.
 func (p *Plugin) Models() []any {
 	return []any{&Domain{}, &ProviderAccount{}, &DDNSToken{}}
 }
 
-// Menus announces this plugin's sidebar entry so /api/menus only offers it
-// when the plugin is mounted and enabled for the workspace.
 func (p *Plugin) Menus() []plugin.MenuItem {
 	return []plugin.MenuItem{
 		{ID: "domains", Label: "DNS", Path: "/domains", Icon: "globe", Category: "Network", Area: "assets", Order: 10},
 	}
 }
 
-// Actions announces this plugin's global create affordances so /api/actions
-// only offers them when the plugin is mounted and enabled for the workspace.
 func (p *Plugin) Actions() []plugin.Action {
 	return []plugin.Action{
 		{ID: "create-domain", Label: "Add Domain", Path: "/domains?create=1", Icon: "globe", Category: "Network", Order: 10},
 	}
 }
 
-// docs is this plugin's documentation directory and the only place its pages
-// are declared. Adding one means adding "docs/<slug>.mdx" plus its ".zh.mdx"
-// translation — nothing else. See plugin.HelpDocsFS.
-//
 //go:embed docs
 var docs embed.FS
 
 func (p *Plugin) HelpDocsFS() fs.FS { return docs }
 
-// Mount wires the plugin's dependencies from the shared context and registers
-// its routes on the core API, then provides the DNS manager seam.
 func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 	p.ctx = ctx
 	if ctx.DB != nil {
@@ -213,9 +169,6 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 }
 
 func (p *Plugin) purge(orgID uint) error {
-	// Collect the names before the rows go; see forgetOrigin. A purged
-	// workspace's hostnames must stop resolving to it immediately, not when the
-	// cache happens to expire.
 	var names []string
 	p.db.Model(&Domain{}).Where("owner_id = ?", orgID).Pluck("name", &names)
 	p.db.Where("owner_id = ?", orgID).Delete(&Domain{})
@@ -262,7 +215,6 @@ func (p *Plugin) overview(orgID uint, includeBot bool) map[string]any {
 	}
 }
 
-// orgDB scopes a query to the caller's org.
 func (p *Plugin) orgDB(r *http.Request) *gorm.DB {
 	return p.db.Where("owner_id = ?", p.orgID(r))
 }
@@ -277,8 +229,6 @@ func (p *Plugin) vault() (plugin.VaultService, error) {
 	return nil, plugin.ErrVaultUnavailable
 }
 
-// providerFor resolves a domain's stored credentials from VaultService and
-// builds its DNS provider. Scoped to the domain's owning org.
 func (p *Plugin) providerFor(dom Domain) (provider.Provider, error) {
 	return p.providerForContext(context.Background(), dom)
 }
@@ -339,12 +289,6 @@ func (p *Plugin) providerForContext(ctx context.Context, dom Domain) (provider.P
 	}
 }
 
-// hasRole reports whether the caller holds at least the given workspace role.
-//
-// A host that never wired RequireRole is refused rather than waved through. The
-// gate protects destructive and credential-bearing operations, so "the host did
-// not tell us who this is" has to mean no, not yes — an unwired seam would
-// otherwise silently disable every role check in this plugin.
 func (p *Plugin) hasRole(r *http.Request, min string) bool {
 	if p.requireRole == nil {
 		return false

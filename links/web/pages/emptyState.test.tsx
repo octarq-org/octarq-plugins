@@ -4,10 +4,6 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { I18nProvider } from "@octarq/plugin-sdk";
 
-// The page's empty state must render THROUGH the shared Empty primitive — not
-// a handwritten copy. Mock Empty at the barrel the page imports from, tagging
-// it with a testid; if the page ever regresses to a hand-rolled div, this
-// marker disappears and the test goes red.
 vi.mock("@octarq/plugin-sdk", async (importOriginal) => {
   const ui = await importOriginal<typeof import("@octarq/plugin-sdk")>();
   return {
@@ -46,8 +42,6 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-// Each test renders the whole page. Without this, the next test counts the
-// previous render's buttons too.
 afterEach(cleanup);
 
 describe("LinksPage empty state", () => {
@@ -78,9 +72,6 @@ describe("LinksPage empty state", () => {
       expect(screen.getAllByTestId("shared-empty").length).toBeGreaterThan(0);
     });
 
-    // The header and the empty state used to open the same dialog from two
-    // buttons with the same label. The test harness renders keys, so the label
-    // here is the key both buttons use.
     expect(screen.getAllByRole("button", { name: "links.newLink" })).toHaveLength(1);
   });
 });

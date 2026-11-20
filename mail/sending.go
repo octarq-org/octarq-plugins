@@ -37,10 +37,6 @@ func (p *Plugin) getStorageProvider() (plugin.StorageProvider, error) {
 	return NewDBStorageProvider(p.db), nil
 }
 
-// getBackendConfig resolves which storage backend to use. The Pro mailstorage
-// module owns the authoritative configuration table and pushes the runtime key
-// here via SetGlobalSetting; absent a value the database backend — the only one
-// OSS ships — applies.
 func (p *Plugin) getBackendConfig() string {
 	if p.getGlobalSetting != nil {
 		if val := strings.TrimSpace(p.getGlobalSetting("mail_storage_backend")); val != "" {
@@ -137,8 +133,6 @@ func intFromAny(v any) int {
 	}
 }
 
-// senderFromVaultSecret builds a mail.Sender and sender from-address from a
-// decrypted VaultSecret (supporting SMTP relays and Resend).
 func (p *Plugin) senderFromVaultSecret(sec *plugin.VaultSecret) (mail.Sender, string, error) {
 	if sec == nil || len(sec.Payload) == 0 {
 		return nil, "", errors.New("empty credential configuration")
@@ -146,8 +140,6 @@ func (p *Plugin) senderFromVaultSecret(sec *plugin.VaultSecret) (mail.Sender, st
 
 	from := strings.TrimSpace(strFromAny(sec.Payload["fromEmail"]))
 	if from == "" {
-		// A sender without a From address is not usable: the relay would reject
-		// it, or deliver as no-reply@octarq.local and burn the sending domain.
 		return nil, "", errors.New("sender From address is not configured")
 	}
 
@@ -232,16 +224,11 @@ func (p *Plugin) resolveSenderPassword(ctx context.Context, s *SMTPSender) (stri
 	return pass, nil
 }
 
-// mailReady reports whether this instance can deliver a SYSTEM message
-// (verification, password reset, invite).
 func (p *Plugin) mailReady() bool {
 	_, err := p.systemSender()
 	return err == nil
 }
 
-// systemSender resolves the instance's system sender: the one explicitly
-// selected in instance settings (mail_system_sender_id). Pre-v1.0 fail-closed
-// invariants strictly prohibit falling back to lowest-id or arbitrary tenant senders.
 func (p *Plugin) systemSender() (*SMTPSender, error) {
 	if p.getGlobalSetting != nil {
 		if idStr := strings.TrimSpace(p.getGlobalSetting("mail_system_sender_id")); idStr != "" {
@@ -276,8 +263,6 @@ func (p *Plugin) systemSender() (*SMTPSender, error) {
 	return nil, fmt.Errorf("no SMTP sender configured on this instance; configure mail_system_sender_id in system settings")
 }
 
-// deliverVia sends one message through the given sender record, handling
-// password resolution from VaultService, usage metering and the email.send_failed event.
 func (p *Plugin) deliverVia(s *SMTPSender, to, subject, htmlBody, textBody string) error {
 	ctx := context.Background()
 	var sender mail.Sender
@@ -334,8 +319,6 @@ func (p *Plugin) deliverVia(s *SMTPSender, to, subject, htmlBody, textBody strin
 	return nil
 }
 
-// sendSystemMail delivers an instance-level system message (verification,
-// password reset, invite) through the system sender resolved by systemSender.
 func (p *Plugin) sendSystemMail(to, subject, htmlBody, textBody string) error {
 	s, err := p.systemSender()
 	if err != nil {
@@ -344,9 +327,6 @@ func (p *Plugin) sendSystemMail(to, subject, htmlBody, textBody string) error {
 	return p.deliverVia(s, to, subject, htmlBody, textBody)
 }
 
-// sendMail delivers an org-level message using VaultService communication
-// integrations (SMTP or Resend). Fails closed if Vault is unavailable or no
-// mail integration exists.
 func (p *Plugin) sendMail(orgID uint, to, subject, htmlBody, textBody string) error {
 	if p.isSuppressed(orgID, to) {
 		return fmt.Errorf("recipient address %s is in suppression list", to)

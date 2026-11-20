@@ -10,7 +10,6 @@ import (
 func TestPlugin_CreateDeclarativeLink(t *testing.T) {
 	p, _ := setupFullLinksTestDB(t)
 
-	// 1. Unauthenticated context
 	_, err := p.createDeclarativeLink(context.Background(), DeclarativeLinkInput{
 		Destination: "https://example.com/target",
 	})
@@ -23,7 +22,6 @@ func TestPlugin_CreateDeclarativeLink(t *testing.T) {
 		t.Errorf("expected UNAUTHORIZED AgentError, got %v", err)
 	}
 
-	// 2. Authenticated context with empty destination
 	ctxOrg := plugin.WithOrgID(context.Background(), 1)
 	_, err = p.createDeclarativeLink(ctxOrg, DeclarativeLinkInput{
 		Destination: "   ",
@@ -37,7 +35,6 @@ func TestPlugin_CreateDeclarativeLink(t *testing.T) {
 		t.Errorf("expected MISSING_DESTINATION AgentError, got %v", err)
 	}
 
-	// 3. Authenticated context with invalid destination URL
 	_, err = p.createDeclarativeLink(ctxOrg, DeclarativeLinkInput{
 		Destination: "ftp://invalid-scheme.com",
 	})
@@ -50,7 +47,6 @@ func TestPlugin_CreateDeclarativeLink(t *testing.T) {
 		t.Errorf("expected INVALID_DESTINATION AgentError, got %v", err)
 	}
 
-	// 4. Authenticated context with reserved slug
 	_, err = p.createDeclarativeLink(ctxOrg, DeclarativeLinkInput{
 		Destination: "https://example.com",
 		Slug:        "admin",
@@ -64,7 +60,6 @@ func TestPlugin_CreateDeclarativeLink(t *testing.T) {
 		t.Errorf("expected SLUG_RESERVED AgentError, got %v", err)
 	}
 
-	// 5. Successful link creation
 	out, err := p.createDeclarativeLink(ctxOrg, DeclarativeLinkInput{
 		Destination: "https://example.com/landing",
 		Slug:        "my-promo",
@@ -77,7 +72,6 @@ func TestPlugin_CreateDeclarativeLink(t *testing.T) {
 		t.Errorf("unexpected output: %+v", out)
 	}
 
-	// 6. Duplicate slug creation attempt
 	_, err = p.createDeclarativeLink(ctxOrg, DeclarativeLinkInput{
 		Destination: "https://example.com/other",
 		Slug:        "my-promo",

@@ -11,21 +11,15 @@ import (
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
-// domainDTO is the create/update payload.
-// LinkHosts/MailHosts are pointers so we can distinguish "not sent" (nil)
-// from "explicitly set to empty" ([]) in PATCH-style updates.
 type domainDTO struct {
-	Name              string `json:"name,omitempty"`
-	ProviderAccountID uint   `json:"providerAccountId,omitempty"`
-	ZoneID            string `json:"zoneId,omitempty"`
-	Note              string `json:"note,omitempty"`
-	// ForLink/ForMail are pointer booleans so "not sent" (nil) is distinct
-	// from an explicit true/false, enabling domain-level master toggles that
-	// are independent of the individual host lists.
-	ForMail   *bool        `json:"forMail,omitempty"`
-	ForLink   *bool        `json:"forLink,omitempty"`
-	LinkHosts *[]hostEntry `json:"linkHosts,omitempty"`
-	MailHosts *[]hostEntry `json:"mailHosts,omitempty"`
+	Name              string       `json:"name,omitempty"`
+	ProviderAccountID uint         `json:"providerAccountId,omitempty"`
+	ZoneID            string       `json:"zoneId,omitempty"`
+	Note              string       `json:"note,omitempty"`
+	ForMail           *bool        `json:"forMail,omitempty"`
+	ForLink           *bool        `json:"forLink,omitempty"`
+	LinkHosts         *[]hostEntry `json:"linkHosts,omitempty"`
+	MailHosts         *[]hostEntry `json:"mailHosts,omitempty"`
 }
 
 type ListDomainsInput struct {
@@ -121,7 +115,6 @@ func (p *Plugin) createDomain(ctx context.Context, input *CreateDomainInput) (*C
 		LinkHosts:         normalizeHosts(linkHosts),
 		MailHosts:         normalizeHosts(mailHosts),
 	}
-	// On creation, derive master switches from host presence unless explicitly set.
 	if input.Body.ForLink != nil {
 		dom.ForLink = *input.Body.ForLink
 	} else {
@@ -132,18 +125,12 @@ func (p *Plugin) createDomain(ctx context.Context, input *CreateDomainInput) (*C
 	} else {
 		dom.ForMail = len(dom.MailHosts) > 0
 	}
-	// The reserved zone applies to the host lists as well as the name: a link
-	// or mail host under the base would claim a label no org owns yet.
 	if bad := reservedInHostLists(p.db, dom.LinkHosts, dom.MailHosts); bad != "" {
 		return nil, huma.Error400BadRequest("that hostname is reserved for automatic tenant subdomains")
 	}
-	// Host lists must stay inside this domain's own zone — the apex itself or
-	// a subdomain of it. Domain.Name is unique, so this is what keeps two orgs
-	// from claiming the same hostname through their lists.
 	if bad := hostsOutsideZone(dom.Name, dom.LinkHosts, dom.MailHosts); bad != "" {
 		return nil, huma.Error400BadRequest("host list entry " + bad + " is outside this domain's zone")
 	}
-	// Best-effort credential check.
 	if prov, err := p.providerFor(dom); err == nil && dom.ZoneID != "" {
 		if name, err := prov.VerifyZone(r.Context(), dom.ZoneID); err != nil {
 			if p.publishEvent != nil {
@@ -154,10 +141,6 @@ func (p *Plugin) createDomain(ctx context.Context, input *CreateDomainInput) (*C
 			dom.Name = name
 		}
 	}
-	// Metered consumption: a custom domain is a metered resource on the hosted
-	// build, so ask the (hosted-only) quota checker whether this org may add
-	// one. Self-hosted has no checker and this always passes there. The check
-	// runs before the row exists so a refusal leaves no partial domain behind.
 	if err := plugin.CheckQuota(p.ctx, ctx, dom.OrgID, "customDomains", 1); err != nil {
 		if errors.Is(err, plugin.ErrQuotaUnavailable) {
 			return nil, huma.Error402PaymentRequired("Custom domains are not included in this plan. Upgrade to add custom domains.")
@@ -217,18 +200,15 @@ func (p *Plugin) updateDomain(ctx context.Context, input *UpdateDomainInput) (*U
 	if input.Body.ForMail != nil {
 		dom.ForMail = *input.Body.ForMail
 	}
-	// Only overwrite host lists when they were present in the payload.
 	if input.Body.LinkHosts != nil {
 		dom.LinkHosts = normalizeHosts(*input.Body.LinkHosts)
 	}
 	if input.Body.MailHosts != nil {
 		dom.MailHosts = normalizeHosts(*input.Body.MailHosts)
 	}
-	// The reserved zone applies to the host lists as well as the name.
 	if bad := reservedInHostLists(p.db, dom.LinkHosts, dom.MailHosts); bad != "" {
 		return nil, huma.Error400BadRequest("that hostname is reserved for automatic tenant subdomains")
 	}
-	// The lists must stay inside this domain's own zone, exactly as on create.
 	if bad := hostsOutsideZone(dom.Name, dom.LinkHosts, dom.MailHosts); bad != "" {
 		return nil, huma.Error400BadRequest("host list entry " + bad + " is outside this domain's zone")
 	}
@@ -243,8 +223,6 @@ func (p *Plugin) updateDomain(ctx context.Context, input *UpdateDomainInput) (*U
 		dom.ProviderAccountID = input.Body.ProviderAccountID
 	}
 	p.db.Save(&dom)
-	// The link/mail host lists moved even when the name did not, and those are
-	// what ServesTraffic answers from.
 	forgetOrigin(dom.Name)
 	p.audit(r, "domain.update", "domain", dom.ID, map[string]any{"name": dom.Name})
 	return &UpdateDomainOutput{Body: dom}, nil
@@ -275,8 +253,6 @@ func (p *Plugin) deleteDomain(ctx context.Context, input *DeleteDomainInput) (*D
 	if !p.hasRole(r, "admin") {
 		return nil, huma.Error403Forbidden("Admin role required to delete domain. Contact a workspace admin for access.")
 	}
-	// Read the name before the row goes: it is the cache key that has to be
-	// dropped, and after the DELETE there is nowhere left to read it from.
 	var dom Domain
 	if p.db.Where("id = ? AND owner_id = ?", input.ID, p.orgID(r)).First(&dom).Error != nil {
 		return nil, huma.Error404NotFound("Domain not found")

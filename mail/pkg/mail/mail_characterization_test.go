@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// TestCharacterization_RFC822ParseLocks locks the RFC822 parsing behavior
-// including subject, sender, and text/html body extraction.
 func TestCharacterization_RFC822ParseLocks(t *testing.T) {
 	raw := []byte("From: sender@example.com\r\n" +
 		"To: receiver@example.com\r\n" +
@@ -38,8 +36,6 @@ func TestCharacterization_RFC822ParseLocks(t *testing.T) {
 	}
 }
 
-// TestCharacterization_UnparseableFallback locks the non-dropping fallback
-// behavior for completely corrupt mail bodies.
 func TestCharacterization_UnparseableFallback(t *testing.T) {
 	corruptRaw := []byte{0x00, 0xFF, 0xFE, 0xFD}
 	parsed, err := Parse(corruptRaw)
@@ -54,7 +50,6 @@ func TestCharacterization_UnparseableFallback(t *testing.T) {
 	}
 }
 
-// TestCharacterization_StripCRLFInjection locks the header injection defense.
 func TestCharacterization_StripCRLFInjection(t *testing.T) {
 	maliciousInput := "victim@example.com\r\nBcc: hacker@example.com\nSubject: Injected"
 	cleaned := stripCRLF(maliciousInput)
@@ -67,9 +62,7 @@ func TestCharacterization_StripCRLFInjection(t *testing.T) {
 	}
 }
 
-// TestCharacterization_SenderFailClosedLocks locks the fail-closed auth requirements.
 func TestCharacterization_SenderFailClosedLocks(t *testing.T) {
-	// Construct sender with credentials
 	s := NewCustomSender("127.0.0.1", "25", "user", "pass", "sender@example.com")
 	if s == nil {
 		t.Fatal("NewSender returned nil")
@@ -82,7 +75,6 @@ func TestCharacterization_SenderFailClosedLocks(t *testing.T) {
 		Text:    "Test message",
 	}
 
-	// Attempting to send to a closed port must fail with network error, not panic
 	err := s.Send(msg)
 	if err == nil {
 		t.Fatal("expected error connecting to inactive port")

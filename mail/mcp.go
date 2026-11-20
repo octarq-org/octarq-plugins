@@ -11,10 +11,6 @@ import (
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
-// errNoOrgInContext refuses a tool call that arrives without a tenant scope.
-// Every transport supplies one — the networked ones from the caller's API token,
-// the stdio CLI from its entry point — so an absent org means something is wrong,
-// and defaulting it to a tenant would hand that tenant's data to whoever asked.
 var errNoOrgInContext = errors.New("no workspace in this request")
 
 type listMailboxesInput struct{}
@@ -98,12 +94,8 @@ type emailContentOut struct {
 	ReceivedAt time.Time `json:"received_at"`
 }
 
-// sanitizeMailMeta strips invisible controls and defuses forged framing tags
-// in attacker-controlled email metadata (From/To/Subject) before it reaches
-// agent context. Every MCP output carrying inbound metadata must use it.
 func sanitizeMailMeta(s string) string { return NeutralizeFramingTags(StripInvisibleControls(s)) }
 
-// MCPTier reports the license tier these tools require. Core tools are free.
 func (*Plugin) MCPTier() string { return "" }
 
 func (p *Plugin) RegisterMCP(srv *mcp.Server) {

@@ -5,8 +5,6 @@ import (
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
-// Permission keys. Every key defaults to member: the tracker lives in the
-// caller's personal space, so ownership protects the data, not a team role.
 const (
 	permRead    = "pt.trackers.read"
 	permCreate  = "pt.trackers.create"
@@ -16,8 +14,6 @@ const (
 	permRefresh = "pt.trackers.refresh"
 )
 
-// roleMember is the minimum role passed to RequirePerm. The resolver may still
-// grant or deny by policy.
 const roleMember = "member"
 
 func declarePerms() {
@@ -31,9 +27,6 @@ func declarePerms() {
 	)
 }
 
-// registerRoutes wires the HTTP surface. Mount returns before this runs when
-// the host has no guard, so every route below requires an authenticated
-// dashboard session.
 func (p *Plugin) registerRoutes(ctx *plugin.Context) {
 	declarePerms()
 

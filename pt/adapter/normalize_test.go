@@ -121,7 +121,6 @@ func TestRegistrySuggestUsesDomainHint(t *testing.T) {
 	}
 }
 
-// stubAdapter satisfies Adapter for registry tests.
 type stubAdapter struct{ schema Schema }
 
 func (s stubAdapter) Schema() Schema             { return s.schema }

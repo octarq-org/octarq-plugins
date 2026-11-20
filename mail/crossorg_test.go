@@ -63,17 +63,14 @@ func TestMailCrossOrgIsolation(t *testing.T) {
 	const org1 uint = 1
 	const org2 uint = 2
 
-	// Seed Org 1 domain & mailbox
 	db.Create(&testDomain{OrgID: org1, Name: "org1.example.com", ForMail: true})
 	mb1 := Mailbox{OrgID: org1, Address: "user1@org1.example.com", Note: "Org1 MB", Enabled: true}
 	db.Create(&mb1)
 
-	// Seed Org 2 domain & mailbox
 	db.Create(&testDomain{OrgID: org2, Name: "org2.example.com", ForMail: true})
 	mb2 := Mailbox{OrgID: org2, Address: "user2@org2.example.com", Note: "Org2 MB", Enabled: true}
 	db.Create(&mb2)
 
-	// Seed Org 1 emails
 	e1_1 := Email{
 		MailboxID:  mb1.ID,
 		FromAddr:   "sender1@remote.com",
@@ -95,7 +92,6 @@ func TestMailCrossOrgIsolation(t *testing.T) {
 	db.Create(&e1_1)
 	db.Create(&e1_2)
 
-	// Seed Org 2 emails
 	e2_1 := Email{
 		MailboxID:  mb2.ID,
 		FromAddr:   "confidential@partner.com",
@@ -121,9 +117,6 @@ func TestMailCrossOrgIsolation(t *testing.T) {
 	ctxOrg1Admin := makeOrgCtx(org1, "admin")
 	ctxOrg2Admin := makeOrgCtx(org2, "admin")
 
-	// ==================== 1. Mailbox Endpoints Isolation ====================
-
-	// 1a. List Mailboxes: Org 1 must only see its own mailbox
 	mbListOut, err := p.listMailboxes(ctx, &ListMailboxesInput{Ctx: ctxOrg1Admin})
 	if err != nil {
 		t.Fatalf("listMailboxes: %v", err)
@@ -132,7 +125,6 @@ func TestMailCrossOrgIsolation(t *testing.T) {
 		t.Errorf("listMailboxes: Org 1 saw mailboxes %+v, want only mb1 (%d)", mbListOut.Body, mb1.ID)
 	}
 
-	// 1b. Update Mailbox: Org 1 cannot update Org 2's mailbox
 	updateNote := "malicious-update"
 	_, err = p.updateMailbox(ctx, &UpdateMailboxInput{
 		Ctx:  ctxOrg1Admin,
@@ -148,7 +140,6 @@ func TestMailCrossOrgIsolation(t *testing.T) {
 		t.Fatalf("updateMailbox: Org 2 mailbox was modified by Org 1")
 	}
 
-	// 1c. Delete Mailbox: Org 1 cannot delete Org 2's mailbox
 	_, err = p.deleteMailbox(ctx, &DeleteMailboxInput{
 		Ctx: ctxOrg1Admin,
 		ID:  mb2.ID,
@@ -162,9 +153,6 @@ func TestMailCrossOrgIsolation(t *testing.T) {
 		t.Fatalf("deleteMailbox: Org 2 mailbox was deleted by Org 1")
 	}
 
-	// ==================== 2. Email Endpoints Isolation (mailbox_id IN) ====================
-
-	// 2a. listEmails (mail.go:218): Org 1 listing emails should never include Org 2 emails
 	emailListOut, err := p.listEmails(ctx, &ListEmailsInput{Ctx: ctxOrg1Admin})
 	if err != nil {
 		t.Fatalf("listEmails: %v", err)
@@ -178,7 +166,6 @@ func TestMailCrossOrgIsolation(t *testing.T) {
 		}
 	}
 
-	// 2b. listEmails with Org 2 mailbox filter: must return empty
 	emailListFilterOut, err := p.listEmails(ctx, &ListEmailsInput{
 		Ctx:     ctxOrg1Admin,
 		Mailbox: fmt.Sprintf("%d", mb2.ID),
@@ -190,7 +177,6 @@ func TestMailCrossOrgIsolation(t *testing.T) {
 		t.Errorf("listEmails: Org 1 filtering by Org 2 mailbox got %d emails, want 0", len(emailListFilterOut.Body))
 	}
 
-	// 2c. listEmails with search query matching Org 2 email: must return empty
 	emailSearchOut, err := p.listEmails(ctx, &ListEmailsInput{
 		Ctx: ctxOrg1Admin,
 		Q:   "Confidential",
@@ -202,7 +188,6 @@ func TestMailCrossOrgIsolation(t *testing.T) {
 		t.Errorf("listEmails: Org 1 search leaked Org 2 email: %+v", emailSearchOut.Body)
 	}
 
-	// 2d. getEmail (mail.go:264): Org 1 cannot get Org 2's email
 	_, err = p.getEmail(ctx, &GetEmailInput{
 		Ctx: ctxOrg1Admin,
 		ID:  e2_1.ID,
@@ -211,14 +196,12 @@ func TestMailCrossOrgIsolation(t *testing.T) {
 		t.Errorf("getEmail: expected 404 when Org 1 reads Org 2 email, got nil")
 	}
 
-	// Verify getEmail did not auto-mark e2_1 as read
 	var e2_1Reload Email
 	db.First(&e2_1Reload, e2_1.ID)
 	if e2_1Reload.Read {
 		t.Errorf("getEmail: Org 2 unread email was marked as read by Org 1 getEmail call")
 	}
 
-	// 2e. updateEmail (mail.go:302): Org 1 cannot update Org 2's email
 	readVal := true
 	tamperedNote := "tampered-by-org1"
 	upIn := &UpdateEmailInput{
@@ -236,7 +219,6 @@ func TestMailCrossOrgIsolation(t *testing.T) {
 		t.Fatalf("updateEmail: Org 2 email was mutated by Org 1 (read=%v, note=%q)", e2_1Reload.Read, e2_1Reload.Note)
 	}
 
-	// 2f. readAllEmails (mail.go:339): Org 1 calling readAllEmails must not affect Org 2
 	_, err = p.readAllEmails(ctx, &ReadAllEmailsInput{Ctx: ctxOrg1Admin})
 	if err != nil {
 		t.Fatalf("readAllEmails: %v", err)
@@ -246,7 +228,6 @@ func TestMailCrossOrgIsolation(t *testing.T) {
 		t.Fatalf("readAllEmails: Org 1 readAllEmails marked Org 2 email as read")
 	}
 
-	// 2g. readAllEmails with Org 2 mailbox parameter: must not affect Org 2
 	_, err = p.readAllEmails(ctx, &ReadAllEmailsInput{
 		Ctx:     ctxOrg1Admin,
 		Mailbox: fmt.Sprintf("%d", mb2.ID),
@@ -259,7 +240,6 @@ func TestMailCrossOrgIsolation(t *testing.T) {
 		t.Fatalf("readAllEmails with mailbox filter: Org 2 email marked read by Org 1")
 	}
 
-	// 2h. rawEmail (mail.go:371): Org 1 cannot download Org 2's raw email
 	_, err = p.rawEmail(ctx, &RawEmailInput{
 		Ctx: ctxOrg1Admin,
 		ID:  e2_1.ID,
@@ -268,7 +248,6 @@ func TestMailCrossOrgIsolation(t *testing.T) {
 		t.Errorf("rawEmail: expected 404 when Org 1 downloads Org 2 raw email, got nil")
 	}
 
-	// 2i. deleteEmail (mail.go:430 / 444): Org 1 cannot delete Org 2's email
 	_, err = p.deleteEmail(ctx, &DeleteEmailInput{
 		Ctx: ctxOrg1Admin,
 		ID:  e2_1.ID,
@@ -281,27 +260,21 @@ func TestMailCrossOrgIsolation(t *testing.T) {
 		t.Fatalf("deleteEmail: Org 2 email was deleted by Org 1")
 	}
 
-	// ==================== 3. Reverse Direction Isolation (Org 2 vs Org 1) ====================
-
-	// Org 2 cannot read Org 1 email
 	_, err = p.getEmail(ctx, &GetEmailInput{Ctx: ctxOrg2Admin, ID: e1_1.ID})
 	if err == nil {
 		t.Errorf("getEmail: expected error for Org 2 reading Org 1 email")
 	}
 
-	// Org 2 cannot update Org 1 email
 	_, err = p.updateEmail(ctx, &UpdateEmailInput{Ctx: ctxOrg2Admin, ID: e1_1.ID})
 	if err == nil {
 		t.Errorf("updateEmail: expected error for Org 2 updating Org 1 email")
 	}
 
-	// Org 2 cannot delete Org 1 email
 	_, err = p.deleteEmail(ctx, &DeleteEmailInput{Ctx: ctxOrg2Admin, ID: e1_1.ID})
 	if err == nil {
 		t.Errorf("deleteEmail: expected error for Org 2 deleting Org 1 email")
 	}
 
-	// Org 2 listEmails only returns Org 2 emails
 	org2List, err := p.listEmails(ctx, &ListEmailsInput{Ctx: ctxOrg2Admin})
 	if err != nil {
 		t.Fatalf("listEmails for Org 2: %v", err)

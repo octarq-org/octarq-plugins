@@ -18,7 +18,6 @@ import (
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
-// patchedCreateDeclarativeLink simulates the proposed remediation in AUDIT_REPORT.md (Finding SEC-02)
 func (p *Plugin) patchedCreateDeclarativeLink(ctx context.Context, in DeclarativeLinkInput, auditCapture *[]string, eventCapture *[]string) (*DeclarativeLinkOutput, error) {
 	orgID := plugin.OrgIDFromContext(ctx)
 	if orgID == 0 {
@@ -86,7 +85,6 @@ func (p *Plugin) patchedCreateDeclarativeLink(ctx context.Context, in Declarativ
 	}, nil
 }
 
-// TestVerification_SEC02_Remediation verifies the refined SEC-02 remediation in AUDIT_REPORT.md
 func TestVerification_SEC02_Remediation(t *testing.T) {
 	t.Parallel()
 	p, _ := setupFullLinksTestDB(t)
@@ -101,7 +99,6 @@ func TestVerification_SEC02_Remediation(t *testing.T) {
 		eventLogs = append(eventLogs, fmt.Sprintf("%d:%s", orgID, event))
 	}
 
-	// 1. Test Host Requirement Enforcement
 	p.db.Create(&testSetting{Key: "base_domain", Value: "octarq.test"})
 	p.db.Create(&testDomain{
 		OrgID:   1,
@@ -116,7 +113,6 @@ func TestVerification_SEC02_Remediation(t *testing.T) {
 		t.Fatal("expected linkHostRequired to be true")
 	}
 
-	// Calling patchedCreateDeclarativeLink must reject with 400 HOST_REQUIRED
 	_, errHost := p.patchedCreateDeclarativeLink(ctxOrg1, DeclarativeLinkInput{
 		Slug:        "test-host-req",
 		Destination: "https://example.com",
@@ -134,13 +130,11 @@ func TestVerification_SEC02_Remediation(t *testing.T) {
 		t.Fatalf("expected *plugin.AgentError, got %T: %v", errHost, errHost)
 	}
 
-	// Reset host requirement to test quota paths
 	p.db.Where("key = ?", "base_domain").Delete(&testSetting{})
 	if p.linkHostRequired(1) {
 		t.Fatal("expected linkHostRequired to be false after removing base domain setting")
 	}
 
-	// 2. Test Quota 402 Payment Required (Feature unavailable in tier)
 	withQuotaChecker(p, fakeQuotaChecker{err: plugin.ErrQuotaUnavailable})
 	_, err402 := p.patchedCreateDeclarativeLink(ctxOrg1, DeclarativeLinkInput{
 		Slug:        "test-402",
@@ -158,7 +152,6 @@ func TestVerification_SEC02_Remediation(t *testing.T) {
 		t.Fatalf("expected *plugin.AgentError, got %T: %v", err402, err402)
 	}
 
-	// 3. Test Quota 429 Too Many Requests (Exceeded link count quota)
 	withQuotaChecker(p, fakeQuotaChecker{err: plugin.ErrQuotaExceeded})
 	_, err429 := p.patchedCreateDeclarativeLink(ctxOrg1, DeclarativeLinkInput{
 		Slug:        "test-429",
@@ -176,7 +169,6 @@ func TestVerification_SEC02_Remediation(t *testing.T) {
 		t.Fatalf("expected *plugin.AgentError, got %T: %v", err429, err429)
 	}
 
-	// 4. Test Generic Quota error fallback (defaults to 429 QUOTA_EXCEEDED)
 	withQuotaChecker(p, fakeQuotaChecker{err: errors.New("generic quota error")})
 	_, errGen := p.patchedCreateDeclarativeLink(ctxOrg1, DeclarativeLinkInput{
 		Slug:        "test-gen-quota",
@@ -192,7 +184,6 @@ func TestVerification_SEC02_Remediation(t *testing.T) {
 		}
 	}
 
-	// 5. Test Successful Creation with Audit and Event Publishing
 	withQuotaChecker(p, fakeQuotaChecker{err: nil})
 	outSuccess, errSuccess := p.patchedCreateDeclarativeLink(ctxOrg1, DeclarativeLinkInput{
 		Slug:        "test-success",
@@ -206,7 +197,6 @@ func TestVerification_SEC02_Remediation(t *testing.T) {
 		t.Fatalf("unexpected output: %+v", outSuccess)
 	}
 
-	// Verify Audit Log
 	if len(auditLogs) != 1 {
 		t.Fatalf("expected 1 audit log, got %d", len(auditLogs))
 	}
@@ -215,7 +205,6 @@ func TestVerification_SEC02_Remediation(t *testing.T) {
 		t.Errorf("audit log mismatch: got %q, want %q", auditLogs[0], expectedAudit)
 	}
 
-	// Verify Published Event
 	if len(eventLogs) != 1 {
 		t.Fatalf("expected 1 event log, got %d", len(eventLogs))
 	}
@@ -225,7 +214,6 @@ func TestVerification_SEC02_Remediation(t *testing.T) {
 	}
 }
 
-// patchedRenderPasswordGate simulates the proposed remediation in AUDIT_REPORT.md (Finding SEC-03)
 func patchedRenderPasswordGate(w http.ResponseWriter, path string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Referrer-Policy", "no-referrer")
@@ -243,7 +231,6 @@ button{width:100%;padding:.6rem;border:0;border-radius:8px;background:#6366f1;co
 <button type="submit">Continue</button></form></body></html>`))
 }
 
-// patchedHandle simulates the proposed Engine.Handle remediation in AUDIT_REPORT.md (Finding SEC-03)
 func (e *Engine) patchedHandle(w http.ResponseWriter, r *http.Request, link *Link) {
 	if expired(link) {
 		if link.ExpiredURL != "" {
@@ -315,7 +302,6 @@ func (e *Engine) patchedHandle(w http.ResponseWriter, r *http.Request, link *Lin
 	http.Redirect(w, r, target, http.StatusFound)
 }
 
-// TestVerification_SEC03_Remediation tests the refined password gate and Referrer-Policy remediation
 func TestVerification_SEC03_Remediation(t *testing.T) {
 	t.Parallel()
 	s := newTestEngine(t)
@@ -329,7 +315,6 @@ func TestVerification_SEC03_Remediation(t *testing.T) {
 	}
 	s.db.Create(link)
 
-	// 1. Initial GET request without credentials
 	recGate := httptest.NewRecorder()
 	reqGate := httptest.NewRequest(http.MethodGet, "/protected-item", nil)
 	s.patchedHandle(recGate, reqGate, link)
@@ -351,7 +336,6 @@ func TestVerification_SEC03_Remediation(t *testing.T) {
 		t.Errorf("expected <meta name=\"referrer\" content=\"no-referrer\"> in HTML head")
 	}
 
-	// 2. Submit password via POST form (application/x-www-form-urlencoded)
 	formData := url.Values{}
 	formData.Set("pw", "SecretVaultKey_987!")
 	reqPost := httptest.NewRequest(http.MethodPost, "/protected-item", strings.NewReader(formData.Encode()))
@@ -370,7 +354,6 @@ func TestVerification_SEC03_Remediation(t *testing.T) {
 		t.Errorf("expected Referrer-Policy: no-referrer on 302 redirect, got %q", recPost.Header().Get("Referrer-Policy"))
 	}
 
-	// 3. Submit wrong password via POST form
 	formDataWrong := url.Values{}
 	formDataWrong.Set("pw", "IncorrectPass!")
 	reqPostWrong := httptest.NewRequest(http.MethodPost, "/protected-item", strings.NewReader(formDataWrong.Encode()))
@@ -385,7 +368,6 @@ func TestVerification_SEC03_Remediation(t *testing.T) {
 		t.Errorf("expected Referrer-Policy: no-referrer on 401 wrong pass response")
 	}
 
-	// 4. Submit password via GET query string (programmatic link compatibility)
 	reqGetPW := httptest.NewRequest(http.MethodGet, "/protected-item?pw=SecretVaultKey_987!", nil)
 	recGetPW := httptest.NewRecorder()
 
@@ -397,7 +379,6 @@ func TestVerification_SEC03_Remediation(t *testing.T) {
 		t.Errorf("expected Referrer-Policy: no-referrer on GET redirect")
 	}
 
-	// 5. Expired Link with ExpiredURL redirects with Referrer-Policy
 	expiredLink := &Link{
 		OrgID:      1,
 		Slug:       "expired-item",

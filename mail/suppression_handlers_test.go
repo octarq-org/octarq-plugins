@@ -22,7 +22,6 @@ func TestSuppressionCRUDHandlers(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Empty list before any suppression.
 	out, err := p.listSuppressions(ctx, &ListSuppressionsInput{Ctx: mkCtx2()})
 	if err != nil {
 		t.Fatalf("listSuppressions: %v", err)
@@ -31,7 +30,6 @@ func TestSuppressionCRUDHandlers(t *testing.T) {
 		t.Fatalf("expected empty list, got %+v", out.Body)
 	}
 
-	// Create with a valid address.
 	created, err := p.createSuppression(ctx, &CreateSuppressionInput{Ctx: mkCtx2(), Body: suppressionDTO{Address: "spam@example.com"}})
 	if err != nil {
 		t.Fatalf("createSuppression: %v", err)
@@ -40,12 +38,10 @@ func TestSuppressionCRUDHandlers(t *testing.T) {
 		t.Errorf("unexpected suppression: %+v", created.Body)
 	}
 
-	// Invalid address refused.
 	if _, err := p.createSuppression(ctx, &CreateSuppressionInput{Ctx: mkCtx2(), Body: suppressionDTO{Address: "nope"}}); err == nil {
 		t.Error("address without @ must be refused")
 	}
 
-	// Upsert: creating the same address again keeps a single row.
 	if _, err := p.createSuppression(ctx, &CreateSuppressionInput{Ctx: mkCtx2(), Body: suppressionDTO{Address: "SPAM@example.com"}}); err != nil {
 		t.Fatalf("upsert: %v", err)
 	}
@@ -55,7 +51,6 @@ func TestSuppressionCRUDHandlers(t *testing.T) {
 		t.Errorf("upsert produced %d rows, want 1", n)
 	}
 
-	// List reflects the row.
 	out2, err := p.listSuppressions(ctx, &ListSuppressionsInput{Ctx: mkCtx2()})
 	if err != nil {
 		t.Fatalf("second list: %v", err)
@@ -64,12 +59,10 @@ func TestSuppressionCRUDHandlers(t *testing.T) {
 		t.Errorf("list after create: %+v", out2.Body)
 	}
 
-	// Delete missing -> 404.
 	if _, err := p.deleteSuppression(ctx, &DeleteSuppressionInput{Ctx: mkCtx2(), ID: 999}); err == nil {
 		t.Error("deleting a missing suppression must 404")
 	}
 
-	// Delete existing -> ok.
 	delOut, err := p.deleteSuppression(ctx, &DeleteSuppressionInput{Ctx: mkCtx2(), ID: created.Body.ID})
 	if err != nil || !delOut.Body["ok"] {
 		t.Fatalf("deleteSuppression: %v", err)
@@ -95,19 +88,16 @@ func TestInboundHandler(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Unknown org -> 404.
 	req := httptest.NewRequest(http.MethodPost, "/api/webhook/nope/email/inbound/tok", bytes.NewReader([]byte(raw)))
 	if _, err := p.inbound(ctx, &InboundInput{Ctx: humago.NewContext(nil, req, httptest.NewRecorder()), OrgSlug: "nope", Token: "tok"}); err == nil {
 		t.Error("unknown org must 404")
 	}
 
-	// Wrong token -> 401.
 	req = httptest.NewRequest(http.MethodPost, "/api/webhook/acme/email/inbound/bad", bytes.NewReader([]byte(raw)))
 	if _, err := p.inbound(ctx, &InboundInput{Ctx: humago.NewContext(nil, req, httptest.NewRecorder()), OrgSlug: "acme", Token: "bad"}); err == nil {
 		t.Error("bad token must 401")
 	}
 
-	// X-Octarq-To overrides the RCPT target: mail lands in that mailbox.
 	req = httptest.NewRequest(http.MethodPost, "/api/webhook/acme/email/inbound/tok", bytes.NewReader([]byte(raw)))
 	req.Header.Set("X-Octarq-To", "bob@acme.example")
 	out, err := p.inbound(ctx, &InboundInput{Ctx: humago.NewContext(nil, req, httptest.NewRecorder()), OrgSlug: "acme", Token: "tok"})
@@ -127,7 +117,6 @@ func TestInboundHandler(t *testing.T) {
 func TestExtractRawEmailMultipart(t *testing.T) {
 	t.Parallel()
 
-	// Multipart with a file part named "message".
 	var buf bytes.Buffer
 	w := multipart.NewWriter(&buf)
 	fw, _ := w.CreateFormFile("message", "orig.eml")
@@ -141,7 +130,6 @@ func TestExtractRawEmailMultipart(t *testing.T) {
 		t.Errorf("multipart file extraction: %q err=%v", b, err)
 	}
 
-	// Multipart with a text field.
 	buf.Reset()
 	w = multipart.NewWriter(&buf)
 	w.WriteField("raw", "From: y\r\n\r\ntextbody")
@@ -153,7 +141,6 @@ func TestExtractRawEmailMultipart(t *testing.T) {
 		t.Errorf("multipart field extraction: %q err=%v", b, err)
 	}
 
-	// Non-multipart body is read directly.
 	r2 := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader([]byte("plain")))
 	b2, err := extractRawEmail(r2)
 	if err != nil || string(b2) != "plain" {

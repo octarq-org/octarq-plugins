@@ -6,13 +6,11 @@ import (
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
-// RegisterViews registers the core tenant views for short links and link events.
 func RegisterViews(ctx *plugin.Context) {
 	if ctx == nil || ctx.RegisterTenantView == nil {
 		return
 	}
 
-	// tenant_links view
 	ctx.RegisterTenantView(plugin.TenantView{
 		Name: "tenant_links",
 		Columns: []plugin.TenantColumn{
@@ -41,7 +39,6 @@ func RegisterViews(ctx *plugin.Context) {
 		},
 	})
 
-	// tenant_link_events view
 	ctx.RegisterTenantView(plugin.TenantView{
 		Name: "tenant_link_events",
 		Columns: []plugin.TenantColumn{

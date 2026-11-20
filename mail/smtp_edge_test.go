@@ -44,13 +44,11 @@ func TestCreateSMTPSenderEdges(t *testing.T) {
 		return in
 	}
 
-	// Missing required fields -> 400.
 	minimal := full()
 	minimal.Body.Pass = ""
 	if _, err := p.createSMTPSender(ctx, minimal); err == nil {
 		t.Error("missing pass must fail with 400")
 	}
-	// Non-admin denied.
 	member := full()
 	member.Ctx = mkCtx(func() *http.Request {
 		r := httptest.NewRequest(http.MethodPost, "/", nil)
@@ -60,32 +58,27 @@ func TestCreateSMTPSenderEdges(t *testing.T) {
 	if _, err := p.createSMTPSender(ctx, member); err == nil {
 		t.Error("member must be forbidden")
 	}
-	// Invalid target (bad port) -> 422.
 	badPort := full()
 	badPort.Body.Port = 2222
 	if _, err := p.createSMTPSender(ctx, badPort); err == nil {
 		t.Error("restricted port must fail")
 	}
-	// private IP host -> 422
 	private := full()
 	private.Body.Host = "127.0.0.1"
 	if _, err := p.createSMTPSender(ctx, private); err == nil {
 		t.Error("private IP host must fail")
 	}
-	// Vault unavailable -> 500.
 	mv := p.vaultSvc.(*mockVaultService)
 	p.vaultSvc = nil
 	if _, err := p.createSMTPSender(ctx, full()); err == nil {
 		t.Error("missing vault seam must fail with 500")
 	}
-	// Vault error -> 500.
 	mv.putErr = errBoom
 	p.vaultSvc = mv
 	if _, err := p.createSMTPSender(ctx, full()); err == nil {
 		t.Error("vault failure must fail with 500")
 	}
 
-	// Success records the audit and exposes PassSet.
 	mv.putErr = nil
 	audited := 0
 	p.audit = func(*http.Request, string, string, uint, map[string]any) { audited++ }
@@ -123,12 +116,10 @@ func TestUpdateSMTPSenderEdges(t *testing.T) {
 	}
 	id := created.Body.ID
 
-	// 404 for a missing sender.
 	if _, err := p.updateSMTPSender(ctx, &UpdateSMTPSenderInput{Ctx: mkCtx(httptest.NewRequest(http.MethodPut, "/api/smtp-senders/999", nil)), ID: 999}); err == nil {
 		t.Error("updating a missing sender must 404")
 	}
 
-	// Partial field update.
 	name := "renamed"
 	host := "smtp2.example.com"
 	port := 465
@@ -153,7 +144,6 @@ func TestUpdateSMTPSenderEdges(t *testing.T) {
 		t.Errorf("update not persisted: %+v", out.Body)
 	}
 
-	// Password rotation updates Vault secret.
 	newPass := "newpass"
 	rot, err := p.updateSMTPSender(ctx, &UpdateSMTPSenderInput{
 		Ctx: mkCtx(httptest.NewRequest(http.MethodPut, "/api/smtp-senders/1", nil)),
@@ -175,7 +165,6 @@ func TestUpdateSMTPSenderEdges(t *testing.T) {
 		t.Errorf("password not updated in vault: sec=%+v err=%v", sec, secErr)
 	}
 
-	// Invalid target after update -> 422.
 	badHost := "127.0.0.1"
 	if _, err := p.updateSMTPSender(ctx, &UpdateSMTPSenderInput{
 		Ctx: mkCtx(httptest.NewRequest(http.MethodPut, "/api/smtp-senders/1", nil)),
@@ -214,11 +203,9 @@ func TestDeleteSMTPSenderEdges(t *testing.T) {
 		t.Fatalf("seed sender: %v", err)
 	}
 
-	// Missing sender -> 404.
 	if _, err := p.deleteSMTPSender(ctx, &DeleteSMTPSenderInput{Ctx: mkCtx(httptest.NewRequest(http.MethodDelete, "/api/smtp-senders/999", nil)), ID: 999}); err == nil {
 		t.Error("deleting a missing sender must 404")
 	}
-	// Success.
 	out, err := p.deleteSMTPSender(ctx, &DeleteSMTPSenderInput{Ctx: mkCtx(httptest.NewRequest(http.MethodDelete, "/api/smtp-senders/1", nil)), ID: created.Body.ID})
 	if err != nil || !out.Body["ok"] {
 		t.Fatalf("delete sender: %v", err)

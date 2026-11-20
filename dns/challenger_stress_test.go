@@ -11,8 +11,6 @@ import (
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
-// TestChallenger_DNSCredentialBridgeStress stress tests DNS credential resolution,
-// cross-tenant isolation, and invalid configurations via VaultService.
 func TestChallenger_DNSCredentialBridgeStress(t *testing.T) {
 	p, _ := setupFreshTestDB(t)
 	mv := p.vaultSvc.(*mockVaultService)
@@ -48,7 +46,6 @@ func TestChallenger_DNSCredentialBridgeStress(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 1. Cross-Tenant Isolation Tests
 	t.Run("CrossTenant_ownsProviderAccount", func(t *testing.T) {
 		p.orgID = func(r *http.Request) uint { return 20 }
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -82,7 +79,6 @@ func TestChallenger_DNSCredentialBridgeStress(t *testing.T) {
 		}
 	})
 
-	// 2. Resolution & Fail-Closed Tests
 	t.Run("VaultResolution", func(t *testing.T) {
 		prov, err := p.providerFor(Domain{OrgID: 10, ProviderAccountID: idOrg10Valid})
 		if err != nil || prov == nil {
@@ -105,7 +101,6 @@ func TestChallenger_DNSCredentialBridgeStress(t *testing.T) {
 		}
 	})
 
-	// 3. Invalid Configurations Tests
 	t.Run("InvalidConfigurations_MissingAPIToken", func(t *testing.T) {
 		_, err := p.providerFor(Domain{OrgID: 10, ProviderAccountID: idOrg10EmptyToken})
 		if err == nil || !strings.Contains(err.Error(), "apiToken required") {

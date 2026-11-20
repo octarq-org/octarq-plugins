@@ -1,6 +1,3 @@
-// Package mteam implements the M-Team dialect. M-Team exposes a read-only
-// account API behind an API key; it has no public sign-in endpoint, so the
-// plugin collects statistics and refuses to pretend it signed in.
 package mteam
 
 import (
@@ -14,10 +11,8 @@ import (
 	"github.com/octarq-org/octarq-plugins/pt/adapter"
 )
 
-// Adapter is the M-Team dialect.
 type Adapter struct{}
 
-// New returns the dialect.
 func New() *Adapter { return &Adapter{} }
 
 func (*Adapter) Schema() adapter.Schema { return adapter.SchemaMTeam }
@@ -47,9 +42,6 @@ func (a *Adapter) CheckSession(ctx context.Context, s *adapter.Session) (*adapte
 	return check(ctx, s)
 }
 
-// Signin reports the missing capability instead of inventing a request. The
-// site's own "sign-in" is a signed last-browse call whose secret is scraped
-// from front-end code and rotates without notice.
 func (*Adapter) Signin(context.Context, *adapter.Session) (*adapter.SigninResult, error) {
 	return &adapter.SigninResult{
 		Outcome: adapter.OutcomeUnsupported,
@@ -87,8 +79,6 @@ func check(ctx context.Context, s *adapter.Session) (*adapter.LoginResult, error
 	return result, nil
 }
 
-// apiBase resolves the API host. M-Team serves the site at kp.m-team.cc and the
-// API at api.m-team.cc, so the host cannot simply be reused.
 func apiBase(s *adapter.Session) (string, error) {
 	if raw := strings.TrimSpace(s.Site.APIBaseURL); raw != "" {
 		return trimSlash(raw), nil
@@ -111,7 +101,6 @@ func fetchProfile(ctx context.Context, s *adapter.Session) (map[string]any, erro
 	}
 	hdr := map[string]string{"x-api-key": s.Secret.APIKey}
 	if s.Secret.Token != "" {
-		// Some deployments put the browser token here; the key remains primary.
 		hdr["Authorization"] = s.Secret.Token
 	}
 
@@ -178,8 +167,6 @@ func parseProfile(root map[string]any, loc *time.Location) (*adapter.UserStats, 
 	return out, nil
 }
 
-// levelName maps M-Team's numeric role to a label. Unknown roles are reported
-// as "Role N" rather than guessed.
 func levelName(role int) string {
 	switch role {
 	case 1:

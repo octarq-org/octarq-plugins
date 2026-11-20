@@ -17,9 +17,6 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-// TestChallengerM1_MIMEParserFuzz stress-tests the RFC822 MIME parser with thousands
-// of randomized malformed, truncated, deeply nested, and corrupted MIME payloads.
-// It verifies that Parse NEVER panics, NEVER hangs, and gracefully falls back.
 func TestChallengerM1_MIMEParserFuzz(t *testing.T) {
 	orig := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
@@ -39,27 +36,27 @@ func TestChallengerM1_MIMEParserFuzz(t *testing.T) {
 		var payload []byte
 
 		switch r.Intn(6) {
-		case 0: // Truncation
+		case 0:
 			cut := r.Intn(len(base))
 			payload = []byte(base[:cut])
-		case 1: // Null byte injection
+		case 1:
 			b := []byte(base)
 			pos := r.Intn(len(b))
 			b[pos] = 0
 			payload = b
-		case 2: // Giant header injection
+		case 2:
 			giant := strings.Repeat("X-Spam-Test: "+strings.Repeat("A", 1000)+"\r\n", 10)
 			payload = []byte(giant + base)
-		case 3: // Recursive / broken boundary markers
+		case 3:
 			broken := strings.ReplaceAll(base, "frontier", "frontier_"+strings.Repeat("-", r.Intn(50)))
 			payload = []byte(broken)
-		case 4: // Random byte corruption
+		case 4:
 			b := []byte(base)
 			for j := 0; j < r.Intn(20); j++ {
 				b[r.Intn(len(b))] = byte(r.Intn(256))
 			}
 			payload = b
-		case 5: // Deeply nested multipart bomb attempt
+		case 5:
 			var nest strings.Builder
 			for depth := 0; depth < 30; depth++ {
 				nest.WriteString(fmt.Sprintf("Content-Type: multipart/mixed; boundary=\"b%d\"\r\n\r\n--b%d\r\n", depth, depth))
@@ -71,7 +68,6 @@ func TestChallengerM1_MIMEParserFuzz(t *testing.T) {
 			payload = []byte(nest.String())
 		}
 
-		// Must never panic or hang
 		parsed, err := mail.Parse(payload)
 		if err != nil {
 			t.Fatalf("iteration %d: unexpected error returned: %v", i, err)
@@ -82,8 +78,6 @@ func TestChallengerM1_MIMEParserFuzz(t *testing.T) {
 	}
 }
 
-// TestChallengerM1_OutboundSMTSSRFGuard verifies that SMTPSender refuses outbound connections
-// to private, loopback, and metadata network IP addresses at dial time.
 func TestChallengerM1_OutboundSMTSSRFGuard(t *testing.T) {
 	ssrfTargets := []string{
 		"127.0.0.1",
@@ -108,8 +102,6 @@ func TestChallengerM1_OutboundSMTSSRFGuard(t *testing.T) {
 	}
 }
 
-// TestChallengerM1_DBStorageProviderConcurrency stress-tests DBStorageProvider under
-// concurrent Put, Get, Stat, and Delete operations to ensure thread safety and data integrity.
 func TestChallengerM1_DBStorageProviderConcurrency(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
@@ -137,20 +129,17 @@ func TestChallengerM1_DBStorageProviderConcurrency(t *testing.T) {
 			key := fmt.Sprintf("tenant-1/msg-%d", id)
 			data := []byte(fmt.Sprintf("RFC822 raw message body content for id %d", id))
 
-			// Put
 			if err := provider.Put(ctx, key, data); err != nil {
 				t.Errorf("worker %d: Put failed: %v", id, err)
 				return
 			}
 			putCount.Add(1)
 
-			// Stat
 			size, err := provider.Stat(ctx, key)
 			if err != nil || size != int64(len(data)) {
 				t.Errorf("worker %d: Stat failed (size=%d, want=%d, err=%v)", id, size, len(data), err)
 			}
 
-			// Get
 			fetched, err := provider.Get(ctx, key)
 			if err != nil || string(fetched) != string(data) {
 				t.Errorf("worker %d: Get mismatch or error: %v", id, err)
@@ -158,7 +147,6 @@ func TestChallengerM1_DBStorageProviderConcurrency(t *testing.T) {
 			}
 			getCount.Add(1)
 
-			// Delete half
 			if id%2 == 0 {
 				_ = provider.Delete(ctx, key)
 			}

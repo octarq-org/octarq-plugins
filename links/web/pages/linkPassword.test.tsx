@@ -73,14 +73,12 @@ describe("Link password redaction and edit preservation", () => {
       </MemoryRouter>
     );
 
-    // 1. Lock badge shows generic protection title without plaintext password
     await waitFor(() => {
       const lockBadge = screen.getByTitle("Access protection password");
       expect(lockBadge).toBeDefined();
       expect(lockBadge.textContent?.trim()).toBe("");
     });
 
-    // 2. Open Edit Link modal
     const editBtn = screen.getByTitle("Edit link");
     fireEvent.click(editBtn);
 
@@ -88,13 +86,11 @@ describe("Link password redaction and edit preservation", () => {
       expect(screen.getByText("Edit link — Protected Link")).toBeDefined();
     });
 
-    // 3. Password input should be type="password", empty, and show passwordSetHint
     expect(screen.getByText("Key set. Fill to overwrite, blank to keep")).toBeDefined();
     const passwordInput = screen.getByPlaceholderText("e.g. 123456") as HTMLInputElement;
     expect(passwordInput.type).toBe("password");
     expect(passwordInput.value).toBe("");
 
-    // 4. Save without filling password -> payload must omit password key to preserve existing password
     fireEvent.click(screen.getByText("Save link"));
 
     await waitFor(() => {

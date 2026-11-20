@@ -16,8 +16,6 @@ var (
 	ErrMissingSecret = errors.New("invalid otpauth uri: secret query parameter is required")
 )
 
-// ParseOTPAuthURI parses a standard otpauth:// Key URI string into
-// a TwoFAAccount model and the raw plaintext secret.
 func ParseOTPAuthURI(uriStr string) (*TwoFAAccount, string, error) {
 	uriStr = strings.TrimSpace(uriStr)
 	u, err := url.Parse(uriStr)
@@ -35,7 +33,6 @@ func ParseOTPAuthURI(uriStr string) (*TwoFAAccount, string, error) {
 		return nil, "", ErrMissingSecret
 	}
 
-	// Clean secret
 	normSecret := NormalizeSecret(rawSecret)
 	if _, err := DecodeBase32(normSecret); err != nil {
 		return nil, "", ErrInvalidSecret
@@ -45,7 +42,6 @@ func ParseOTPAuthURI(uriStr string) (*TwoFAAccount, string, error) {
 	issuer := q.Get("issuer")
 	account := ""
 
-	// Label can be "Issuer:Account" or just "Account"
 	if strings.Contains(label, ":") {
 		parts := strings.SplitN(label, ":", 2)
 		if issuer == "" {
@@ -96,7 +92,6 @@ func ParseOTPAuthURI(uriStr string) (*TwoFAAccount, string, error) {
 	return acc, normSecret, nil
 }
 
-// BuildOTPAuthURI constructs an RFC-compliant otpauth://totp/ URI for an account and its secret.
 func BuildOTPAuthURI(acc *TwoFAAccount, secret string) string {
 	var label string
 	if acc.Issuer != "" && acc.Account != "" {
@@ -127,7 +122,6 @@ func BuildOTPAuthURI(acc *TwoFAAccount, secret string) string {
 	return fmt.Sprintf("otpauth://totp/%s?%s", url.PathEscape(label), q.Encode())
 }
 
-// GenerateQRCodePNG creates a PNG image of the QR code representing the URI.
 func GenerateQRCodePNG(uriStr string, size int) ([]byte, error) {
 	if size <= 0 {
 		size = 256
@@ -135,8 +129,6 @@ func GenerateQRCodePNG(uriStr string, size int) ([]byte, error) {
 	return qrcode.Encode(uriStr, qrcode.Medium, size)
 }
 
-// GenerateQRCodeDataURI generates a Base64 data URI string (data:image/png;base64,...)
-// suitable for embedding directly in an <img> tag.
 func GenerateQRCodeDataURI(uriStr string, size int) (string, error) {
 	pngBytes, err := GenerateQRCodePNG(uriStr, size)
 	if err != nil {

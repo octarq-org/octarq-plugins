@@ -13,7 +13,6 @@ import (
 func TestRegisterMCPAddsListDomains(t *testing.T) {
 	p, _ := setupFreshTestDB(t)
 	srv := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1"}, nil)
-	// Must not panic; a second registration must be idempotent.
 	p.RegisterMCP(srv)
 	p.RegisterMCP(srv)
 
@@ -41,7 +40,6 @@ func TestRegisterMCPAddsListDomains(t *testing.T) {
 		t.Fatalf("tool result payload = %+v", body)
 	}
 
-	// Export mirrors the same rows.
 	exported, err := p.mcpExportDomains(ctx, 7)
 	if err != nil || len(exported.([]Domain)) != 1 {
 		t.Fatalf("mcpExportDomains: %v %+v", err, exported)
@@ -93,7 +91,6 @@ func TestMCPUpdateDomainConfig(t *testing.T) {
 		t.Errorf("expected forMail and forLink to be true, got %+v", out)
 	}
 
-	// Cross-tenant check: org 2 cannot update org 1's domain
 	ctx2 := plugin.WithOrgID(context.Background(), 2)
 	_, _, err = p.mcpUpdateDomainConfig(ctx2, nil, updateDomainConfigInput{ID: 1, Note: "hacked"})
 	if err == nil {
@@ -165,7 +162,6 @@ func TestMCPDNSRecordsLifecycle(t *testing.T) {
 
 	ctx := plugin.WithOrgID(context.Background(), 1)
 
-	// 1. List
 	_, listOut, err := p.mcpListDNSRecords(ctx, nil, listDNSRecordsInput{DomainID: dom.ID})
 	if err != nil {
 		t.Fatalf("mcpListDNSRecords: %v", err)
@@ -175,7 +171,6 @@ func TestMCPDNSRecordsLifecycle(t *testing.T) {
 		t.Fatalf("expected rec-1, got %+v", recs)
 	}
 
-	// 2. Create
 	_, createOut, err := p.mcpSetDNSRecord(ctx, nil, setDNSRecordInput{
 		DomainID: dom.ID,
 		Type:     "A",
@@ -191,7 +186,6 @@ func TestMCPDNSRecordsLifecycle(t *testing.T) {
 		t.Fatalf("expected rec-created-1, got %+v", created)
 	}
 
-	// 3. Update
 	_, updateOut, err := p.mcpSetDNSRecord(ctx, nil, setDNSRecordInput{
 		DomainID: dom.ID,
 		RecordID: created.ID,
@@ -208,7 +202,6 @@ func TestMCPDNSRecordsLifecycle(t *testing.T) {
 		t.Fatalf("expected updated content 9.9.9.9, got %+v", updated)
 	}
 
-	// 4. Delete
 	_, _, err = p.mcpDeleteDNSRecord(ctx, nil, deleteDNSRecordInput{
 		DomainID: dom.ID,
 		RecordID: created.ID,
@@ -225,49 +218,41 @@ func TestMCPDNSRecordsValidation(t *testing.T) {
 	p, _ := setupFreshTestDB(t)
 	ctx := plugin.WithOrgID(context.Background(), 1)
 
-	// List no org
 	_, _, err := p.mcpListDNSRecords(context.Background(), nil, listDNSRecordsInput{DomainID: 1})
 	if err == nil {
 		t.Error("expected error for no org")
 	}
 
-	// List domain not found
 	_, _, err = p.mcpListDNSRecords(ctx, nil, listDNSRecordsInput{DomainID: 99999})
 	if err == nil {
 		t.Error("expected error for domain not found")
 	}
 
-	// Set record no org
 	_, _, err = p.mcpSetDNSRecord(context.Background(), nil, setDNSRecordInput{DomainID: 1})
 	if err == nil {
 		t.Error("expected error for no org")
 	}
 
-	// Set record domain not found
 	_, _, err = p.mcpSetDNSRecord(ctx, nil, setDNSRecordInput{DomainID: 99999, Type: "A", Name: "sub", Content: "1.1.1.1"})
 	if err == nil {
 		t.Error("expected error for domain not found")
 	}
 
-	// Delete record no org
 	_, _, err = p.mcpDeleteDNSRecord(context.Background(), nil, deleteDNSRecordInput{DomainID: 1, RecordID: "r1"})
 	if err == nil {
 		t.Error("expected error for no org")
 	}
 
-	// Delete record domain not found
 	_, _, err = p.mcpDeleteDNSRecord(ctx, nil, deleteDNSRecordInput{DomainID: 99999, RecordID: "r1"})
 	if err == nil {
 		t.Error("expected error for domain not found")
 	}
 
-	// Update domain config no org
 	_, _, err = p.mcpUpdateDomainConfig(context.Background(), nil, updateDomainConfigInput{ID: 1})
 	if err == nil {
 		t.Error("expected error for no org")
 	}
 
-	// Update domain config not found
 	_, _, err = p.mcpUpdateDomainConfig(ctx, nil, updateDomainConfigInput{ID: 99999})
 	if err == nil {
 		t.Error("expected error for domain not found")

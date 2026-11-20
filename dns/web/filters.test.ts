@@ -3,37 +3,29 @@ import { parseDnsFilter, buildDnsFilterQuery } from "./filters";
 
 describe("DNS Records url-backed filters pure functions", () => {
   it("1. parses query params correctly and defaults empty query to defaults", () => {
-    // Non-empty query
     const parsed = parseDnsFilter("?type=A&q=example");
     expect(parsed).toEqual({ type: "A", q: "example" });
 
-    // Empty query
     const defaultParsed = parseDnsFilter("");
     expect(defaultParsed).toEqual({ type: "", q: "" });
 
-    // Only type
     const typeOnly = parseDnsFilter("?type=CNAME");
     expect(typeOnly).toEqual({ type: "CNAME", q: "" });
 
-    // Only search q
     const searchOnly = parseDnsFilter("?q=test");
     expect(searchOnly).toEqual({ type: "", q: "test" });
   });
 
   it("2. serializes filter values to query without including default values", () => {
-    // Defaults: type empty, q empty -> query should be empty
     const queryDefault = buildDnsFilterQuery({ type: "", q: "" });
     expect(queryDefault.toString()).toBe("");
 
-    // Only type
     const queryType = buildDnsFilterQuery({ type: "MX", q: "" });
     expect(queryType.toString()).toBe("type=MX");
 
-    // Only search q
     const querySearch = buildDnsFilterQuery({ type: "", q: "foo" });
     expect(querySearch.toString()).toBe("q=foo");
 
-    // Both
     const queryBoth = buildDnsFilterQuery({ type: "AAAA", q: "bar" });
     expect(queryBoth.toString()).toBe("type=AAAA&q=bar");
   });

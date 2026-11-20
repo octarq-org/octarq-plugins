@@ -14,8 +14,6 @@ import (
 	"time"
 )
 
-// Handle serves a redirect (or the password gate) and records the click. An
-// expired/over-limit link redirects to its ExpiredURL when set, else 404s.
 func (e *Engine) Handle(w http.ResponseWriter, r *http.Request, link *Link) {
 	if expired(link) {
 		if link.ExpiredURL != "" {
@@ -51,16 +49,13 @@ func (e *Engine) Handle(w http.ResponseWriter, r *http.Request, link *Link) {
 
 	target := link.Target
 
-	// Priority: attribute rules (geo/device/os/language) are evaluated first.
-	// Split rules only apply when no attribute rule matched.
-	// Any panic or misconfiguration falls back silently to link.Target.
 	var variant string
 	if len(link.RoutingRules) > 0 {
 		lang := r.Header.Get("Accept-Language")
 		attributeHit := false
 		for _, rule := range link.RoutingRules {
 			if rule.Type == "split" {
-				continue // handle split group separately below
+				continue
 			}
 			if matchRule(rule, country, device, osStr, lang) {
 				target = rule.Target
@@ -68,7 +63,6 @@ func (e *Engine) Handle(w http.ResponseWriter, r *http.Request, link *Link) {
 				break
 			}
 		}
-		// Apply split routing only when no attribute rule fired.
 		if !attributeHit {
 			fingerprint := deviceFingerprint(anonymizeIP(ip), ua, r.Header.Get("Accept-Language"))
 			if splitTarget, splitVariant, ok := splitAssign(link.RoutingRules, fingerprint, link.ID); ok {
@@ -108,7 +102,6 @@ func isBot(ua string) bool {
 	return false
 }
 
-// matchRule reports whether a non-split routing rule matches the given request attributes.
 func matchRule(rule RoutingRule, country, device, os, lang string) bool {
 	matchLower := strings.ToLower(rule.Match)
 	switch rule.Type {
@@ -124,27 +117,6 @@ func matchRule(rule RoutingRule, country, device, os, lang string) bool {
 	return false
 }
 
-// splitAssign deterministically assigns a visitor to a split-rule variant.
-// It returns (target, variantName, true) when a split rule is selected,
-// or ("", "", false) when no split rules exist or the residual share falls
-// back to the link's own default target (caller treats that as control).
-//
-// Priority note: this function is called only after attribute rules
-// (geo/device/os/language) have been checked and none matched.
-//
-// Algorithm:
-//   - Collect all rules with type == "split".
-//   - Derive a stable bucket in [0, 100) by hashing fingerprint + linkID.
-//     The link ID is mixed in so that the same visitor does not always land
-//     on the same side across every short link in the system.
-//   - Walk the rules in order, accumulating weight. The first rule whose
-//     cumulative weight exceeds the bucket wins.
-//   - Weights summing < 100 leave the remainder as the control/default.
-//   - Weights summing > 100 are truncated (no errors; redirect path must
-//     never return 5xx due to misconfiguration).
-//
-// This function is a pure function: (fingerprint, linkID) → variant.
-// It never uses rand, time, or counters.
 func splitAssign(rules RoutingRules, fingerprint string, linkID uint) (target, variant string, ok bool) {
 	var splits []RoutingRule
 	for _, r := range rules {
@@ -169,15 +141,12 @@ func splitAssign(rules RoutingRules, fingerprint string, linkID uint) (target, v
 			return r.Target, r.Target, true
 		}
 		if cum >= 100 {
-			break // weights exceeded 100; remaining rules are unreachable
+			break
 		}
 	}
-	// Residual share goes to the control (link.Target). Caller handles this.
 	return "", "control", true
 }
 
-// anonymizeIP truncates the last octet of IPv4 (1.2.3.4 → 1.2.3.0) and the
-// last 80 bits of IPv6 to avoid storing personally identifiable data.
 func anonymizeIP(raw string) string {
 	ip := net.ParseIP(raw)
 	if ip == nil {
@@ -187,7 +156,6 @@ func anonymizeIP(raw string) string {
 		v4[3] = 0
 		return v4.String()
 	}
-	// IPv6: zero the last 10 bytes (80 bits), keep the first 6 bytes (48 bits).
 	v6 := ip.To16()
 	for i := 6; i < 16; i++ {
 		v6[i] = 0
@@ -195,13 +163,9 @@ func anonymizeIP(raw string) string {
 	return v6.String()
 }
 
-// deviceFingerprint derives a stable, privacy-preserving per-device hash from
-// the already-anonymized IP, the user-agent, and the Accept-Language header.
-// It carries no more PII than the fields already stored, but collapses repeat
-// visits from one device into a single value so analytics can dedup them.
 func deviceFingerprint(anonIP, ua, acceptLang string) string {
 	sum := sha256.Sum256([]byte(anonIP + "\n" + ua + "\n" + acceptLang))
-	return hex.EncodeToString(sum[:16]) // 128-bit hex, fits size:64
+	return hex.EncodeToString(sum[:16])
 }
 
 func truncateString(s string, maxLen int) string {
@@ -215,7 +179,6 @@ func truncateString(s string, maxLen int) string {
 	return string(runes[:maxLen])
 }
 
-// record writes a click event and increments the counter in the background.
 func (e *Engine) record(r *http.Request, orgID uint, slug string, linkID uint, ip, country, region, city, ua string, device, browser, osStr string, bot bool, variant string) {
 	referer := r.Referer()
 	anonIP := anonymizeIP(ip)
@@ -253,14 +216,8 @@ func (e *Engine) record(r *http.Request, orgID uint, slug string, linkID uint, i
 	}
 }
 
-// trustProxy gates whether proxy-supplied client-IP headers are honoured when
-// attributing analytics. Set once from config via SetTrustProxy; when false,
-// X-Forwarded-For / X-Real-IP are ignored so a client can't spoof its IP (and
-// thus its geo/attribution) by sending those headers directly.
 var trustProxy bool
 
-// SetTrustProxy configures whether proxy-supplied client-IP headers are trusted.
-// Call once at startup from config, mirroring auth.New / server construction.
 func SetTrustProxy(v bool) { trustProxy = v }
 
 func clientIP(r *http.Request) string {

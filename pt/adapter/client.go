@@ -13,11 +13,8 @@ import (
 	"golang.org/x/net/html/charset"
 )
 
-// MaxBodyBytes caps every response. safehttp does not bound response size, and
-// a tracker behind a broken proxy can otherwise stream for minutes.
 const MaxBodyBytes = 8 << 20
 
-// Page is a decoded response.
 type Page struct {
 	URL    *url.URL
 	Status int
@@ -25,12 +22,6 @@ type Page struct {
 	Body   []byte
 }
 
-// Client is one tracker session: an injected *http.Client plus a cookie jar
-// bound to the site origin.
-//
-// The *http.Client is injected rather than constructed here because production
-// must use plugin/safehttp (the site URL comes from a user) while tests must
-// reach a loopback fixture server, which safehttp deliberately blocks.
 type Client struct {
 	http    *http.Client
 	jar     http.CookieJar
@@ -39,8 +30,6 @@ type Client struct {
 	maxBody int64
 }
 
-// NewClient wraps base for one site. cookie is the stored Cookie header value
-// and may be empty.
 func NewClient(base *http.Client, site Site, cookie string) (*Client, error) {
 	if base == nil {
 		return nil, &OpError{Op: "client", Schema: site.Schema, Kind: KindConfig, Err: errors.New("http client is nil")}
@@ -54,8 +43,6 @@ func NewClient(base *http.Client, site Site, cookie string) (*Client, error) {
 		return nil, &OpError{Op: "client", Schema: site.Schema, Kind: KindConfig, Err: err}
 	}
 
-	// Copy the client struct so the jar and redirect policy are per-session
-	// while the dialer and its SSRF guard stay shared.
 	cloned := *base
 	cloned.Jar = jar
 
@@ -69,10 +56,8 @@ func NewClient(base *http.Client, site Site, cookie string) (*Client, error) {
 	return c, nil
 }
 
-// BaseOrigin returns the site origin without a trailing path.
 func (c *Client) BaseOrigin() *url.URL { return c.base }
 
-// SetCookieHeader loads a Cookie header value into the jar.
 func (c *Client) SetCookieHeader(raw string) {
 	cookies := ParseCookieHeader(raw)
 	if len(cookies) == 0 {
@@ -81,13 +66,10 @@ func (c *Client) SetCookieHeader(raw string) {
 	c.jar.SetCookies(c.base, cookies)
 }
 
-// Cookies serializes the jar for the site origin, which is the value stored in
-// the credential vault.
 func (c *Client) Cookies() string {
 	return SerializeCookies(c.jar.Cookies(c.base))
 }
 
-// HasCookie reports whether the jar holds a named cookie.
 func (c *Client) HasCookie(name string) bool {
 	for _, ck := range c.jar.Cookies(c.base) {
 		if ck.Name == name {
@@ -97,8 +79,6 @@ func (c *Client) HasCookie(name string) bool {
 	return false
 }
 
-// NoRedirect returns a client that surfaces the first redirect response, which
-// is how a successful form login is observed (302 + Set-Cookie).
 func (c *Client) NoRedirect() *Client {
 	cloned := *c
 	inner := *c.http
@@ -107,7 +87,6 @@ func (c *Client) NoRedirect() *Client {
 	return &cloned
 }
 
-// Get fetches rawURL, resolving it against the site origin when relative.
 func (c *Client) Get(ctx context.Context, rawURL string, hdr map[string]string) (*Page, error) {
 	req, err := c.newRequest(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
@@ -119,7 +98,6 @@ func (c *Client) Get(ctx context.Context, rawURL string, hdr map[string]string) 
 	return c.do(req)
 }
 
-// PostForm posts url-encoded form data to rawURL.
 func (c *Client) PostForm(ctx context.Context, rawURL string, form url.Values, referer string) (*Page, error) {
 	req, err := c.newRequest(ctx, http.MethodPost, rawURL, strings.NewReader(form.Encode()))
 	if err != nil {
@@ -134,7 +112,6 @@ func (c *Client) PostForm(ctx context.Context, rawURL string, form url.Values, r
 	return c.do(req)
 }
 
-// PostJSON posts a JSON body with the given extra headers.
 func (c *Client) PostJSON(ctx context.Context, rawURL string, body []byte, hdr map[string]string) (*Page, error) {
 	req, err := c.newRequest(ctx, http.MethodPost, rawURL, bytes.NewReader(body))
 	if err != nil {
@@ -201,8 +178,6 @@ func (c *Client) do(req *http.Request) (*Page, error) {
 	return &Page{URL: resp.Request.URL, Status: resp.StatusCode, Header: resp.Header, Body: decoded}, nil
 }
 
-// DecodeCharset converts a page body to UTF-8 using the response Content-Type
-// or the HTML meta tag. Many Chinese trackers are still GBK.
 func DecodeCharset(body []byte, contentType string) []byte {
 	if len(body) == 0 {
 		return body
@@ -218,7 +193,6 @@ func DecodeCharset(body []byte, contentType string) []byte {
 	return out
 }
 
-// challengeMarkers are the fingerprints of an interstitial anti-bot page.
 var challengeMarkers = [][]byte{
 	[]byte("cf-please-wait"),
 	[]byte("Just a moment..."),
@@ -228,8 +202,6 @@ var challengeMarkers = [][]byte{
 	[]byte("请稍候…"),
 }
 
-// IsChallenge reports whether a response is an anti-bot interstitial rather
-// than site content.
 func IsChallenge(hdr http.Header, body []byte) bool {
 	if hdr != nil {
 		if v := strings.ToLower(strings.TrimSpace(hdr.Get("cf-mitigated"))); v == "challenge" {
@@ -248,8 +220,6 @@ func IsChallenge(hdr http.Header, body []byte) bool {
 	return false
 }
 
-// ParseCookieHeader parses a browser Cookie header value. Values may contain
-// '=' (base64), so only the first '=' separates name from value.
 func ParseCookieHeader(raw string) []*http.Cookie {
 	if strings.TrimSpace(raw) == "" {
 		return nil
@@ -270,7 +240,6 @@ func ParseCookieHeader(raw string) []*http.Cookie {
 	return out
 }
 
-// SerializeCookies renders cookies as a Cookie header value.
 func SerializeCookies(cookies []*http.Cookie) string {
 	parts := make([]string, 0, len(cookies))
 	for _, ck := range cookies {

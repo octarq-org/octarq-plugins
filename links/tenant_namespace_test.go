@@ -15,15 +15,6 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-// Link hosts on a multi-tenant install are org-scoped, but the host="" pool is
-// shared across every tenant: tenant A's slug blocks tenant B forever, and the
-// resulting 409 leaks which slugs exist. These tests pin both sides of the fix:
-// Provision must make the tenant subdomain a real link host, and the handlers
-// must refuse to fall back into the shared pool once one exists.
-//
-// Each test opens its own in-memory DB (unlike setupOwnershipTestDB, which
-// shares one DB across the whole package): a base-domain setting seeded here
-// must neither see nor leak state from other tests in the package.
 func openTenantTestPlugin(t *testing.T) (*gorm.DB, *Plugin) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{Logger: logger.Discard})
@@ -46,8 +37,6 @@ func openTenantTestPlugin(t *testing.T) (*gorm.DB, *Plugin) {
 	return db, p
 }
 
-// A newly provisioned tenant subdomain must be a usable link host for its org:
-// tenancy.Provision writes ForLink + LinkHosts, and ownsHost must see them.
 func TestProvisionedTenantSubdomainIsLinkHost(t *testing.T) {
 	db, p := openTenantTestPlugin(t)
 	db.Create(&testSetting{Key: "base_domain", Value: "app.example.com"})
@@ -68,8 +57,6 @@ func TestProvisionedTenantSubdomainIsLinkHost(t *testing.T) {
 	}
 }
 
-// base + link hosts: host="" must be refused on every write path, so no tenant
-// can drop back into the cross-tenant shared namespace.
 func TestEmptyHostRejectedWhenInstanceMultiTenant(t *testing.T) {
 	db, p := openTenantTestPlugin(t)
 	db.Create(&testSetting{Key: "base_domain", Value: "app.example.com"})
@@ -82,7 +69,6 @@ func TestEmptyHostRejectedWhenInstanceMultiTenant(t *testing.T) {
 
 	ctx := context.Background()
 
-	// createLink with host="" → 400
 	{
 		req := httptest.NewRequest(http.MethodPost, "/api/links", nil)
 		req.Header.Set("X-Org-ID", "1")
@@ -96,7 +82,6 @@ func TestEmptyHostRejectedWhenInstanceMultiTenant(t *testing.T) {
 		}
 	}
 
-	// quickCreateLink with host="" → 400
 	{
 		req := httptest.NewRequest(http.MethodPost, "/api/links/quick", nil)
 		req.Header.Set("X-Org-ID", "1")
@@ -110,7 +95,6 @@ func TestEmptyHostRejectedWhenInstanceMultiTenant(t *testing.T) {
 		}
 	}
 
-	// updateLink moving an existing link to host="" → 400
 	{
 		req := httptest.NewRequest(http.MethodPost, "/api/links", nil)
 		req.Header.Set("X-Org-ID", "1")
@@ -136,13 +120,9 @@ func TestEmptyHostRejectedWhenInstanceMultiTenant(t *testing.T) {
 	}
 }
 
-// Without a base domain the identical request must still succeed: self-hosted
-// single-tenant installs keep their neutral-host links (mail click tracking and
-// the shared dashboard host depend on it). Without this twin, a test passes by
-// refusing host="" unconditionally.
 func TestEmptyHostStillAllowedWithoutBase(t *testing.T) {
 	db, p := openTenantTestPlugin(t)
-	t.Setenv("OCTARQ_BASE_DOMAIN", "") // pin: no env fallback either
+	t.Setenv("OCTARQ_BASE_DOMAIN", "")
 	db.Create(&testDomain{
 		OrgID:     1,
 		Name:      "mybrand.com",

@@ -1,4 +1,3 @@
-// Package mail parses inbound MIME messages and sends outbound mail via SMTP.
 package mail
 
 import (
@@ -12,16 +11,11 @@ import (
 	"github.com/emersion/go-message/mail"
 )
 
-// Resource limits for parsing untrusted inbound mail. A single malformed or
-// hostile message must not be able to exhaust memory.
 const (
-	maxPartBytes = 10 << 20 // 10 MiB read from any single MIME part
-	maxParts     = 200      // maximum number of MIME parts walked
+	maxPartBytes = 10 << 20
+	maxParts     = 200
 )
 
-// readLimited reads up to maxPartBytes from r, discarding the rest so the
-// underlying reader is drained without buffering an unbounded payload.
-// It returns the read bytes, whether content was truncated, and the total size.
 func readLimited(r io.Reader) (b []byte, truncated bool, totalBytes int) {
 	var readErr error
 	b, readErr = io.ReadAll(io.LimitReader(r, maxPartBytes))
@@ -38,11 +32,9 @@ func readLimited(r io.Reader) (b []byte, truncated bool, totalBytes int) {
 }
 
 func init() {
-	// Allow non-UTF-8 charsets in headers/bodies.
 	message.CharsetReader = charset.Reader
 }
 
-// Attachment is metadata for a message part.
 type Attachment struct {
 	Filename    string `json:"filename"`
 	ContentType string `json:"contentType"`
@@ -52,15 +44,12 @@ type Attachment struct {
 	Truncated   bool   `json:"truncated,omitempty"`
 }
 
-// AuthResults holds the outcome of SPF, DKIM, and DMARC checks as reported
-// in the Authentication-Results header added by the receiving MTA.
 type AuthResults struct {
-	SPF   string `json:"spf"`   // pass|fail|softfail|neutral|none|temperror|permerror
-	DKIM  string `json:"dkim"`  // pass|fail|none|temperror|permerror
-	DMARC string `json:"dmarc"` // pass|fail|none|temperror|permerror
+	SPF   string `json:"spf"`
+	DKIM  string `json:"dkim"`
+	DMARC string `json:"dmarc"`
 }
 
-// Parsed is the normalized result of reading a raw RFC822 message.
 type Parsed struct {
 	MessageID       string
 	From            string
@@ -76,11 +65,9 @@ type Parsed struct {
 	MaxPartsReached bool
 }
 
-// Parse reads a raw email and extracts the fields octarq stores.
 func Parse(raw []byte) (*Parsed, error) {
 	mr, err := mail.CreateReader(strings.NewReader(string(raw)))
 	if err != nil {
-		// Fall back to a minimal record so delivery is never silently dropped.
 		return &Parsed{Raw: raw, ReceivedAt: time.Now(), Subject: "(unparseable message)"}, nil
 	}
 	h := mr.Header
@@ -104,7 +91,6 @@ func Parse(raw []byte) (*Parsed, error) {
 	if t, err := h.Date(); err == nil && !t.IsZero() {
 		p.ReceivedAt = t
 	}
-	// Authentication-Results may appear on multiple lines; merge all values.
 	for _, v := range h.Values("Authentication-Results") {
 		parseAuthResults(v, &p.Auth)
 	}
@@ -137,11 +123,6 @@ func Parse(raw []byte) (*Parsed, error) {
 				if p.HTML == "" && len(b) > 0 {
 					p.HTML = string(b)
 				} else if len(b) > 0 {
-					// According to RFC 2046 (multipart/alternative), later parts are "richer"
-					// representations, but earlier parts are more primary/authentic.
-					// We keep the first non-empty text/html part to prevent malicious or
-					// unexpected later parts from silently overwriting the primary body text,
-					// and increment PartErrors to flag the duplicate.
 					p.PartErrors++
 					slog.Warn("duplicate text/html part ignored", "message_id", p.MessageID)
 				}
@@ -181,9 +162,6 @@ func Parse(raw []byte) (*Parsed, error) {
 		case *mail.AttachmentHeader:
 			ct, _, _ := hdr.ContentType()
 			filename, _ := hdr.Filename()
-			// The bytes are read to measure and drain the part; only metadata is
-			// stored on the Email row. The original message is kept whole through
-			// the storage seam, so re-reading a body from there costs nothing here.
 			_, truncated, totalBytes := readLimited(part.Body)
 			cid := strings.Trim(hdr.Get("Content-ID"), "<>")
 			p.Attachments = append(p.Attachments, Attachment{
@@ -199,17 +177,7 @@ func Parse(raw []byte) (*Parsed, error) {
 	return p, nil
 }
 
-// parseAuthResults extracts spf/dkim/dmarc result tokens from one
-// Authentication-Results header value.
-//
-// Header format (RFC 8601):
-//
-//	Authentication-Results: mx.example.com;
-//	  spf=pass smtp.mailfrom=example.com;
-//	  dkim=pass header.i=@example.com;
-//	  dmarc=pass (p=NONE) header.from=example.com
 func parseAuthResults(hdr string, out *AuthResults) {
-	// Lowercase once; result tokens are case-insensitive.
 	s := strings.ToLower(hdr)
 	for _, method := range []struct {
 		name   string
@@ -228,9 +196,6 @@ func parseAuthResults(hdr string, out *AuthResults) {
 			matchPos := idx + pos
 			idx = matchPos + len(method.name)
 
-			// Ensure match is at the start of the header string, or preceded by
-			// a token separator (whitespace, semicolon, comma). This avoids false
-			// matches like "x-not-dkim=pass".
 			if matchPos > 0 {
 				prev := s[matchPos-1]
 				if prev != ' ' && prev != '\t' && prev != ';' && prev != ',' {
@@ -239,7 +204,6 @@ func parseAuthResults(hdr string, out *AuthResults) {
 			}
 
 			rest := s[matchPos+len(method.name):]
-			// Result token ends at the next whitespace, semicolon, or end.
 			end := strings.IndexAny(rest, " \t\r\n;(")
 			if end < 0 {
 				end = len(rest)

@@ -65,20 +65,16 @@ func TestUpdateLinkEdgeBranches(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPut, "/api/links/1", nil)
 	req.Header.Set("X-Org-ID", "1")
 
-	// Reserved slug refused.
 	if _, err := p.updateLink(ctx, &UpdateLinkInput{Ctx: mkCtx(req), ID: linkID, Body: linkDTO{Slug: "api"}}); err == nil {
 		t.Error("updating to a reserved slug must fail")
 	}
-	// Dangerous target refused, original untouched.
 	if _, err := p.updateLink(ctx, &UpdateLinkInput{Ctx: mkCtx(req), ID: linkID, Body: linkDTO{Target: "javascript:alert(1)"}}); err == nil {
 		t.Error("updating to a javascript target must fail")
 	}
-	// Unowned host refused.
 	p.db.Create(&testDomain{OrgID: 2, Name: "org2-up.example", ForLink: true})
 	if _, err := p.updateLink(ctx, &UpdateLinkInput{Ctx: mkCtx(req), ID: linkID, Body: linkDTO{Host: "org2-up.example"}}); err == nil {
 		t.Error("updating to an unowned host must fail")
 	}
-	// Host required when a base domain is configured.
 	p.db.Where("key = ?", "base_domain").Delete(&testSetting{})
 	p.db.Create(&testSetting{Key: "base_domain", Value: "octarq.test"})
 	p.db.Create(&testDomain{OrgID: 1, Name: "own-up.example", ForLink: true})
@@ -88,12 +84,10 @@ func TestUpdateLinkEdgeBranches(t *testing.T) {
 		t.Error("clearing host must fail when a base domain is configured")
 	}
 
-	// Missing id.
 	if _, err := p.updateLink(ctx, &UpdateLinkInput{Ctx: mkCtx(req), ID: 999, Body: linkDTO{Note: "x"}}); err == nil {
 		t.Error("updating a missing link must fail")
 	}
 
-	// Full update: slug rename invalidates both the old and the new cache key.
 	p.db.Where("key = ?", "base_domain").Delete(&testSetting{})
 	var invalidations []string
 	p.deleteCache = func(_ context.Context, key string) error { invalidations = append(invalidations, key); return nil }
@@ -213,7 +207,6 @@ func TestLinkStatsWithEvents(t *testing.T) {
 		t.Errorf("variants = %+v, want 1 variant with 3 events (UV dedups to 3 distinct fingerprints)", variants)
 	}
 
-	// pv metric and a 7-day window exclude the 48h-old event.
 	outPV, err := p.linkStats(ctx, &LinkStatsInput{Ctx: mkCtx(req), ID: link.ID, Days: 7, Metric: "pv"})
 	if err != nil {
 		t.Fatalf("linkStats pv: %v", err)
@@ -228,7 +221,6 @@ func TestLinkStatsWithEvents(t *testing.T) {
 		t.Error("expected non-empty daily series")
 	}
 
-	// Missing link.
 	if _, err := p.linkStats(ctx, &LinkStatsInput{Ctx: mkCtx(req), ID: 999, Days: 30}); err == nil {
 		t.Error("stats for a missing link must fail")
 	}

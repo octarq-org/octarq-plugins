@@ -20,17 +20,11 @@ func newOverviewDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// TestOverviewBotClicksScopedToOrgLinks guards the click aggregates against the
-// regression where botCount bound the org id directly into `link_id IN (?)`
-// instead of the org's link subquery — which made bot counts filter on
-// link_id == orgID rather than "any link owned by the org".
 func TestOverviewBotClicksScopedToOrgLinks(t *testing.T) {
 	db := newOverviewDB(t)
 	p := &Plugin{db: db}
 
 	const org = uint(7)
-	// A link whose id deliberately differs from the org id, so a query that
-	// confuses the two would miss these events entirely.
 	link := Link{OrgID: org, Host: "go.example.com", Slug: "a", Target: "https://x", Enabled: true}
 	if err := db.Create(&link).Error; err != nil {
 		t.Fatalf("create link: %v", err)
@@ -39,7 +33,6 @@ func TestOverviewBotClicksScopedToOrgLinks(t *testing.T) {
 		t.Fatalf("test needs link.ID (%d) != org (%d)", link.ID, org)
 	}
 	now := time.Now()
-	// Two bot clicks and one human click, all within the 7-day window.
 	db.Create(&LinkEvent{LinkID: link.ID, IsBot: true, CreatedAt: now})
 	db.Create(&LinkEvent{LinkID: link.ID, IsBot: true, CreatedAt: now})
 	db.Create(&LinkEvent{LinkID: link.ID, IsBot: false, CreatedAt: now})

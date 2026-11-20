@@ -127,7 +127,6 @@ describe("Mail Enhancements", () => {
       />
     );
 
-    // Typing in To should load contact suggestions
     const toInput = screen.getByPlaceholderText("hello@world.com");
     fireEvent.focus(toInput);
 
@@ -138,7 +137,6 @@ describe("Mail Enhancements", () => {
     fireEvent.mouseDown(screen.getByText("Key Contact <contact@example.com>"));
     expect((toInput as HTMLInputElement).value).toBe("contact@example.com");
 
-    // Click Save Draft
     const saveDraftBtn = screen.getByRole("button", { name: "Save draft" });
     fireEvent.click(saveDraftBtn);
 

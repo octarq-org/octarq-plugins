@@ -23,7 +23,6 @@ func sumStatKV(kvs []StatKV) int64 {
 	return t
 }
 
-// classifyReferer categorizes a raw referer string into a channel name.
 func classifyReferer(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -93,9 +92,6 @@ func sortStatKV(res []StatKV) {
 	})
 }
 
-// shortURL builds the public URL for a link. When the link has its own host it
-// is used; otherwise the URL is derived from the incoming request so no extra
-// configuration is needed.
 func shortURL(r *http.Request, l Link) string {
 	host := l.Host
 	scheme := "https"

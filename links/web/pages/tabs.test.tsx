@@ -62,24 +62,20 @@ describe("LinksPage — 3 Horizontal Projection Tabs", () => {
   it("renders 3 horizontal projection tabs and switches between them cleanly", async () => {
     renderPage();
 
-    // Verify all 3 tabs are present
     expect(screen.getByTestId("tab-links")).toBeDefined();
     expect(screen.getByTestId("tab-anomalies")).toBeDefined();
     expect(screen.getByTestId("tab-reserved")).toBeDefined();
 
-    // Default projection: Links view
     await waitFor(() => {
       expect(screen.getByTestId("links-projection-view")).toBeDefined();
     });
 
-    // Switch to Anomaly Monitoring projection
     fireEvent.click(screen.getByTestId("tab-anomalies"));
     expect(screen.getByTestId("anomalies-projection-view")).toBeDefined();
     expect(screen.queryByTestId("links-projection-view")).toBeNull();
     expect(screen.getByText("Traffic Anomalies")).toBeDefined();
     expect(screen.getByText("Bot Filtering")).toBeDefined();
 
-    // Switch to Reserved Words projection
     fireEvent.click(screen.getByTestId("tab-reserved"));
     expect(screen.getByTestId("reserved-projection-view")).toBeDefined();
     expect(screen.queryByTestId("anomalies-projection-view")).toBeNull();
@@ -87,7 +83,6 @@ describe("LinksPage — 3 Horizontal Projection Tabs", () => {
     expect(screen.getByText("/api")).toBeDefined();
     expect(screen.getByText("/instance")).toBeDefined();
 
-    // Switch back to Links projection
     fireEvent.click(screen.getByTestId("tab-links"));
     expect(screen.getByTestId("links-projection-view")).toBeDefined();
   });

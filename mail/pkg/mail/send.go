@@ -18,14 +18,10 @@ import (
 	"github.com/octarq-org/octarq/server/plugin/safehttp"
 )
 
-// stripCRLF removes CR/LF (and NUL) from a header value to prevent SMTP header
-// injection: an attacker-controlled To/From/Subject containing "\r\n" could
-// otherwise inject arbitrary headers (Bcc:, forged Content-Type) or a body.
 func stripCRLF(s string) string {
 	return strings.NewReplacer("\r", "", "\n", "", "\x00", "").Replace(s)
 }
 
-// Message is an outbound email.
 type Message struct {
 	From    string   `json:"from,omitempty"`
 	To      []string `json:"to"`
@@ -34,17 +30,14 @@ type Message struct {
 	HTML    string   `json:"html,omitempty"`
 }
 
-// Sender delivers outbound mail. Implemented today by an SMTP relay.
 type Sender interface {
 	Send(m Message) error
 }
 
-// SMTPSender relays through a configured SMTP server.
 type SMTPSender struct {
 	host, port, user, pass, from string
 }
 
-// NewCustomSender builds a Sender from explicit credentials.
 func NewCustomSender(host, port, user, pass, from string) Sender {
 	return &SMTPSender{
 		host: host, port: port,
@@ -64,7 +57,6 @@ func (s *SMTPSender) Send(m Message) error {
 	var b strings.Builder
 	fmt.Fprintf(&b, "From: %s\r\n", stripCRLF(from))
 	fmt.Fprintf(&b, "To: %s\r\n", strings.Join(to, ", "))
-	// QEncoding both encodes non-ASCII subjects and neutralizes any CR/LF.
 	fmt.Fprintf(&b, "Subject: %s\r\n", mime.QEncoding.Encode("utf-8", m.Subject))
 	fmt.Fprintf(&b, "MIME-Version: 1.0\r\n")
 	if m.HTML != "" {
@@ -99,10 +91,6 @@ func (s *SMTPSender) Send(m Message) error {
 		}
 	}
 
-	// Fail closed when credentials are configured but the server does not offer
-	// AUTH, matching net/smtp.SendMail. Skipping auth instead would silently
-	// deliver unauthenticated whenever a relay stops advertising the capability
-	// — including when something on the path strips it.
 	if s.user != "" {
 		if ok, _ := c.Extension("AUTH"); !ok {
 			return errors.New("smtp: server doesn't support AUTH")
@@ -138,14 +126,12 @@ func (s *SMTPSender) Send(m Message) error {
 	return c.Quit()
 }
 
-// ResendSender delivers outbound mail via Resend transactional email API.
 type ResendSender struct {
 	apiKey string
 	from   string
 	client *http.Client
 }
 
-// NewResendSender builds a Sender targeting Resend REST API.
 func NewResendSender(apiKey, from string) Sender {
 	return &ResendSender{
 		apiKey: apiKey,

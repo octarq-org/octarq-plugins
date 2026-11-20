@@ -77,7 +77,6 @@ func TestMCPListMailboxes(t *testing.T) {
 		t.Errorf("result missing address: %s", text)
 	}
 
-	// Unread count is computed per mailbox.
 	mb := Mailbox{OrgID: 1, Address: "unread@example.com", Enabled: true}
 	db.Create(&mb)
 	db.Create(&Email{MailboxID: mb.ID, Read: false, ReceivedAt: time.Now()})
@@ -124,7 +123,6 @@ func TestMCPListEmails(t *testing.T) {
 		t.Errorf("email count = %d, want 3", len(out.([]emailOut)))
 	}
 
-	// Mailbox filter narrows; unread-only filters further.
 	_, onMB, err := p.mcpListEmails(ctx, nil, listEmailsInput{MailboxID: mb.ID})
 	if err != nil {
 		t.Fatalf("mailbox filter: %v", err)
@@ -140,7 +138,6 @@ func TestMCPListEmails(t *testing.T) {
 		t.Errorf("unread filter: %+v", unread)
 	}
 
-	// Limit bounds without error.
 	if _, _, err := p.mcpListEmails(ctx, nil, listEmailsInput{Limit: -1}); err != nil {
 		t.Errorf("default limit: %v", err)
 	}
@@ -148,7 +145,6 @@ func TestMCPListEmails(t *testing.T) {
 		t.Errorf("clamped limit: %v", err)
 	}
 
-	// An org with no mailboxes yields an empty list, not an error.
 	db.Where("1 = 1").Delete(&Mailbox{})
 	_, emptyOrg, err := p.mcpListEmails(ctx, nil, listEmailsInput{})
 	if err != nil {
@@ -185,7 +181,6 @@ func TestMCPExportMailboxesAndEmails(t *testing.T) {
 		t.Errorf("exported emails = %+v", emails)
 	}
 
-	// Another org has no mailboxes -> export is empty.
 	none, err := p.mcpExportEmails(context.Background(), 99)
 	if err != nil {
 		t.Fatalf("empty export: %v", err)
@@ -200,7 +195,6 @@ func TestMCPGetLatestOTP(t *testing.T) {
 	db.Where("1 = 1").Delete(&Mailbox{})
 	db.Where("1 = 1").Delete(&Email{})
 
-	// 1. Refuses call without org context
 	if _, _, err := p.mcpGetLatestOTP(context.Background(), nil, getLatestOTPInput{}); err == nil {
 		t.Fatal("expected error without org in context")
 	}
@@ -208,7 +202,6 @@ func TestMCPGetLatestOTP(t *testing.T) {
 	ctx1 := plugin.WithOrgID(context.Background(), 1)
 	ctx2 := plugin.WithOrgID(context.Background(), 2)
 
-	// 2. Org with no mailboxes
 	res, out, err := p.mcpGetLatestOTP(ctx1, nil, getLatestOTPInput{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -218,7 +211,6 @@ func TestMCPGetLatestOTP(t *testing.T) {
 		t.Errorf("expected Found = false for empty org")
 	}
 
-	// 3. Mailbox exists but no emails
 	mb1 := Mailbox{OrgID: 1, Address: "agent@corp.com", Enabled: true}
 	db.Create(&mb1)
 	mb2 := Mailbox{OrgID: 2, Address: "other@corp.com", Enabled: true}
@@ -232,7 +224,6 @@ func TestMCPGetLatestOTP(t *testing.T) {
 		t.Errorf("expected Found = false when no emails exist")
 	}
 
-	// 4. Email received 15 minutes ago (older than 10m window) -> ignored
 	db.Create(&Email{
 		MailboxID:  mb1.ID,
 		FromAddr:   "auth@saas.com",
@@ -245,7 +236,6 @@ func TestMCPGetLatestOTP(t *testing.T) {
 		t.Errorf("expected Found = false for email >10m ago")
 	}
 
-	// 5. Email is already read -> ignored
 	db.Create(&Email{
 		MailboxID:  mb1.ID,
 		FromAddr:   "auth@saas.com",
@@ -258,7 +248,6 @@ func TestMCPGetLatestOTP(t *testing.T) {
 		t.Errorf("expected Found = false for read email")
 	}
 
-	// 6. Recent unread email with OTP arrived 2 minutes ago
 	db.Create(&Email{
 		MailboxID:  mb1.ID,
 		FromAddr:   "service@saas.com",
@@ -268,7 +257,6 @@ func TestMCPGetLatestOTP(t *testing.T) {
 		Read:       false,
 	})
 
-	// Call without filters
 	_, outFound, err := p.mcpGetLatestOTP(ctx1, nil, getLatestOTPInput{})
 	if err != nil {
 		t.Fatalf("mcpGetLatestOTP failed: %v", err)
@@ -278,31 +266,26 @@ func TestMCPGetLatestOTP(t *testing.T) {
 		t.Errorf("expected OTP 783921, got %+v", resFound)
 	}
 
-	// Call with mailbox_id filter
 	_, outWithID, _ := p.mcpGetLatestOTP(ctx1, nil, getLatestOTPInput{MailboxID: mb1.ID})
 	if outWithID.(otpResult).OTP != "783921" {
 		t.Errorf("expected OTP with MailboxID filter")
 	}
 
-	// Call with camelCase mailboxId filter
 	_, outWithIDCamel, _ := p.mcpGetLatestOTP(ctx1, nil, getLatestOTPInput{MailboxIDCamel: mb1.ID})
 	if outWithIDCamel.(otpResult).OTP != "783921" {
 		t.Errorf("expected OTP with MailboxIDCamel filter")
 	}
 
-	// Call with mailbox_address filter
 	_, outWithAddr, _ := p.mcpGetLatestOTP(ctx1, nil, getLatestOTPInput{MailboxAddress: "AGENT@corp.com"})
 	if outWithAddr.(otpResult).OTP != "783921" {
 		t.Errorf("expected OTP with MailboxAddress filter")
 	}
 
-	// Call with mismatched mailbox_address
 	_, outMismatch, _ := p.mcpGetLatestOTP(ctx1, nil, getLatestOTPInput{MailboxAddress: "nonexistent@corp.com"})
 	if outMismatch.(otpResult).Found {
 		t.Errorf("expected Found = false for mismatched mailbox_address")
 	}
 
-	// 7. Security: Tenant isolation (Org 2 cannot read Org 1's unread OTP)
 	_, outOrg2, _ := p.mcpGetLatestOTP(ctx2, nil, getLatestOTPInput{})
 	if outOrg2.(otpResult).Found {
 		t.Errorf("security violation: Org 2 must not see Org 1's OTP")
@@ -319,7 +302,6 @@ func TestMCPGetEmailContentAndSummary(t *testing.T) {
 	ctx1 := plugin.WithOrgID(context.Background(), 1)
 	ctx2 := plugin.WithOrgID(context.Background(), 2)
 
-	// Refusal without org context
 	if _, _, err := p.mcpGetEmailContent(context.Background(), nil, getEmailContentInput{EmailID: 1}); err == nil {
 		t.Fatal("expected error without org in context")
 	}
@@ -327,16 +309,13 @@ func TestMCPGetEmailContentAndSummary(t *testing.T) {
 		t.Fatal("expected error without org in context")
 	}
 
-	// Missing email_id
 	if _, _, err := p.mcpGetEmailContent(ctx1, nil, getEmailContentInput{}); err == nil {
 		t.Fatal("expected error for missing email_id")
 	}
 
-	// Mailbox for org 1
 	mb1 := Mailbox{OrgID: 1, Address: "worker@corp.com", Enabled: true}
 	db.Create(&mb1)
 
-	// Create email with password reset token and inline base64 image
 	bodyWithSensitive := "Hello,\nYour verification code is 998877.\nTo reset password, click https://app.example.com/reset-password?token=secret1234567890abcdef\nInline avatar: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\nDone."
 	email1 := Email{
 		MailboxID:  mb1.ID,
@@ -348,7 +327,6 @@ func TestMCPGetEmailContentAndSummary(t *testing.T) {
 	}
 	db.Create(&email1)
 
-	// 1. Get email content as Org 1
 	_, outContent, err := p.mcpGetEmailContent(ctx1, nil, getEmailContentInput{EmailID: email1.ID})
 	if err != nil {
 		t.Fatalf("mcpGetEmailContent failed: %v", err)
@@ -370,19 +348,16 @@ func TestMCPGetEmailContentAndSummary(t *testing.T) {
 		t.Errorf("normal sized email should not be truncated")
 	}
 
-	// 2. Test camelCase emailId
 	_, outCamel, err := p.mcpGetEmailContent(ctx1, nil, getEmailContentInput{EmailIDCamel: email1.ID})
 	if err != nil || outCamel.(emailContentOut).ID != email1.ID {
 		t.Errorf("failed fetching with EmailIDCamel")
 	}
 
-	// 3. Security: Org 2 cannot read Org 1's email content
 	_, _, errOrg2 := p.mcpGetEmailContent(ctx2, nil, getEmailContentInput{EmailID: email1.ID})
 	if errOrg2 == nil {
 		t.Errorf("security violation: Org 2 must not read Org 1's email content")
 	}
 
-	// 4. Get email summary as Org 1
 	_, outSummary, err := p.mcpGetEmailSummary(ctx1, nil, getEmailSummaryInput{EmailID: email1.ID})
 	if err != nil {
 		t.Fatalf("mcpGetEmailSummary failed: %v", err)
@@ -398,7 +373,6 @@ func TestMCPGetEmailContentAndSummary(t *testing.T) {
 		t.Errorf("summary contained sensitive token: %s", sumRes.Summary)
 	}
 
-	// 5. Test HTML-only email fallback
 	emailHTMLOnly := Email{
 		MailboxID:  mb1.ID,
 		FromAddr:   "newsletter@saas.com",
@@ -417,7 +391,6 @@ func TestMCPGetEmailContentAndSummary(t *testing.T) {
 		t.Errorf("expected stripped HTML text, got: %s", outHTML.(emailContentOut).Text)
 	}
 
-	// 6. Org 2 cannot read Org 1's email summary
 	if _, _, err := p.mcpGetEmailSummary(ctx2, nil, getEmailSummaryInput{EmailID: email1.ID}); err == nil {
 		t.Errorf("security violation: Org 2 must not read Org 1's email summary")
 	}

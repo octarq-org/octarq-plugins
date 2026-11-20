@@ -13,7 +13,6 @@ type domainLinkRow struct {
 
 func normalizeHost(host string) string { return hostlist.NormalizeHost(host) }
 
-// ownsHost reports whether orgID may serve short links on host.
 func (p *Plugin) ownsHost(orgID uint, host string) bool {
 	normHost := normalizeHost(host)
 	if normHost == "" {
@@ -47,12 +46,6 @@ func (p *Plugin) ownsHost(orgID uint, host string) bool {
 	return false
 }
 
-// linkHostRequired reports whether hostless (host = "") links must be refused
-// for orgID: a shared base domain is configured AND the org has at least one
-// link host to pick from. There the empty host means the cross-tenant shared
-// namespace — tenant A's slug silently blocks tenant B, and the 409 acts as an
-// existence probe across orgs. A self-hosted single-tenant install (no base
-// domain) keeps its neutral-host links, which scopeForHost still serves.
 func (p *Plugin) linkHostRequired(orgID uint) bool {
 	if orgID == 0 || p.db == nil || !p.db.Migrator().HasTable("domains") {
 		return false

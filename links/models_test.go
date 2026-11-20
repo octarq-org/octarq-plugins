@@ -35,7 +35,6 @@ func TestRoutingRulesRoundTrip(t *testing.T) {
 }
 
 func TestRoutingRules_CompatOldJSON(t *testing.T) {
-	// Old data doesn't have weight field
 	oldJSON := `[{"type":"geo","match":"US","target":"https://us"},{"type":"split","weight":50,"target":"https://a"}]`
 	var rules RoutingRules
 	if err := rules.Scan(oldJSON); err != nil {

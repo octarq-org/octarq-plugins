@@ -15,8 +15,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// normalizeHost cleans a user-supplied host into a bare lowercase hostname
-// (no scheme, no path, no trailing dot).
 func normalizeHost(host string) string {
 	host = strings.ToLower(strings.TrimSpace(host))
 	host = strings.TrimPrefix(host, "https://")
@@ -48,8 +46,6 @@ func getBaseDomain(db *gorm.DB, host plugin.Host) string {
 	return normalizeHost(os.Getenv("OCTARQ_BASE_DOMAIN"))
 }
 
-// underBaseZone reports whether name is the reserved tenant-subdomain base
-// itself or a subdomain of it, when one is configured.
 func underBaseZone(db *gorm.DB, name string) bool {
 	base := getBaseDomain(db, nil)
 	if base == "" {
@@ -59,9 +55,6 @@ func underBaseZone(db *gorm.DB, name string) bool {
 	return name == base || strings.HasSuffix(name, "."+base)
 }
 
-// reservedInHostLists returns the first hostname across linkHosts and mailHosts
-// that lies inside the reserved tenant-subdomain base zone, or "" when none
-// does.
 func reservedInHostLists(db *gorm.DB, linkHosts, mailHosts hostlist.HostList) string {
 	base := getBaseDomain(db, nil)
 	if base == "" {
@@ -78,9 +71,6 @@ func reservedInHostLists(db *gorm.DB, linkHosts, mailHosts hostlist.HostList) st
 	return ""
 }
 
-// hostsOutsideZone returns the first hostname across linkHosts and mailHosts
-// that is neither the domain's own name nor a subdomain of it, or "" when
-// every entry is inside the zone.
 func hostsOutsideZone(name string, linkHosts, mailHosts hostlist.HostList) string {
 	name = NormalizeHost(name)
 	if name == "" {
@@ -97,14 +87,11 @@ func hostsOutsideZone(name string, linkHosts, mailHosts hostlist.HostList) strin
 	return ""
 }
 
-// hostEntry is a host with its enable flag in create/update payloads.
 type hostEntry struct {
 	Host    string `json:"host"`
 	Enabled *bool  `json:"enabled"`
 }
 
-// normalizeHosts cleans and de-duplicates a host list, preserving each host's
-// enabled flag (defaulting to enabled).
 func normalizeHosts(hosts []hostEntry) hostlist.HostList {
 	seen := map[string]bool{}
 	var out hostlist.HostList
@@ -123,10 +110,6 @@ func normalizeHosts(hosts []hostEntry) hostlist.HostList {
 	return out
 }
 
-// ownsProviderAccount reports whether the given provider account id belongs to
-// the caller's org (either via a local ProviderAccount row or a Vault DNS
-// integration item). The second return reports a resolution failure (500-class),
-// which is never "not owned".
 func (p *Plugin) ownsProviderAccount(r *http.Request, id uint) (bool, error) {
 	if id == 0 {
 		return false, nil

@@ -17,8 +17,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// routed is a plugin mounted on a live huma API with a session-stamping front
-// door. Each test user maps to its own personal org; one user maps to none.
 type routed struct {
 	plugin       *Plugin
 	handler      http.Handler
@@ -48,7 +46,6 @@ func newRouted(t *testing.T) *routed {
 
 	r := &routed{
 		db: db, site: site, vault: vault,
-		// Two accounts with a personal space, one without.
 		personalOrgs: map[uint]uint{7: 101, 8: 102},
 	}
 	r.perms = func(*http.Request, string, string) bool { return true }
@@ -82,8 +79,6 @@ func newRouted(t *testing.T) *routed {
 		},
 	})
 
-	// Every real request arrives with a workspace and a user. The team
-	// workspace is shared; the personal org is resolved per account.
 	r.handler = http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		ctx := plugin.WithOrgID(req.Context(), orgFromHeader(req))
 		ctx = plugin.WithUserID(ctx, userFromHeader(req))
@@ -102,12 +97,8 @@ func userFromHeader(r *http.Request) uint {
 	return 7
 }
 
-// orgFromHeader stands in for the session's active team workspace. Every test
-// user shares it; only the personal org differs per account.
 func orgFromHeader(*http.Request) uint { return 1 }
 
-// do sends a request as user userID (default 7) inside the shared team
-// workspace org 1.
 func (r *routed) do(t *testing.T, method, path, userID string, body any) (*httptest.ResponseRecorder, string) {
 	t.Helper()
 	var reader *strings.Reader
@@ -162,7 +153,6 @@ func TestRouteCreateAndList(t *testing.T) {
 		t.Fatalf("list body = %s", body)
 	}
 
-	// Another account sees an empty list, even in the same team workspace.
 	rec, body = r.do(t, http.MethodGet, "/api/pt/trackers", "8", nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("user 8 list -> %d %s", rec.Code, body)
@@ -172,9 +162,6 @@ func TestRouteCreateAndList(t *testing.T) {
 	}
 }
 
-// TestRouteSameNameInTwoPersonalSpaces proves the unique name is per owner:
-// two accounts in one team workspace may both call their tracker "demo", and
-// neither list shows the other row.
 func TestRouteSameNameInTwoPersonalSpaces(t *testing.T) {
 	r := newRouted(t)
 
@@ -205,12 +192,9 @@ func TestRouteSameNameInTwoPersonalSpaces(t *testing.T) {
 	}
 }
 
-// TestRouteWithoutPersonalSpaceIsForbidden proves the fail-closed path: an
-// account with no personal org gets 403 and never the team workspace rows.
 func TestRouteWithoutPersonalSpaceIsForbidden(t *testing.T) {
 	r := newRouted(t)
 
-	// Seed a row in the shared team workspace. It must stay invisible.
 	seed := &PTTracker{
 		OwnerUserID: 7, OrgID: 1, Name: "team-row", SecretID: "seed",
 		BaseURL: r.site.server.URL, Domain: "example.test", SchemaKey: "nexusphp",
@@ -237,8 +221,6 @@ func TestRouteCreateRejectsUnverifiableCookie(t *testing.T) {
 	delete(body, "login_secret")
 	body["cookie"] = "lang=en; tpstyle=nexusphp"
 
-	// The fake site serves an anonymous page for a bare cookie, so the check
-	// fails and nothing may be written.
 	rec, response := r.do(t, http.MethodPost, "/api/pt/trackers", "", body)
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("create -> %d %s", rec.Code, response)
@@ -256,7 +238,6 @@ func TestRouteCreateRejectsUnverifiableCookie(t *testing.T) {
 func TestRoutePermissionsFailClosed(t *testing.T) {
 	r := newRouted(t)
 
-	// A member may read and sign in but not create.
 	r.perms = func(_ *http.Request, key, _ string) bool { return key == permRead || key == permSignin }
 	if rec, body := r.do(t, http.MethodGet, "/api/pt/trackers", "", nil); rec.Code != http.StatusOK {
 		t.Fatalf("read -> %d %s", rec.Code, body)
@@ -265,7 +246,6 @@ func TestRoutePermissionsFailClosed(t *testing.T) {
 		t.Fatalf("member create -> %d", rec.Code)
 	}
 
-	// No permission source at all must refuse, never allow.
 	r.perms = func(*http.Request, string, string) bool { return false }
 	if rec, _ := r.do(t, http.MethodGet, "/api/pt/trackers", "", nil); rec.Code != http.StatusForbidden {
 		t.Fatalf("unwired permission source -> %d", rec.Code)
@@ -290,7 +270,6 @@ func TestRouteCrossOwnerDetailIsNotFound(t *testing.T) {
 	if rec, body := r.do(t, http.MethodGet, path, "", nil); rec.Code != http.StatusOK {
 		t.Fatalf("owner read -> %d %s", rec.Code, body)
 	}
-	// Absent, not forbidden: a 403 would confirm the id exists.
 	if rec, body := r.do(t, http.MethodGet, path, "8", nil); rec.Code != http.StatusNotFound {
 		t.Fatalf("cross-owner read -> %d %s", rec.Code, body)
 	}
@@ -321,15 +300,12 @@ func TestRouteSigninWritesLedger(t *testing.T) {
 		t.Fatalf("signin outcome = %s", body)
 	}
 
-	// A missing tracker is a 404, not a 500.
 	rec, _ = r.do(t, http.MethodPost, "/api/pt/trackers/9999/signin", "", map[string]any{})
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("missing tracker -> %d", rec.Code)
 	}
 }
 
-// TestRouteUnknownSchemaIsRefused guards the registry boundary: the schema key
-// comes from the client and must be one the build registered.
 func TestRouteUnknownSchemaIsRefused(t *testing.T) {
 	r := newRouted(t)
 	body := createBody(r.site)
@@ -340,8 +316,6 @@ func TestRouteUnknownSchemaIsRefused(t *testing.T) {
 	}
 }
 
-// TestRouteHandlersResolveRequest keeps the huma input wiring honest: an
-// untouched request still reaches the handler with the caller's workspace.
 func TestRouteHandlersResolveRequest(t *testing.T) {
 	r := newRouted(t)
 	rec, body := r.do(t, http.MethodGet, "/api/pt/overview", "", nil)
@@ -360,8 +334,6 @@ func TestRouteHandlersResolveRequest(t *testing.T) {
 	}
 }
 
-// TestRouteDeleteShredsCredential proves the delete path removes the rows and
-// then destroys the subject key.
 func TestRouteDeleteShredsCredential(t *testing.T) {
 	r := newRouted(t)
 	rec, body := r.do(t, http.MethodPost, "/api/pt/trackers", "", createBody(r.site))
@@ -389,7 +361,6 @@ func TestRouteDeleteShredsCredential(t *testing.T) {
 		t.Fatalf("expected vault secret to be shredded after delete, got %v", err)
 	}
 
-	// The tracker row is gone with it.
 	var tracker PTTracker
 	if err := r.db.Where("id = ?", view.ID).First(&tracker).Error; err == nil {
 		t.Fatal("tracker row survived delete")

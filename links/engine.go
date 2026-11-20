@@ -76,7 +76,6 @@ type clickItem struct {
 	createdAt   time.Time
 }
 
-// Engine handles redirect resolution and analytics.
 type Engine struct {
 	db          *gorm.DB
 	resolver    *origin.Resolver
@@ -133,10 +132,6 @@ func (e *Engine) worker() {
 		batch = batch[:0]
 	}
 
-	// consume runs one iteration of the event loop. It returns true when the
-	// channel is closed (normal shutdown) — the caller must stop looping.
-	// A panic inside flushBatch / PublishEvent is caught by safego.Recover
-	// and consume returns false so the outer loop restarts it.
 	consume := func() (closed bool) {
 		defer safego.Recover("links.click-worker")
 		for {
@@ -157,9 +152,6 @@ func (e *Engine) worker() {
 	}
 
 	for !consume() {
-		// After a panic-recovery, re-enter the loop. The channel and
-		// batch slice survive because they live in the outer scope.
-		// Reset the batch — whatever was in it may be half-processed.
 		batch = batch[:0]
 	}
 }
@@ -169,8 +161,6 @@ func (e *Engine) flushBatch(batch []clickItem) {
 		return
 	}
 
-	// Count non-bot clicks per org up front: the per-org totals are what the
-	// quota check below judges, and an over-quota click must not land anywhere.
 	clicksByOrg := make(map[uint]int64)
 	for _, item := range batch {
 		if !item.bot {
@@ -178,15 +168,6 @@ func (e *Engine) flushBatch(batch []clickItem) {
 		}
 	}
 
-	// Ask the quota checker once per org before writing anything. Redirects are
-	// never refused — short links get printed on QR codes and campaign material,
-	// and stopping the 302 would break the link owner's customers irrecoverably,
-	// while the write-and-store cost is what actually bills. So an org that has
-	// used up its monthly click allowance simply stops being counted. Only an
-	// explicit ErrQuotaExceeded suppresses; any other error (a broken checker,
-	// an unknown one) reads as "allowed" so a metering outage never becomes
-	// silent data loss. With no checker registered (self-hosted) CheckQuota
-	// returns nil and nothing is suppressed.
 	suppressed := make(map[uint]bool)
 	for orgID, count := range clicksByOrg {
 		if errors.Is(plugin.CheckQuota(e.ctx, context.Background(), orgID, "clicksPerMonth", count), plugin.ErrQuotaExceeded) {
@@ -197,10 +178,6 @@ func (e *Engine) flushBatch(batch []clickItem) {
 	events := make([]LinkEvent, 0, len(batch))
 	clicksByLink := make(map[uint]int64)
 	for _, item := range batch {
-		// Suppression is all-or-nothing per org: drop both the event row and the
-		// Link.clicks increment. Skipping the event while still bumping the
-		// counter would make the link detail page's total disagree with the event
-		// table — worse than not counting at all.
 		if suppressed[item.orgID] {
 			continue
 		}
@@ -229,9 +206,6 @@ func (e *Engine) flushBatch(batch []clickItem) {
 	}
 
 	err := e.db.Transaction(func(tx *gorm.DB) error {
-		// A batch can be entirely suppressed (every item over quota). GORM
-		// treats Create on an empty slice as an error, so only write when
-		// there is actually an event row to persist.
 		if len(events) > 0 {
 			if err := tx.Create(&events).Error; err != nil {
 				return err
@@ -268,13 +242,6 @@ func (e *Engine) flushBatch(batch []clickItem) {
 
 	if e.ctx != nil {
 		if e.ctx.RecordUsage != nil {
-			// Meter only the clicks that were actually written. A suppressed org
-			// consumed nothing on disk, so metering it would bill for clicks the
-			// product never counted — the cap exists to stop the bill, not to
-			// keep it growing. The metric is "clicks", not "links": "links" is
-			// the stock-quota key for how many short links an org may hold,
-			// a different thing that would collide if clicks were reported
-			// under the same name.
 			for orgID, count := range clicksByOrg {
 				if suppressed[orgID] {
 					continue

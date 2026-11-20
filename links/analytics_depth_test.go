@@ -39,18 +39,15 @@ func TestUTMCaptureAndTruncation(t *testing.T) {
 		t.Fatalf("failed to create link: %v", err)
 	}
 
-	// 1. UTM capture
 	req1 := httptest.NewRequest("GET", "/utm-test?utm_source=twitter&utm_medium=cpc&utm_campaign=summer_sale", nil)
 	w1 := httptest.NewRecorder()
 	engine.Handle(w1, req1, &link)
 
-	// 2. Super long UTM values (500 chars)
 	longSource := strings.Repeat("a", 500)
 	req2 := httptest.NewRequest("GET", "/utm-test?utm_source="+longSource, nil)
 	w2 := httptest.NewRecorder()
 	engine.Handle(w2, req2, &link)
 
-	// Flush queue
 	engine.Close()
 
 	var events []LinkEvent
@@ -61,13 +58,11 @@ func TestUTMCaptureAndTruncation(t *testing.T) {
 		t.Fatalf("expected 2 events, got %d", len(events))
 	}
 
-	// Verify req1 UTM parameters
 	if events[0].UTMSource != "twitter" || events[0].UTMMedium != "cpc" || events[0].UTMCampaign != "summer_sale" {
 		t.Errorf("unexpected UTM values on event 0: source=%q, medium=%q, campaign=%q",
 			events[0].UTMSource, events[0].UTMMedium, events[0].UTMCampaign)
 	}
 
-	// Verify req2 truncation to 128 chars
 	if len(events[1].UTMSource) != 128 || events[1].UTMSource != strings.Repeat("a", 128) {
 		t.Errorf("expected UTMSource to be truncated to 128 chars, got length %d", len(events[1].UTMSource))
 	}
@@ -114,7 +109,6 @@ func TestUVExcludesEmptyFingerprint(t *testing.T) {
 	db.Create(&link)
 
 	now := time.Now()
-	// 5 events with empty fingerprint
 	for i := 0; i < 5; i++ {
 		db.Create(&LinkEvent{
 			LinkID:      link.ID,
@@ -124,7 +118,6 @@ func TestUVExcludesEmptyFingerprint(t *testing.T) {
 			Fingerprint: "",
 		})
 	}
-	// 2 events with distinct fingerprints
 	db.Create(&LinkEvent{
 		LinkID:      link.ID,
 		CreatedAt:   now,
@@ -161,7 +154,6 @@ func TestUVExcludesEmptyFingerprint(t *testing.T) {
 		t.Fatalf("expected devices statkv slice in body")
 	}
 
-	// UV metric must exclude empty fingerprint, so count should be 2 (fp_user_1 and fp_user_2)
 	if devices[0].Count != 2 {
 		t.Fatalf("expected UV count = 2 excluding empty fingerprints, got %d", devices[0].Count)
 	}
@@ -183,7 +175,6 @@ func TestPVVsUVMetrics(t *testing.T) {
 	db.Create(&link)
 
 	now := time.Now()
-	// 3 clicks from user 1, 2 clicks from user 2
 	for i := 0; i < 3; i++ {
 		db.Create(&LinkEvent{
 			LinkID:      link.ID,
@@ -201,7 +192,6 @@ func TestPVVsUVMetrics(t *testing.T) {
 		})
 	}
 
-	// Test PV
 	rPV := httptest.NewRequest("GET", "/api/links/102/stats?metric=pv", nil)
 	rPV.Header.Set("X-Org-ID", "1")
 	ctxPV := humago.NewContext(nil, rPV, httptest.NewRecorder())
@@ -214,7 +204,6 @@ func TestPVVsUVMetrics(t *testing.T) {
 		t.Fatalf("expected PV count = 5, got %v", browsersPV)
 	}
 
-	// Test UV
 	rUV := httptest.NewRequest("GET", "/api/links/102/stats?metric=uv", nil)
 	rUV.Header.Set("X-Org-ID", "1")
 	ctxUV := humago.NewContext(nil, rUV, httptest.NewRecorder())

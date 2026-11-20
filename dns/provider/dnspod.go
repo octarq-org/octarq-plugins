@@ -37,7 +37,6 @@ type dpCreds struct {
 	SecretKey string `json:"secretKey"`
 }
 
-// DNSPod implements Provider using the official Tencent Cloud DNSPod Go SDK.
 type DNSPod struct {
 	client *dnspod.Client
 }

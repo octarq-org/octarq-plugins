@@ -62,7 +62,6 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// Guard Test 1: Default behavior unchanged (inbound -> DB storage -> .eml download byte-for-byte)
 func TestDefaultStorageBehavior(t *testing.T) {
 	db := setupTestDB(t)
 	p := New()
@@ -107,9 +106,6 @@ func TestDefaultStorageBehavior(t *testing.T) {
 		t.Fatalf("failed to find created email: %v", err)
 	}
 
-	// The whole point of the seam: the emails row — the one every inbox list
-	// query scans — must not carry the multi-megabyte original. It goes to the
-	// blob store instead, and the .eml download below proves it survived the trip.
 	if len(email.Raw) != 0 {
 		t.Fatalf("emails row still carries the raw original (%d bytes); it belongs in the blob store", len(email.Raw))
 	}
@@ -136,7 +132,6 @@ func TestDefaultStorageBehavior(t *testing.T) {
 	}
 }
 
-// Guard Test 2: Provider Put -> Get -> Delete -> Stat roundtrip
 func TestStorageProviderRoundtrip(t *testing.T) {
 	db := setupTestDB(t)
 	prov := NewDBStorageProvider(db)
@@ -169,7 +164,6 @@ func TestStorageProviderRoundtrip(t *testing.T) {
 	}
 }
 
-// Guard Test 3: Coexistence read (one in DB, one in alternative provider)
 func TestCoexistenceRead(t *testing.T) {
 	db := setupTestDB(t)
 	p := New()
@@ -221,7 +215,6 @@ func TestCoexistenceRead(t *testing.T) {
 	}
 }
 
-// Guard Test 4: OSS rejects Pro provider ("s3") when Pro provider is absent
 func TestOSSRejectsProProvider(t *testing.T) {
 	db := setupTestDB(t)
 	p := New()
@@ -254,8 +247,6 @@ func TestOSSRejectsProProvider(t *testing.T) {
 	}
 }
 
-// Guard Test 6: Usage metering (writing N bytes records N bytes plus one
-// message of inbound mail)
 func TestStorageUsageMetering(t *testing.T) {
 	db := setupTestDB(t)
 	p := New()
@@ -310,12 +301,10 @@ func TestStorageUsageMetering(t *testing.T) {
 	if len(calls) != 2 {
 		t.Fatalf("expected 2 RecordUsage calls (raw bytes + message count), got %d: %+v", len(calls), calls)
 	}
-	// First: stored byte count, no quota consumer today.
 	if calls[0].orgID != 10 || calls[0].metric != plugin.MetricRawBytes || calls[0].n != int64(len(rawEML)) {
 		t.Errorf("raw-bytes call mismatch: expected org=10 metric=%s n=%d, got %+v",
 			plugin.MetricRawBytes, len(rawEML), calls[0])
 	}
-	// Second: one inbound message for the mailInPerMonth quota.
 	if calls[1].orgID != 10 || calls[1].metric != plugin.MetricMailIn || calls[1].n != 1 {
 		t.Errorf("mailIn call mismatch: expected org=10 metric=%s n=1, got %+v", plugin.MetricMailIn, calls[1])
 	}
@@ -360,9 +349,6 @@ func TestPurgeDeletesExternalProviderBlobs(t *testing.T) {
 	}
 }
 
-// TestMailRawBlobSchemaIsPortableToPostgres ensures MailRawBlob.Data does not carry
-// an explicit gorm:"type:blob" tag, which causes PostgreSQL migrations to fail with
-// ERROR: type "blob" does not exist (SQLSTATE 42704).
 func TestMailRawBlobSchemaIsPortableToPostgres(t *testing.T) {
 	db := setupTestDB(t)
 	stmt := &gorm.Statement{DB: db}

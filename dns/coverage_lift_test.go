@@ -28,7 +28,6 @@ func TestCoverageLift_DNS_ErrorsAndHelpers(t *testing.T) {
 	t.Parallel()
 	p, _ := setupFullDNSTestDB(t)
 
-	// cleanProviderError invalid/validation/parameter
 	if got := cleanProviderError("invalid argument provided"); got != "invalid record configuration or parameters" {
 		t.Fatalf("unexpected cleanProviderError: %s", got)
 	}
@@ -36,17 +35,14 @@ func TestCoverageLift_DNS_ErrorsAndHelpers(t *testing.T) {
 		t.Fatalf("unexpected cleanProviderError: %s", got)
 	}
 
-	// providerErr with err == nil
 	if err := p.providerErr("test_action", nil); err == nil {
 		t.Fatalf("expected error from providerErr")
 	}
 
-	// hostsOutsideZone with empty name
 	if got := hostsOutsideZone("", nil, nil); got != "" {
 		t.Fatalf("expected empty string for empty domain name, got %s", got)
 	}
 
-	// ownsProviderAccount with id == 0
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	if owned, err := p.ownsProviderAccount(r, 0); owned || err != nil {
 		t.Fatalf("expected false for id=0, got %v, %v", owned, err)
@@ -58,12 +54,10 @@ func TestCoverageLift_DNS_EmailBlueprint(t *testing.T) {
 	p, mkCtx := setupFullDNSTestDB(t)
 	ctx := context.Background()
 
-	// NormaliseRecordName fallback
 	if got := normaliseRecordName("otherdomain.org", "example.com"); got != "otherdomain.org" {
 		t.Fatalf("unexpected normaliseRecordName: %s", got)
 	}
 
-	// Resolve methods
 	req := httptest.NewRequest(http.MethodGet, "/domains/1/email-blueprint", nil)
 	humaCtx := mkCtx(req)
 
@@ -80,7 +74,6 @@ func TestCoverageLift_DNS_EmailBlueprint(t *testing.T) {
 		t.Fatalf("unexpected resolve errors: %v", errs)
 	}
 
-	// emailBlueprint error branches: nil Ctx, orgID == 0
 	if _, err := p.emailBlueprint(ctx, &EmailBlueprintInput{}); err == nil {
 		t.Fatalf("expected error for nil Ctx")
 	}
@@ -92,7 +85,6 @@ func TestCoverageLift_DNS_EmailBlueprint(t *testing.T) {
 		t.Fatalf("expected error for orgID == 0")
 	}
 
-	// emailBlueprint: domain without provider account
 	dom := Domain{
 		OrgID:             1,
 		Name:              "unconfigured.example.com",
@@ -113,7 +105,6 @@ func TestCoverageLift_DNS_EmailBlueprint(t *testing.T) {
 		t.Fatalf("expected all missing status")
 	}
 
-	// applyEmailBlueprint: nil Ctx, orgID == 0, dom with ProviderAccountID == 0
 	if _, err := p.applyEmailBlueprint(ctx, &ApplyEmailBlueprintInput{}); err == nil {
 		t.Fatalf("expected error for nil Ctx")
 	}
@@ -130,22 +121,18 @@ func TestCoverageLift_DNS_MCP(t *testing.T) {
 	p, _ := setupFullDNSTestDB(t)
 	ctx := plugin.WithOrgID(context.Background(), 1)
 
-	// mcpUpdateDomainConfig: ID == 0
 	if _, _, err := p.mcpUpdateDomainConfig(ctx, nil, updateDomainConfigInput{ID: 0}); err == nil {
 		t.Fatalf("expected error for ID == 0")
 	}
 
-	// mcpListDNSRecords: DomainID == 0
 	if _, _, err := p.mcpListDNSRecords(ctx, nil, listDNSRecordsInput{DomainID: 0}); err == nil {
 		t.Fatalf("expected error for DomainID == 0")
 	}
 
-	// mcpSetDNSRecord: DomainID == 0
 	if _, _, err := p.mcpSetDNSRecord(ctx, nil, setDNSRecordInput{DomainID: 0}); err == nil {
 		t.Fatalf("expected error for DomainID == 0")
 	}
 
-	// mcpDeleteDNSRecord: DomainID == 0, RecordID == ""
 	if _, _, err := p.mcpDeleteDNSRecord(ctx, nil, deleteDNSRecordInput{DomainID: 0}); err == nil {
 		t.Fatalf("expected error for DomainID == 0")
 	}
@@ -153,7 +140,6 @@ func TestCoverageLift_DNS_MCP(t *testing.T) {
 		t.Fatalf("expected error for empty RecordID")
 	}
 
-	// Domain without zoneID
 	acc := ProviderAccount{OrgID: 1, Name: "Acc", Type: "cloudflare"}
 	p.db.Create(&acc)
 	dom := Domain{OrgID: 1, Name: "nozone.example.com", ProviderAccountID: acc.ID, ZoneID: ""}
@@ -169,7 +155,6 @@ func TestCoverageLift_DNS_MCP(t *testing.T) {
 		t.Fatalf("expected error for missing ZoneID")
 	}
 
-	// mcpExportDomains
 	res, err := p.mcpExportDomains(ctx, 1)
 	if err != nil {
 		t.Fatalf("mcpExportDomains failed: %v", err)
@@ -184,7 +169,6 @@ func TestCoverageLift_DNS_ProvidersAndDomains(t *testing.T) {
 	p, mkCtx := setupFullDNSTestDB(t)
 	ctx := context.Background()
 
-	// Resolve implementations
 	upProvIn := &UpdateProviderAccountInput{ID: 1}
 	if errs := upProvIn.Resolve(mkCtx(httptest.NewRequest(http.MethodPut, "/providers/1", nil))); len(errs) > 0 {
 		t.Fatalf("resolve failed: %v", errs)
@@ -198,7 +182,6 @@ func TestCoverageLift_DNS_ProvidersAndDomains(t *testing.T) {
 		t.Fatalf("resolve failed: %v", errs)
 	}
 
-	// updateProviderAccount error branches
 	if _, err := p.updateProviderAccount(ctx, &UpdateProviderAccountInput{}); err == nil {
 		t.Fatalf("expected error for nil Ctx")
 	}
@@ -216,7 +199,6 @@ func TestCoverageLift_DNS_ProvidersAndDomains(t *testing.T) {
 		t.Fatalf("expected forbidden for non-admin")
 	}
 
-	// deleteProviderAccount error branches
 	if _, err := p.deleteProviderAccount(ctx, &DeleteProviderAccountInput{}); err == nil {
 		t.Fatalf("expected error for nil Ctx")
 	}
@@ -227,7 +209,6 @@ func TestCoverageLift_DNS_ProvidersAndDomains(t *testing.T) {
 		t.Fatalf("expected forbidden for non-admin")
 	}
 
-	// Restore admin role
 	p.requireRole = func(r *http.Request, role string) bool { return true }
 	reqAdmin := httptest.NewRequest(http.MethodDelete, "/providers/999", nil)
 	reqAdmin.Header.Set("X-Org-ID", "1")
@@ -236,7 +217,6 @@ func TestCoverageLift_DNS_ProvidersAndDomains(t *testing.T) {
 		t.Fatalf("expected 404 for non-existent provider")
 	}
 
-	// updateDomain error branches
 	if _, err := p.updateDomain(ctx, &UpdateDomainInput{}); err == nil {
 		t.Fatalf("expected error for nil Ctx")
 	}
@@ -249,7 +229,6 @@ func TestCoverageLift_DNS_ProvidersAndDomains(t *testing.T) {
 	}
 	p.requireRole = func(r *http.Request, role string) bool { return true }
 
-	// createDomain with explicit ForLink / ForMail flags
 	forLink := true
 	forMail := false
 	acc := ProviderAccount{OrgID: 1, Name: "Switches Prov", Type: "cloudflare"}
@@ -272,7 +251,6 @@ func TestCoverageLift_DNS_ProvidersAndDomains(t *testing.T) {
 		t.Fatalf("flags did not take effect")
 	}
 
-	// updateDomain with ZoneID, ForLink, ForMail, Note
 	zoneID := "zone_123"
 	forLinkUpdated := false
 	forMailUpdated := true
@@ -293,7 +271,6 @@ func TestCoverageLift_DNS_ProvidersAndDomains(t *testing.T) {
 		t.Fatalf("domain was not updated properly")
 	}
 
-	// deleteDomain non-existent
 	delReq := httptest.NewRequest(http.MethodDelete, "/domains/9999", nil)
 	delReq.Header.Set("X-Org-ID", "1")
 	delCtx := humago.NewContext(nil, delReq, httptest.NewRecorder())
@@ -307,7 +284,6 @@ func TestCoverageLift_DNS_DDNSAndRecords(t *testing.T) {
 	p, _ := setupFullDNSTestDB(t)
 	ctx := context.Background()
 
-	// deleteDDNSToken error branches
 	if _, err := p.deleteDDNSToken(ctx, &deleteDDNSTokenInput{}); err == nil {
 		t.Fatalf("expected error for nil Ctx")
 	}
@@ -326,7 +302,6 @@ func TestCoverageLift_DNS_DDNSAndRecords(t *testing.T) {
 	}
 	p.requireRole = func(r *http.Request, role string) bool { return true }
 
-	// updateDDNS error branches
 	if _, err := p.updateDDNS(ctx, &updateDDNSInput{}); err == nil {
 		t.Fatalf("expected error for nil Ctx")
 	}
@@ -339,7 +314,6 @@ func TestCoverageLift_DNS_DDNSAndRecords(t *testing.T) {
 		t.Fatalf("expected badauth response, got %s", rec.Body.String())
 	}
 
-	// Records error branches
 	domNoProv := Domain{OrgID: 1, Name: "noprov.example.com", ProviderAccountID: 0}
 	p.db.Create(&domNoProv)
 
@@ -354,7 +328,6 @@ func TestCoverageLift_DNS_DDNSAndRecords(t *testing.T) {
 		t.Fatalf("expected error for domain without provider")
 	}
 
-	// updateRecord validation failure
 	acc := ProviderAccount{OrgID: 1, Name: "Acc", Type: "cloudflare"}
 	p.db.Create(&acc)
 	domProv := Domain{OrgID: 1, Name: "prov.example.com", ProviderAccountID: acc.ID, ZoneID: "zone1"}
@@ -373,7 +346,6 @@ func TestCoverageLift_DNS_DDNSAndRecords(t *testing.T) {
 		t.Fatalf("expected validation error for invalid record type")
 	}
 
-	// syncDomains vault failure & Resolve
 	accBadKey, err := seedVaultProviderAccount(p, 1, "BadKey", "cloudflare", map[string]any{"apiToken": "tok"})
 	if err != nil {
 		t.Fatal(err)

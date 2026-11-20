@@ -260,7 +260,6 @@ func TestSendErrors(t *testing.T) {
 				return
 			}
 			defer conn.Close()
-			// Accept connection but do not write SMTP banner; sleep to simulate hang
 			buf := make([]byte, 1024)
 			_, _ = conn.Read(buf)
 		}()

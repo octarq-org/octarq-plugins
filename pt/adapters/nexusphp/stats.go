@@ -21,11 +21,8 @@ var (
 	numberRe    = regexp.MustCompile(`[\d]+(?:[.,]\d+)*`)
 )
 
-// errStatsIncomplete means the two mandatory metrics were not on the page.
 var errStatsIncomplete = errors.New("upload and download values were not found on the index page")
 
-// stats reads the account overview. Upload and download are mandatory; every
-// other metric is best effort and stays nil when the skin does not show it.
 func stats(ctx context.Context, s *adapter.Session) (*adapter.UserStats, error) {
 	p, err := page(ctx, s, "/index.php")
 	if err != nil {
@@ -55,8 +52,6 @@ func stats(ctx context.Context, s *adapter.Session) (*adapter.UserStats, error) 
 	out.Bonus = bonusFromDoc(doc, text)
 
 	if out.UserID != "" {
-		// The detail page is where level, join date, warnings and invites live.
-		// A failure here must not erase the traffic numbers we already have.
 		if detail, derr := page(ctx, s, "/userdetails.php?id="+out.UserID); derr == nil {
 			parseUserDetail(detail, out, siteTimezone(s))
 		}
@@ -92,8 +87,6 @@ func ratioFromText(text string) (*float64, bool) {
 	return value, infinite
 }
 
-// bonusFromDoc prefers the mybonus link (the exact figure), then falls back to
-// the labelled value on the page.
 func bonusFromDoc(doc *goquery.Document, text string) *float64 {
 	if doc != nil {
 		value := ""
@@ -127,7 +120,6 @@ func parseBonus(raw string) (*float64, bool) {
 	return &v, true
 }
 
-// parseUserDetail fills the best-effort fields from userdetails.php.
 func parseUserDetail(p *adapter.Page, out *adapter.UserStats, loc *time.Location) {
 	doc, err := parseDoc(p.Body)
 	if err != nil {

@@ -1,5 +1,3 @@
-// API shapes. These mirror the Go DTOs in pt/dto.go; a field renamed there must
-// be renamed here in the same change.
 
 export type Outcome =
   | "success"

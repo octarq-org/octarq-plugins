@@ -13,34 +13,26 @@ import (
 )
 
 var (
-	// alreadyMarkers mean the site reports a completed sign-in for today.
-	// They are success for scheduling, but are reported distinctly.
 	alreadyMarkers = []string{
 		"今天已签到", "今日已签到", "今天已簽到", "今日已簽到",
 		"已经签到", "已签到", "已經簽到", "已簽到", "已打卡",
 		"You have already attend",
 	}
-	// successMarkers mean this call performed the sign-in. Every marker names
-	// the sign-in action; a bare bonus word would let an unrelated page claim
-	// success.
 	successMarkers = []string{
 		"签到成功", "簽到成功", "签到已得", "簽到已得",
 		"本次签到获得", "本次簽到獲得", "今天签到您获得",
 	}
-	// negativeMarkers mean the sign-in was attempted and refused.
 	negativeMarkers = []string{
 		"签到失败", "簽到失敗", "签到失敗", "簽到失败",
 		"没有签到成功", "沒有簽到成功", "未成功",
 		"请先登录", "請先登入", "请先登入", "未登录", "未登入",
 		"无权", "無權", "禁止", "账号被禁", "帳號被禁",
 	}
-	// pendingMarkers mean the page still offers the sign-in action.
 	pendingMarkers = []string{"立即签到", "立即簽到", "每日签到", "每日簽到", "点击签到", "點擊簽到", "打卡", "签到"}
 )
 
 var bonusRe = regexp.MustCompile(`(?:本次签到获得|本次簽到獲得|签到已得|簽到已得|今天签到您获得)[^\d\-]{0,20}([\d,]+(?:\.\d+)?)`)
 
-// signin runs the daily sign-in and reports the verdict with its evidence.
 func signin(ctx context.Context, s *adapter.Session) (*adapter.SigninResult, error) {
 	p, err := page(ctx, s, "/attendance.php")
 	if err != nil {
@@ -60,9 +52,6 @@ func signin(ctx context.Context, s *adapter.Session) (*adapter.SigninResult, err
 		return &adapter.SigninResult{Outcome: adapter.OutcomeParseError, Reason: "parse", Message: "Attendance page could not be parsed.", HTTPStatus: p.Status}, nil
 	}
 
-	// A login form on the attendance page means the session is gone. Reporting
-	// that as "not signed in" would send the operator looking in the wrong
-	// place.
 	if hasLoginForm(doc) {
 		return &adapter.SigninResult{
 			Outcome:    adapter.OutcomeAuthFailed,
@@ -77,8 +66,6 @@ func signin(ctx context.Context, s *adapter.Session) (*adapter.SigninResult, err
 		return verdict, nil
 	}
 
-	// Some skins put a confirmation form on attendance.php; posting the form's
-	// own hidden fields is the whole protocol for those sites.
 	form, ok := findSigninForm(doc, p.URL.String())
 	if !ok {
 		return verdict, nil
@@ -93,14 +80,11 @@ func signin(ctx context.Context, s *adapter.Session) (*adapter.SigninResult, err
 	}
 	posted := evaluateSignin(doc2, resp.Body, resp.Status)
 	if posted.Outcome == adapter.OutcomeLoginOKUnconfirmed {
-		// Keep the first evidence: the form was found and submitted, but the
-		// site still said nothing conclusive.
 		posted.Message = "The sign-in request was sent, but the site did not confirm the result."
 	}
 	return posted, nil
 }
 
-// signinForm is the confirmation form on skins that need a POST.
 type signinForm struct {
 	action string
 	values url.Values
@@ -140,7 +124,6 @@ func findSigninForm(doc *goquery.Document, pageURL string) (signinForm, bool) {
 			value, _ := in.Attr("value")
 			out.values.Add(name, value)
 		})
-		// Buttons with a name are part of the submission.
 		form.Find("button").Each(func(_ int, in *goquery.Selection) {
 			if name, ok := in.Attr("name"); ok && name != "" {
 				out.values.Set(name, "1")
@@ -152,8 +135,6 @@ func findSigninForm(doc *goquery.Document, pageURL string) (signinForm, bool) {
 	return out, matched
 }
 
-// evaluateSignin applies the evidence rules in a fixed order:
-// already signed, then refusal, then success, then "no idea".
 func evaluateSignin(doc *goquery.Document, body []byte, status int) *adapter.SigninResult {
 	text := visibleText(doc)
 	evidence := adapter.TruncateEvidence(text, 160)
@@ -187,8 +168,6 @@ func evaluateSignin(doc *goquery.Document, body []byte, status int) *adapter.Sig
 		}
 	}
 	if containsAny(text, pendingMarkers...) {
-		// A visible sign-in control on a page that also logged in means the
-		// action is available but was not taken; the POST path decides.
 		return &adapter.SigninResult{
 			Outcome:    adapter.OutcomeLoginOKUnconfirmed,
 			Reason:     "form_pending",
@@ -206,7 +185,6 @@ func evaluateSignin(doc *goquery.Document, body []byte, status int) *adapter.Sig
 	}
 }
 
-// bonusFromText extracts the bonus awarded by the sign-in.
 func bonusFromText(text string) *float64 {
 	m := bonusRe.FindStringSubmatch(text)
 	if len(m) != 2 {
@@ -219,7 +197,6 @@ func bonusFromText(text string) *float64 {
 	return bonus
 }
 
-// resultFromError maps a transport or anti-bot failure to a sign-in verdict.
 func resultFromError(err error) *adapter.SigninResult {
 	switch {
 	case errors.Is(err, adapter.ErrCloudflare):

@@ -236,10 +236,6 @@ func (p *Plugin) deleteProviderAccount(ctx context.Context, input *DeleteProvide
 		return nil, huma.Error403Forbidden("Admin role required to delete provider account. Contact a workspace admin for access.")
 	}
 
-	// Verify ownership before anything else: without this, the domain-usage
-	// count below runs on a raw ID and its 409-vs-404 response becomes a
-	// cross-tenant oracle (it reveals whether another org's provider account
-	// exists and is referenced). Fail closed with 404 if the caller doesn't own it.
 	var acc ProviderAccount
 	if err := p.db.Where("id = ? AND owner_id = ?", input.ID, orgID).First(&acc).Error; err != nil {
 		return nil, huma.Error404NotFound("Provider account not found")

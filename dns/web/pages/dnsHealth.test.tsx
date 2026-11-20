@@ -87,7 +87,6 @@ function wrapper({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Mock DNS status payloads
 const allHealthyStatus: apiModule.DNSVerifyResult = {
   spf: { set: true, healthy: true, value: "v=spf1 include:_spf.mx.cloudflare.net ~all" },
   dkim: { set: true, healthy: true, selector: "default", value: "v=DKIM1; k=rsa; p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC..." },
@@ -157,7 +156,6 @@ describe("DNS Health & Deliverability Reputation", () => {
     it("calculates partial score when SPF is misconfigured and DKIM is missing", () => {
       const result = calculateReputationScore(issuesStatus, "example.com");
       expect(result).not.toBeNull();
-      // SPF (15) + DKIM (0) + DMARC (30) = 45
       expect(result!.score).toBe(45);
       expect(result!.grade).toBe("fair");
       expect(result!.tone).toBe("warning");
@@ -192,13 +190,12 @@ describe("DNS Health & Deliverability Reputation", () => {
       const multiHostStatus: apiModule.DNSVerifyResult = {
         ...allHealthyStatus,
         hosts: [
-          allHealthyStatus.hosts[0], // 100 pts
-          issuesStatus.hosts[0],     // 45 pts
+          allHealthyStatus.hosts[0],
+          issuesStatus.hosts[0],
         ],
       };
       const result = calculateReputationScore(multiHostStatus, "example.com");
       expect(result).not.toBeNull();
-      // (100 + 45) / 2 = 72.5 -> 73 -> good
       expect(result!.score).toBe(73);
       expect(result!.grade).toBe("good");
       expect(result!.tone).toBe("info");
@@ -300,31 +297,23 @@ describe("DNS Health & Deliverability Reputation", () => {
 
       render(<DomainsPage />, { wrapper });
 
-      // Wait for domain list to load
       await waitFor(() => expect(screen.getByText("example.com")).toBeTruthy());
 
-      // Click the domain health button on the domain row
       const healthButtons = screen.getAllByTitle(/domains.domainHealth/);
       fireEvent.click(healthButtons[0]);
 
-      // Should have triggered verifyDNS for domain 10
       await waitFor(() => expect(apiModule.dnsApi.verifyDNS).toHaveBeenCalledWith(10));
 
-      // Should show the health score for issuesStatus (score: 45)
       await waitFor(() => expect(screen.getByText("45")).toBeTruthy());
       expect(screen.getByText(/domains.autoFixBannerTitle/)).toBeTruthy();
 
-      // Click one-click auto-fix button
       const autoFixBtn = screen.getByText(/domains.oneClickAutoFix/);
       fireEvent.click(autoFixBtn);
 
-      // Verify applyEmailBlueprint was called
       await waitFor(() => expect(apiModule.dnsApi.applyEmailBlueprint).toHaveBeenCalledWith(10));
 
-      // Verify second call to verifyDNS was made
       await waitFor(() => expect(apiModule.dnsApi.verifyDNS).toHaveBeenCalledTimes(2));
 
-      // Now should show updated score 100
       await waitFor(() => expect(screen.getByText("100")).toBeTruthy());
       expect(screen.getByText(/domains.allRecordsHealthy/)).toBeTruthy();
     });

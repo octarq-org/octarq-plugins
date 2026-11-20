@@ -14,12 +14,10 @@ func TestContactsUpsertAndSearchIsolation(t *testing.T) {
 	p, mkCtx := setupFullMailTestDB(t)
 	ctx := context.Background()
 
-	// Org 1 contacts
 	p.upsertContact(1, "Alice Smith <alice@example.com>")
-	p.upsertContact(1, "alice@example.com") // increments count
+	p.upsertContact(1, "alice@example.com")
 	p.upsertContact(1, "Bob Jones <bob@example.com>")
 
-	// Org 2 contact
 	p.upsertContact(2, "Charlie Brown <charlie@other.com>")
 
 	asOrg := func(org string) *http.Request {
@@ -28,7 +26,6 @@ func TestContactsUpsertAndSearchIsolation(t *testing.T) {
 		return req
 	}
 
-	// Org 1 lists contacts
 	out1, err := p.listContacts(ctx, &ListContactsInput{Ctx: mkCtx(asOrg("1"))})
 	if err != nil {
 		t.Fatalf("listContacts org 1 failed: %v", err)
@@ -36,7 +33,6 @@ func TestContactsUpsertAndSearchIsolation(t *testing.T) {
 	if len(out1.Body) != 2 {
 		t.Fatalf("org 1 contacts count = %d, want 2", len(out1.Body))
 	}
-	// Alice had 2 interactions, should be first
 	if out1.Body[0].Address != "alice@example.com" || out1.Body[0].InteractionCount != 2 {
 		t.Fatalf("expected alice first with count 2, got %+v", out1.Body[0])
 	}
@@ -44,13 +40,11 @@ func TestContactsUpsertAndSearchIsolation(t *testing.T) {
 		t.Fatalf("expected alice name 'Alice Smith', got %q", out1.Body[0].Name)
 	}
 
-	// Org 1 search query
 	outSearch, err := p.listContacts(ctx, &ListContactsInput{Ctx: mkCtx(asOrg("1")), Q: "bob"})
 	if err != nil || len(outSearch.Body) != 1 || outSearch.Body[0].Address != "bob@example.com" {
 		t.Fatalf("search 'bob' failed: err=%v out=%+v", err, outSearch)
 	}
 
-	// Org 2 lists contacts (isolated)
 	out2, err := p.listContacts(ctx, &ListContactsInput{Ctx: mkCtx(asOrg("2"))})
 	if err != nil {
 		t.Fatalf("listContacts org 2 failed: %v", err)
@@ -82,13 +76,11 @@ func TestFoldersFilterAndSentRecording(t *testing.T) {
 		return req
 	}
 
-	// Filter inbox
 	inboxRes, err := p.listEmails(ctx, &ListEmailsInput{Ctx: mkCtx(asOrg1()), Folder: "inbox"})
 	if err != nil || len(inboxRes.Body) != 1 || inboxRes.Body[0].Subject != "In 1" {
 		t.Fatalf("filter folder=inbox failed: err=%v res=%+v", err, inboxRes)
 	}
 
-	// Filter sent
 	sentRes, err := p.listEmails(ctx, &ListEmailsInput{Ctx: mkCtx(asOrg1()), Folder: "sent"})
 	if err != nil || len(sentRes.Body) != 1 || sentRes.Body[0].Subject != "Sent 1" {
 		t.Fatalf("filter folder=sent failed: err=%v res=%+v", err, sentRes)
@@ -110,7 +102,6 @@ func TestDraftSaveUpdateDelete(t *testing.T) {
 		return req
 	}
 
-	// 1. Create draft
 	saveIn := &SaveDraftInput{Ctx: mkCtx(asOrg("1"))}
 	saveIn.Body.MailboxID = mb.ID
 	saveIn.Body.To = "client@example.com"
@@ -123,13 +114,11 @@ func TestDraftSaveUpdateDelete(t *testing.T) {
 	}
 	draftID := saveOut.Body.ID
 
-	// Verify saved with folder = "drafts"
 	var draft Email
 	if err := p.db.First(&draft, draftID).Error; err != nil || draft.Folder != "drafts" {
 		t.Fatalf("draft not saved properly: err=%v draft=%+v", err, draft)
 	}
 
-	// 2. Update draft
 	updateIn := &SaveDraftInput{Ctx: mkCtx(asOrg("1"))}
 	updateIn.Body.ID = draftID
 	updateIn.Body.To = "client@example.com"
@@ -140,14 +129,12 @@ func TestDraftSaveUpdateDelete(t *testing.T) {
 		t.Fatalf("update draft failed: err=%v out=%+v", err, updateOut)
 	}
 
-	// 3. Cross-org delete fails
 	delInCross := &DeleteDraftInput{Ctx: mkCtx(asOrg("2")), ID: draftID}
 	_, err = p.deleteDraft(ctx, delInCross)
 	if err == nil {
 		t.Fatalf("expected cross-org deleteDraft to fail, got nil")
 	}
 
-	// 4. Owner delete draft
 	delIn := &DeleteDraftInput{Ctx: mkCtx(asOrg("1")), ID: draftID}
 	delOut, err := p.deleteDraft(ctx, delIn)
 	if err != nil || !delOut.Body["ok"] {
@@ -178,7 +165,6 @@ func TestUpdateEmailFolder(t *testing.T) {
 		return req
 	}
 
-	// Move to trash
 	upIn := &UpdateEmailFolderInput{ID: email.ID}
 	_ = upIn.Resolve(mkCtx(asOrg("1")))
 	upIn.Body.Folder = "trash"
@@ -187,7 +173,6 @@ func TestUpdateEmailFolder(t *testing.T) {
 		t.Fatalf("updateEmailFolder to trash failed: err=%v out=%+v", err, upOut)
 	}
 
-	// Invalid folder fails
 	upInBad := &UpdateEmailFolderInput{Ctx: mkCtx(asOrg("1")), ID: email.ID}
 	upInBad.Body.Folder = "invalid_folder_name"
 	_, err = p.updateEmailFolder(ctx, upInBad)
@@ -195,7 +180,6 @@ func TestUpdateEmailFolder(t *testing.T) {
 		t.Fatalf("expected invalid folder update to fail")
 	}
 
-	// Cross-org update fails
 	upInCross := &UpdateEmailFolderInput{Ctx: mkCtx(asOrg("2")), ID: email.ID}
 	upInCross.Body.Folder = "spam"
 	_, err = p.updateEmailFolder(ctx, upInCross)

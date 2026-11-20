@@ -8,10 +8,6 @@ import (
 	"testing"
 )
 
-// TestListLinksClampsOverLimitToMax is the endpoint-level guard for the
-// pagination bug: ?limit=1000 against a max of 500 must return 500 rows, not
-// the default 50. Returning 50 there looks to a paginating client exactly like
-// the collection ending, so the remaining rows are never fetched.
 func TestListLinksClampsOverLimitToMax(t *testing.T) {
 	p, mkCtx := setupFullLinksTestDB(t)
 

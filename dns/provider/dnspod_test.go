@@ -12,8 +12,6 @@ import (
 	dnspod "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/dnspod/v20210323"
 )
 
-// newDNSPodServer spins up a test server that mimics the tencentcloud API endpoints
-// and returns a DNSPod provider pointed at it.
 func newDNSPodServer(t *testing.T, handler http.HandlerFunc) *DNSPod {
 	t.Helper()
 	srv := httptest.NewServer(handler)
@@ -151,20 +149,16 @@ func TestDNSPodFactoryRegistered(t *testing.T) {
 		t.Fatal("nil provider")
 		return
 	}
-	// Missing creds fails.
 	if _, err := New("dnspod", []byte(`{}`)); err == nil {
 		t.Fatal("expected error for empty creds")
 		return
 	}
-	// Malformed JSON fails the factory.
 	if _, err := New("dnspod", []byte("not json")); err == nil {
 		t.Fatal("expected error for malformed credentials JSON")
 		return
 	}
 }
 
-// dnspodActionHandler dispatches the response per the SDK's X-TC-Action header
-// so one server can serve every operation.
 func dnspodActionHandler(respond func(action string, w http.ResponseWriter) bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if respond(r.Header.Get("X-TC-Action"), w) {
@@ -204,8 +198,6 @@ func TestDNSPodListZonesError(t *testing.T) {
 }
 
 func TestDNSPodListRecordsVariants(t *testing.T) {
-	// Records with nil-ish fields are skipped; a record with an MX>0 priority
-	// maps it; a nil TTL falls back to the default.
 	d := newDNSPodServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"Response":{"RecordList":[
 			{"RecordId": 1, "Type": "A", "Name": "www", "Value": "1.1.1.1", "TTL": 60, "MX": 0, "Remark": "ok"},
@@ -229,7 +221,6 @@ func TestDNSPodListRecordsVariants(t *testing.T) {
 	if recs[1].Comment != "" {
 		t.Errorf("record 2 comment = %q, want empty for null Remark", recs[1].Comment)
 	}
-	// A nil MX with a non-nil TTL keeps the priority nil and uses the TTL.
 	if recs[0].Priority != nil {
 		t.Errorf("record 1 priority = %v, want nil for MX=0", recs[0].Priority)
 	}
@@ -260,11 +251,9 @@ func TestDNSPodInvalidZoneIDs(t *testing.T) {
 	if _, err := d.VerifyZone(context.Background(), "not-a-number"); err == nil {
 		t.Error("VerifyZone with invalid zoneID must error")
 	}
-	// DeleteRecord with an invalid record id errors after the zone id parsed.
 	if err := d.DeleteRecord(context.Background(), "42", "not-a-number"); err == nil {
 		t.Error("DeleteRecord with invalid record id must error")
 	}
-	// UpdateRecord with an invalid record id errors after the zone id parsed.
 	if _, err := d.UpdateRecord(context.Background(), "42", Record{ID: "not-a-number"}); err == nil {
 		t.Error("UpdateRecord with invalid record id must error")
 	}
@@ -291,8 +280,6 @@ func TestDNSPodUpdateRecordFlow(t *testing.T) {
 }
 
 func TestDNSPodCreateRecordPaths(t *testing.T) {
-	// Priority and comment flow into the request; an empty response body is
-	// rejected rather than silently turning into a record.
 	d := newDNSPodServer(t, dnspodActionHandler(func(action string, w http.ResponseWriter) bool {
 		if action != "CreateRecord" {
 			return false
@@ -308,7 +295,7 @@ func TestDNSPodCreateRecordPaths(t *testing.T) {
 		if action != "CreateRecord" {
 			return false
 		}
-		w.Write([]byte(`{"Response":{"RequestId":"r4"}}`)) // no RecordId
+		w.Write([]byte(`{"Response":{"RequestId":"r4"}}`))
 		return true
 	}))
 	if _, err := d2.CreateRecord(context.Background(), "42", Record{Type: "A", Name: "www", Content: "1.1.1.1"}); err == nil {
@@ -324,7 +311,6 @@ func TestDNSPodVerifyZoneNotFound(t *testing.T) {
 		t.Error("VerifyZone must error when the zone id is absent from the list")
 	}
 
-	// A 500 from the API surfaces as an error too.
 	d2 := newDNSPodServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	})

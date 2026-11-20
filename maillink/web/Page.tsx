@@ -36,7 +36,6 @@ export default function MailLinksPage() {
     req<MailLink[]>("GET", "/api/maillink/recent")
       .then((rows) => setLinks(rows))
       .catch((err: unknown) => {
-        // 402 and 404 have their own screen; any other status is a failure.
         const code = err instanceof ApiError ? err.status : 0;
         if (code === 402 || code === 404) setStatus(code);
         else setError(code);

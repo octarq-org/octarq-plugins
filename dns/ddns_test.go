@@ -170,13 +170,11 @@ func TestDDNSUpdateEndpoint(t *testing.T) {
 	json.Unmarshal(rec.Body.Bytes(), &createResp)
 	secret := createResp.Secret
 
-	// A. Bad Auth Test
 	rec = do(srv, "GET", "/api/dns/ddns/update?token=invalid_secret&ip=1.2.3.4")
 	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != "badauth" {
 		t.Fatalf("bad token: want 200 'badauth', got %d %q", rec.Code, rec.Body.String())
 	}
 
-	// B. First Update: Create record (good 1.2.3.4)
 	rec = do(srv, "GET", "/api/dns/ddns/update?token="+secret+"&ip=1.2.3.4")
 	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != "good 1.2.3.4" {
 		t.Fatalf("first update: want 200 'good 1.2.3.4', got %d %q", rec.Code, rec.Body.String())
@@ -189,19 +187,16 @@ func TestDDNSUpdateEndpoint(t *testing.T) {
 		return
 	}
 
-	// C. Second Update: No change (nochg 1.2.3.4)
 	rec = do(srv, "GET", "/api/dns/ddns/update?token="+secret+"&ip=1.2.3.4")
 	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != "nochg 1.2.3.4" {
 		t.Fatalf("second update: want 200 'nochg 1.2.3.4', got %d %q", rec.Code, rec.Body.String())
 	}
 
-	// D. Third Update: IP changed (good 5.6.7.8)
 	rec = do(srv, "GET", "/api/dns/ddns/update?token="+secret+"&ip=5.6.7.8")
 	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != "good 5.6.7.8" {
 		t.Fatalf("third update: want 200 'good 5.6.7.8', got %d %q", rec.Code, rec.Body.String())
 	}
 
-	// E. POST Form Body Update
 	formData := url.Values{}
 	formData.Set("token", secret)
 	formData.Set("ip", "9.10.11.12")
@@ -214,7 +209,6 @@ func TestDDNSUpdateEndpoint(t *testing.T) {
 		t.Fatalf("POST update: want 200 'good 9.10.11.12', got %d %q", postRec.Code, postRec.Body.String())
 	}
 
-	// F. IP Fallback from RemoteAddr
 	fallbackReq := httptest.NewRequest("GET", "/api/dns/ddns/update?token="+secret, nil)
 	fallbackReq.RemoteAddr = "192.168.1.100:12345"
 	fallbackRec := httptest.NewRecorder()

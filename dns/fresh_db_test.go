@@ -13,13 +13,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// memDBCounter keeps in-memory DSNs unique across every invocation, including
-// -count=N reruns: the shared helpers key their DSN on t.Name(), which is
-// identical across reruns and so collides on the second run. Tests here must
-// not depend on prior runs' rows.
 var memDBCounter atomic.Uint64
 
-// freshMemDB opens a uniquely-named shared in-memory sqlite database.
 func freshMemDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	n := memDBCounter.Add(1)
@@ -33,9 +28,6 @@ func freshMemDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// setupFreshTestDB mirrors setupFullDNSTestDB's wiring (org id from the
-// X-Org-ID header, default 1; role gate refuses X-Role=member) but backs the
-// plugin with a fresh, uniquely-named database.
 func setupFreshTestDB(t *testing.T) (*Plugin, func(req *http.Request) huma.Context) {
 	t.Helper()
 	p := New()
@@ -62,8 +54,6 @@ func setupFreshTestDB(t *testing.T) (*Plugin, func(req *http.Request) huma.Conte
 	return p, mkCtx
 }
 
-// setupFreshGateTestDB mirrors setupGateTestDB's wiring (role string passed
-// per context) with a fresh database.
 func setupFreshGateTestDB(t *testing.T) (*Plugin, func(role string) huma.Context) {
 	t.Helper()
 	p := New()

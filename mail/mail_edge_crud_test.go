@@ -44,7 +44,6 @@ func TestReadAllEmailsScopesToOrg(t *testing.T) {
 	p.db.Create(&Email{MailboxID: mb2.ID, Read: false, ReceivedAt: time.Now()})
 
 	req := httptest.NewRequest(http.MethodPost, "/api/emails/read-all", nil)
-	// Scope to org 1 mailbox 1.
 	out, err := p.readAllEmails(ctx, &ReadAllEmailsInput{
 		Ctx:     mkCtx(req),
 		Mailbox: fmt.Sprint(mb1.ID),
@@ -69,7 +68,6 @@ func TestListEmailsMailboxAndPagingFilters(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/emails", nil)
-	// Mailbox filter.
 	out, err := p.listEmails(ctx, &ListEmailsInput{Ctx: mkCtx(req), Mailbox: fmt.Sprint(mb.ID), Limit: 2, Offset: 1})
 	if err != nil {
 		t.Fatalf("listEmails: %v", err)
@@ -77,7 +75,6 @@ func TestListEmailsMailboxAndPagingFilters(t *testing.T) {
 	if len(out.Body) != 2 {
 		t.Errorf("limit/offset = %d, want 2", len(out.Body))
 	}
-	// Q filter.
 	outQ, err := p.listEmails(ctx, &ListEmailsInput{Ctx: mkCtx(req), Q: "hello 2"})
 	if err != nil {
 		t.Fatalf("listEmails q: %v", err)

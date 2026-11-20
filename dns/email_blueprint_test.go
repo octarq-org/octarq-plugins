@@ -12,8 +12,6 @@ import (
 	"github.com/octarq-org/octarq-plugins/dns/provider"
 )
 
-// setupBlueprintPlugin creates a fresh plugin wired for blueprint tests.
-// orgID comes from X-Org-ID header (defaults to 1); admin gate checks X-Role=="admin".
 func setupBlueprintPlugin(t *testing.T) *Plugin {
 	t.Helper()
 	p := New()
@@ -35,8 +33,6 @@ func setupBlueprintPlugin(t *testing.T) *Plugin {
 	return p
 }
 
-// seedBlueprintDomain creates a ProviderAccount and Domain for the given org,
-// backed by the named fake provider. Returns the domain ID.
 func seedBlueprintDomain(t *testing.T, p *Plugin, orgID uint, domainName, provName string) uint {
 	t.Helper()
 	acc, err := seedVaultProviderAccount(p, orgID, domainName+"-acc", provName, map[string]any{"apiToken": "tok"})
@@ -50,8 +46,6 @@ func seedBlueprintDomain(t *testing.T, p *Plugin, orgID uint, domainName, provNa
 	return dom.ID
 }
 
-// TestBlueprintAllMissingWhenProviderEmpty: domain with provider but empty
-// records list → all 4 blueprint records have status "missing".
 func TestBlueprintAllMissingWhenProviderEmpty(t *testing.T) {
 	p := setupBlueprintPlugin(t)
 	fake := &fakeDNSProvider{records: []provider.Record{}}
@@ -78,13 +72,9 @@ func TestBlueprintAllMissingWhenProviderEmpty(t *testing.T) {
 	}
 }
 
-// TestBlueprintStatusOKWhenRecordsMatch: provider returns all 4 matching
-// records → all blueprint records report status "ok".
 func TestBlueprintStatusOKWhenRecordsMatch(t *testing.T) {
 	p := setupBlueprintPlugin(t)
 
-	// Return records matching the blueprint template, using FQDN names as
-	// a real provider would.
 	apex := "match.example.com"
 	mxP10 := 10
 	mxP53 := 53
@@ -115,7 +105,6 @@ func TestBlueprintStatusOKWhenRecordsMatch(t *testing.T) {
 	}
 }
 
-// TestApplyBlueprintMemberForbidden: member role → 403.
 func TestApplyBlueprintMemberForbidden(t *testing.T) {
 	p := setupBlueprintPlugin(t)
 	fake := &fakeDNSProvider{}
@@ -137,7 +126,6 @@ func TestApplyBlueprintMemberForbidden(t *testing.T) {
 	}
 }
 
-// TestApplyBlueprintAdminAppliesAll: admin with empty provider → applied=4, skipped=0.
 func TestApplyBlueprintAdminAppliesAll(t *testing.T) {
 	p := setupBlueprintPlugin(t)
 	fake := &fakeDNSProvider{records: []provider.Record{}}
@@ -185,15 +173,12 @@ func TestApplyBlueprintAdminAppliesAll(t *testing.T) {
 	}
 }
 
-// TestApplyBlueprintMultiTenantIsolation: org2 token cannot access org1's domain → 404.
 func TestApplyBlueprintMultiTenantIsolation(t *testing.T) {
 	p := setupBlueprintPlugin(t)
 	fake := &fakeDNSProvider{}
 	provName := registerFakeProvider(t, "bp-mt-prov", fake)
-	// Seed domain under org 1.
 	org1DomID := seedBlueprintDomain(t, p, 1, "org1-mt.example.com", provName)
 
-	// Org 2 attempts to apply to org 1's domain.
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
 	req.Header.Set("X-Org-ID", "2")
 	req.Header.Set("X-Role", "admin")
@@ -208,7 +193,6 @@ func TestApplyBlueprintMultiTenantIsolation(t *testing.T) {
 		t.Fatalf("expected 404, got %d: %v", st, err)
 	}
 
-	// Also check GET blueprint.
 	req2 := httptest.NewRequest(http.MethodGet, "/", nil)
 	req2.Header.Set("X-Org-ID", "2")
 	req2.Header.Set("X-Role", "admin")
@@ -224,8 +208,6 @@ func TestApplyBlueprintMultiTenantIsolation(t *testing.T) {
 	}
 }
 
-// TestApplyBlueprintIdempotency: when all records already match (status ok),
-// apply reports applied=0, skipped=4 and calls CreateRecord zero times.
 func TestApplyBlueprintIdempotency(t *testing.T) {
 	p := setupBlueprintPlugin(t)
 
@@ -263,12 +245,9 @@ func TestApplyBlueprintIdempotency(t *testing.T) {
 	}
 }
 
-// TestApplyBlueprintNoProviderReturns400: domain without ProviderAccountID → 400 with
-// a friendly message containing "no DNS provider".
 func TestApplyBlueprintNoProviderReturns400(t *testing.T) {
 	p := setupBlueprintPlugin(t)
 
-	// Create a domain without a ProviderAccountID.
 	dom := Domain{OrgID: 1, Name: "noprov.example.com", ProviderAccountID: 0, ZoneID: ""}
 	if err := p.db.Create(&dom).Error; err != nil {
 		t.Fatalf("create domain: %v", err)

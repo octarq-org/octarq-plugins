@@ -40,10 +40,6 @@ func statusOf(t *testing.T, err error) int {
 	return se.GetStatus()
 }
 
-// countingSMTP is a minimal SMTP server that counts every accepted connection
-// and answers the handshake well enough for mail.NewCustomSender to complete a
-// send. A blocked send must leave the counter at zero — that is the "邮件没发出"
-// proof, stronger than an HTTP status alone.
 func countingSMTP(t *testing.T) (host string, port int, accepted *int64) {
 	t.Helper()
 	l, err := net.Listen("tcp", "127.0.0.1:0")
@@ -98,8 +94,6 @@ func countingSMTP(t *testing.T) (host string, port int, accepted *int64) {
 	return "127.0.0.1", l.Addr().(*net.TCPAddr).Port, &n
 }
 
-// mailQuotaPlugin builds a mounted mail plugin backed by a real DB and a
-// counting SMTP relay. checker nil means "no quota checker registered at all".
 func mailQuotaPlugin(t *testing.T, checker plugin.QuotaChecker) (*Plugin, *int64) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
@@ -165,8 +159,6 @@ func sendEmailInput() *SendEmailInput {
 	}
 }
 
-// No checker registered (self-hosted) must behave exactly as before the seam
-// existed: the mail actually goes out.
 func TestSendEmailNoQuotaCheckerSends(t *testing.T) {
 	t.Parallel()
 	p, accepted := mailQuotaPlugin(t, nil)
@@ -178,7 +170,6 @@ func TestSendEmailNoQuotaCheckerSends(t *testing.T) {
 	}
 }
 
-// Exceeded quota → 429, and the relay is never touched (no half-sent mail).
 func TestSendEmailQuotaExceededBlocks(t *testing.T) {
 	t.Parallel()
 	p, accepted := mailQuotaPlugin(t, fakeQuotaChecker{err: plugin.ErrQuotaExceeded})
@@ -191,8 +182,6 @@ func TestSendEmailQuotaExceededBlocks(t *testing.T) {
 	}
 }
 
-// Unavailable (plan lacks the capability) → 402, not 429. The two must stay
-// distinct: one is "used up", the other is "upgrade to get this".
 func TestSendEmailQuotaUnavailableIs402(t *testing.T) {
 	t.Parallel()
 	p, accepted := mailQuotaPlugin(t, fakeQuotaChecker{err: plugin.ErrQuotaUnavailable})
@@ -205,12 +194,10 @@ func TestSendEmailQuotaUnavailableIs402(t *testing.T) {
 	}
 }
 
-// A host whose Context.Lookup is nil (old host / MCP composition) must not
-// panic — it must read as "no checker".
 func TestSendEmailNilLookupNoPanic(t *testing.T) {
 	t.Parallel()
 	p, accepted := mailQuotaPlugin(t, nil)
-	p.ctx = &plugin.Context{} // nil Lookup
+	p.ctx = &plugin.Context{}
 	if _, err := p.sendEmail(context.Background(), sendEmailInput()); err != nil {
 		t.Fatalf("nil Lookup must pass, got %v", err)
 	}

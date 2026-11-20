@@ -7,8 +7,6 @@ import (
 	"sync"
 )
 
-// Info is the public description of a dialect, used by the add-tracker form
-// and the capability matrix in the UI.
 type SchemaInfo struct {
 	Schema       Schema       `json:"schema"`
 	DisplayName  string       `json:"display_name"`
@@ -17,9 +15,6 @@ type SchemaInfo struct {
 	Domains      []string     `json:"domains,omitempty"`
 }
 
-// Registry holds the compiled-in dialects. It is filled once at construction
-// and only read afterwards, so lookups are safe without a lock on the hot
-// path; the mutex covers registration during init.
 type Registry struct {
 	mu       sync.RWMutex
 	bySchema map[Schema]Adapter
@@ -27,7 +22,6 @@ type Registry struct {
 	order    []Schema
 }
 
-// NewRegistry returns an empty registry.
 func NewRegistry() *Registry {
 	return &Registry{
 		bySchema: map[Schema]Adapter{},
@@ -35,8 +29,6 @@ func NewRegistry() *Registry {
 	}
 }
 
-// MustRegister adds a dialect and its domain hints. Duplicate schemas panic:
-// two dialects claiming one schema would make behaviour depend on init order.
 func (r *Registry) MustRegister(a Adapter, domains ...string) {
 	if a == nil {
 		panic("adapter: nil adapter")
@@ -61,9 +53,6 @@ func (r *Registry) MustRegister(a Adapter, domains ...string) {
 	}
 }
 
-// Get returns the dialect for schema. An unknown schema is ErrUnsupported;
-// callers must not fall back to another dialect, because a wrong dialect
-// writes the wrong cookies and reports meaningless success.
 func (r *Registry) Get(schema Schema) (Adapter, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -74,8 +63,6 @@ func (r *Registry) Get(schema Schema) (Adapter, error) {
 	return nil, &OpError{Op: "registry", Schema: schema, Kind: KindUnsupported}
 }
 
-// Suggest returns the domain hint for a host, if one is registered. It is a
-// preselection for the form, never an automatic decision.
 func (r *Registry) Suggest(host string) (Schema, bool) {
 	key := NormalizeDomain(host)
 	if key == "" {
@@ -91,7 +78,6 @@ func (r *Registry) Suggest(host string) (Schema, bool) {
 	return "", false
 }
 
-// List returns every dialect ordered by schema for a stable UI.
 func (r *Registry) List() []SchemaInfo {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -117,8 +103,6 @@ func (r *Registry) List() []SchemaInfo {
 	return out
 }
 
-// NormalizeDomain lowercases a host or URL and strips the scheme, path, port,
-// and a leading www.
 func NormalizeDomain(raw string) string {
 	s := strings.TrimSpace(raw)
 	if s == "" {

@@ -1,12 +1,3 @@
-// Package maillink is the flagship "agent-native" Octarq demo plugin: when an
-// email arrives, it auto-shortens the first link in the body (via the core
-// links.create service) and exposes the results as an MCP tool, so an AI agent
-// can fetch "the short link from my latest email" with no extra plumbing.
-//
-// It is ~a screenful of code and touches four public seams — OnEmail (inbound
-// mail), LookupAs[plugin.LinkCreator] (cross-plugin service), a GORM Model, and
-// MCPProvider — with no fork and no internal imports. That's the whole point:
-// this is what a 10-line-feeling plugin can do on Octarq.
 package maillink
 
 import (
@@ -19,7 +10,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// MailLink records a short link auto-created from an inbound email.
 type MailLink struct {
 	gorm.Model
 	OrgID   uint `gorm:"index;column:org_id"`
@@ -33,7 +23,6 @@ func (MailLink) TenantColumn() string { return "org_id" }
 
 var urlRe = regexp.MustCompile(`https?://[^\s"'<>)\]]+`)
 
-// Plugin is composed with app.Use(&maillink.Plugin{}).
 type Plugin struct {
 	ctx  *plugin.Context
 	host plugin.Host
@@ -56,8 +45,6 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 	if p.host != nil && p.host.Events() != nil {
 		p.host.Events().OnEmail(p.onEmail)
 	}
-	// The MCP composition path mounts this plugin with no HTTP surface (nil
-	// mux, nil Guard) because it only wants the MCP tools. Skip the route there.
 	if mux == nil || ctx.Guard == nil {
 		return
 	}
@@ -71,9 +58,6 @@ func (p *Plugin) Validate(ctx context.Context, host plugin.Host) error {
 	return nil
 }
 
-// onEmail runs async after each inbound email: find the first URL, shorten it
-// via the core links service, and record the result. It degrades to a no-op
-// when links isn't composed into this build.
 func (p *Plugin) onEmail(e plugin.EmailEvent) {
 	if e.OrgID == 0 {
 		return
@@ -88,7 +72,7 @@ func (p *Plugin) onEmail(e plugin.EmailEvent) {
 	}
 	creator, ok := plugin.LookupAs[plugin.LinkCreator](p.ctx, "links.create")
 	if !ok {
-		return // links plugin absent — nothing to do
+		return
 	}
 	slug, err := creator.CreateLink(context.Background(), e.OrgID, target)
 	if err != nil {
@@ -124,10 +108,6 @@ func (p *Plugin) list(ctx context.Context, orgID uint, limit int) []MailLink {
 	return out
 }
 
-// Compile-time assertions.
-// Menus contributes the plugin's sidebar entry. It lives here, not on the
-// frontend half: UIPlugin.menu was removed from the plugin SDK in 0.8.0, and a
-// static frontend menu is ignored even where one is still declared.
 func (*Plugin) Menus() []plugin.MenuItem {
 	return []plugin.MenuItem{
 		{ID: "maillink", Label: "Mail Links", Path: "/maillink", Icon: "link-2", Category: "Marketing"},

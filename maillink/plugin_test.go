@@ -93,28 +93,22 @@ func TestMailLink_ListAndTenantDB(t *testing.T) {
 	}
 	p.host = host
 
-	// Seed rows for org 1 and org 2
 	tdb1 := host.TenantDB(1)
 	_ = tdb1.Create(&MailLink{OrgID: 1, Slug: "slug-1", Target: "https://example.com/1"})
 	tdb2 := host.TenantDB(2)
 	_ = tdb2.Create(&MailLink{OrgID: 2, Slug: "slug-2", Target: "https://example.com/2"})
 
-	// Query for org 1
 	links1 := p.list(context.Background(), 1, 10)
 	if len(links1) != 1 || links1[0].Slug != "slug-1" {
 		t.Fatalf("expected 1 link for org 1, got %+v", links1)
 	}
 
-	// Query for org 2
 	links2 := p.list(context.Background(), 2, 10)
 	if len(links2) != 1 || links2[0].Slug != "slug-2" {
 		t.Fatalf("expected 1 link for org 2, got %+v", links2)
 	}
 }
 
-// TestMailLink_MountWithoutHTTPSurface pins the MCP composition contract: that
-// path mounts the plugin with a nil mux and a nil Guard, because it only wants
-// the MCP tools. Registering a route there panics the stdio server at startup.
 func TestMailLink_MountWithoutHTTPSurface(t *testing.T) {
 	p := &Plugin{}
 	p.Mount(nil, &plugin.Context{})

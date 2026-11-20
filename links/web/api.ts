@@ -1,5 +1,3 @@
-// Links feature API surface — the slice of the JSON API owned by the links
-// plugin. Fully self-contained without relative host leaks.
 import { getAppLang, pluginURL, req, type StatKV } from "@octarq/plugin-sdk";
 
 

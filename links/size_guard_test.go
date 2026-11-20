@@ -23,7 +23,6 @@ func countPureLines(content string) int {
 func TestLinksFilesSizeAndNoSizeOKGuard(t *testing.T) {
 	t.Parallel()
 
-	// Read files from disk directly to avoid hardcoded/duplicated mocks.
 	files, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatalf("failed to glob go files: %v", err)
@@ -44,7 +43,6 @@ func TestLinksFilesSizeAndNoSizeOKGuard(t *testing.T) {
 		content := string(data)
 		lines := strings.Split(content, "\n")
 
-		// 1. Assert line 1 (and the whole file) does not contain size exemption tag
 		if len(lines) > 0 && strings.Contains(lines[0], exemptionTag) {
 			t.Errorf("file %s has %s on line 1: %s", file, exemptionTag, lines[0])
 		}
@@ -52,7 +50,6 @@ func TestLinksFilesSizeAndNoSizeOKGuard(t *testing.T) {
 			t.Errorf("file %s contains %s exemption tag", file, exemptionTag)
 		}
 
-		// 2. Assert pure lines <= 250
 		pureCount := countPureLines(content)
 		if pureCount > 250 {
 			t.Errorf("file %s exceeds 250 pure lines: got %d", file, pureCount)
@@ -62,7 +59,6 @@ func TestLinksFilesSizeAndNoSizeOKGuard(t *testing.T) {
 		}
 	}
 
-	// Specifically verify that key expected files exist on disk
 	expectedFiles := []string{
 		"plugin.go",
 		"stats.go",

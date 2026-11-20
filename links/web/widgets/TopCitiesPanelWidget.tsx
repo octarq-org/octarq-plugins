@@ -9,7 +9,6 @@ export default function TopCitiesPanelWidget() {
   if (!o || o.cities === undefined) return null;
 
   const cities = (o.cities as StatKV[]) ?? [];
-  // cities only spans the last 30 days; clicks30d is the matching window.
   const hasClicksInWindow = (o.clicks30d ?? 0) > 0;
 
   return (

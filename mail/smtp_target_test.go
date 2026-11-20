@@ -11,13 +11,11 @@ func TestValidateSMTPTarget(t *testing.T) {
 		port    int
 		wantErr bool
 	}{
-		// Disallowed ports
 		{"disallowed port 80", "1.1.1.1", 80, true},
 		{"disallowed port 22", "1.1.1.1", 22, true},
 		{"disallowed port 8080", "1.1.1.1", 8080, true},
 		{"disallowed port 0", "1.1.1.1", 0, true},
 
-		// Disallowed private/loopback/link-local IPs
 		{"loopback IPv4", "127.0.0.1", 587, true},
 		{"private 10.x", "10.0.0.1", 587, true},
 		{"private 172.16.x", "172.16.0.1", 587, true},
@@ -26,7 +24,6 @@ func TestValidateSMTPTarget(t *testing.T) {
 		{"loopback IPv6", "::1", 587, true},
 		{"localhost domain", "localhost", 587, true},
 
-		// Allowed public targets and allowed ports (25, 465, 587, 2525)
 		{"public IP port 25", "1.1.1.1", 25, false},
 		{"public IP port 465", "1.1.1.1", 465, false},
 		{"public IP port 587", "8.8.8.8", 587, false},

@@ -1,6 +1,3 @@
-// Thin fetch wrapper. Every request carries the session cookie; a non-2xx
-// response becomes an ApiError so callers can branch on the status instead of
-// parsing prose.
 
 export class ApiError extends Error {
   readonly status: number;
