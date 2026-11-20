@@ -4,6 +4,7 @@ export const ptI18n = {
     // description. The group heading comes from core (Integrations).
     _shared: {
       nav: { pt: "PT Accounts" },
+      groups: { Accounts: "Accounts" },
       settings: { pluginDesc: { pt: "Manage private-tracker accounts: refresh logins, sign in daily, and read traffic." } },
     },
     pageTitle: "PT Accounts",
@@ -112,6 +113,7 @@ export const ptI18n = {
   zh: {
     _shared: {
       nav: { pt: "PT 账号" },
+      groups: { Accounts: "账户" },
       settings: { pluginDesc: { pt: "管理 PT 站点账号：刷新登录、每日签到、查看流量数据。" } },
     },
     pageTitle: "PT 账号",
@@ -220,6 +222,7 @@ export const ptI18n = {
   es: {
     _shared: {
       nav: { pt: "Cuentas PT" },
+      groups: { Accounts: "Cuentas" },
       settings: { pluginDesc: { pt: "Gestiona cuentas de trackers privados: inicia sesión, firma diaria y tráfico." } },
     },
     pageTitle: "Cuentas PT",
@@ -328,6 +331,7 @@ export const ptI18n = {
   pt: {
     _shared: {
       nav: { pt: "Contas PT" },
+      groups: { Accounts: "Contas" },
       settings: { pluginDesc: { pt: "Gerencie contas de trackers privados: login, check-in diário e tráfego." } },
     },
     pageTitle: "Contas PT",
@@ -436,6 +440,7 @@ export const ptI18n = {
   ja: {
     _shared: {
       nav: { pt: "PT アカウント" },
+      groups: { Accounts: "アカウント" },
       settings: { pluginDesc: { pt: "プライベートトラッカーのアカウント管理：再ログイン、毎日のチェックイン、通信量の表示。" } },
     },
     pageTitle: "PT アカウント",

@@ -30,8 +30,9 @@ func (*Plugin) Name() string { return "twofa" }
 
 func (*Plugin) Describe() plugin.Info {
 	return plugin.Info{
-		Title:       "2FA Vault",
-		Description: "Centralized TOTP two-factor authentication manager for team & infrastructure accounts with live code generation, encrypted storage, and AI agent MCP tools.",
+		Title:            "2FA Vault",
+		Description:      "Centralized TOTP two-factor authentication manager for team & infrastructure accounts with live code generation, encrypted storage, and AI agent MCP tools.",
+		EnabledByDefault: true,
 	}
 }
 

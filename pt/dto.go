@@ -19,9 +19,62 @@ type credentialView struct {
 	LastLoginAt    *time.Time `json:"last_login_at,omitempty"`
 }
 
+// TrackerViewFields holds the public fields of a tracker without any promoted methods.
+// Having no methods allows Huma's reflect.StructOf OpenAPI schema linker to wrap it
+// without encountering Go's "embedded type with methods not implemented" panic.
+type TrackerViewFields struct {
+	ID        uint      `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+
+	Name string `json:"name"`
+
+	BaseURL    string `json:"base_url"`
+	APIBaseURL string `json:"api_base_url,omitempty"`
+	Domain     string `json:"domain"`
+	SchemaKey  string `json:"schema"`
+
+	Username  string `json:"username,omitempty"`
+	UserAgent string `json:"user_agent,omitempty"`
+	Timezone  string `json:"timezone,omitempty"`
+
+	Enabled       bool `json:"enabled"`
+	SigninEnabled bool `json:"signin_enabled"`
+
+	SigninWindowStartMin int `json:"signin_window_start_min"`
+	SigninWindowEndMin   int `json:"signin_window_end_min"`
+
+	StatsIntervalHours int `json:"stats_interval_hours"`
+	TimeoutSeconds     int `json:"timeout_seconds"`
+
+	LimitIntervalSeconds int `json:"limit_interval_seconds"`
+	LimitCount           int `json:"limit_count"`
+	LimitSeconds         int `json:"limit_seconds"`
+
+	CookieValid       bool       `json:"cookie_valid"`
+	CookieRefreshedAt *time.Time `json:"cookie_refreshed_at,omitempty"`
+
+	LastLoginAt       *time.Time `json:"last_login_at,omitempty"`
+	LastSigninAt      *time.Time `json:"last_signin_at,omitempty"`
+	LastSigninOutcome string     `json:"last_signin_outcome,omitempty"`
+	LastStatsAt       *time.Time `json:"last_stats_at,omitempty"`
+	NextSigninAt      *time.Time `json:"next_signin_at,omitempty"`
+	NextStatsAt       *time.Time `json:"next_stats_at,omitempty"`
+
+	NeedsManualAction bool   `json:"needs_manual_action"`
+	ManualReason      string `json:"manual_reason,omitempty"`
+
+	LastError           string     `json:"last_error,omitempty"`
+	LastErrorAt         *time.Time `json:"last_error_at,omitempty"`
+	ConsecutiveFailures int        `json:"consecutive_failures"`
+
+	LatestSnapshotID *uint `json:"latest_snapshot_id,omitempty"`
+	CreatedByUserID  uint  `json:"created_by_user_id,omitempty"`
+}
+
 // trackerView is one tracker plus everything the card needs.
 type trackerView struct {
-	PTTracker
+	TrackerViewFields
 	SchemaLabel    string               `json:"schema_label"`
 	Capabilities   adapter.Capabilities `json:"capabilities"`
 	Credential     credentialView       `json:"credential"`
