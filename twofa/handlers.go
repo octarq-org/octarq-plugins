@@ -248,10 +248,11 @@ func (p *Plugin) resolveSharedItem(ctx context.Context, vs plugin.VaultService, 
 		return nil, errShareStoreUnavailable
 	}
 	var shares []TwoFAShare
-	if err := p.db.WithContext(ctx).Where("org_id = ?", orgID).Find(&shares).Error; err != nil {
+	if err := p.db.WithContext(ctx).Where("org_id = ?", orgID).Order("item_id ASC").Find(&shares).Error; err != nil {
 		return nil, err
 	}
 	name := strings.TrimSpace(accountName)
+	matches := make([]plugin.VaultItemMeta, 0, 1)
 	for _, sh := range shares {
 		meta, err := vs.GetMeta(ctx, orgID, sh.ItemID)
 		if err != nil {
@@ -265,10 +266,18 @@ func (p *Plugin) resolveSharedItem(ctx context.Context, vs plugin.VaultService, 
 		}
 		acc := metaToAccount(*meta)
 		if strings.EqualFold(acc.Name, name) || strings.EqualFold(acc.Issuer, name) {
-			return meta, nil
+			matches = append(matches, *meta)
 		}
 	}
-	return nil, fmt.Errorf("shared account %q not found in workspace %d", accountName, orgID)
+	switch len(matches) {
+	case 0:
+		return nil, fmt.Errorf("shared account %q not found in workspace %d", accountName, orgID)
+	case 1:
+		match := matches[0]
+		return &match, nil
+	default:
+		return nil, fmt.Errorf("shared account %q is ambiguous: %d accounts match in workspace %d", accountName, len(matches), orgID)
+	}
 }
 
 func (p *Plugin) listAccounts(w http.ResponseWriter, r *http.Request) {
@@ -717,17 +726,17 @@ func (p *Plugin) deleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := p.deleteShare(r.Context(), sc.OrgID, id); err != nil {
+		http.Error(w, "failed to delete share", http.StatusInternalServerError)
+		return
+	}
+
 	if err := vs.DeleteSecret(r.Context(), sc.OrgID, id); err != nil {
 		if errors.Is(err, plugin.ErrSecretNotFound) {
 			http.Error(w, "account not found", http.StatusNotFound)
 			return
 		}
 		http.Error(w, "failed to delete account", http.StatusInternalServerError)
-		return
-	}
-
-	if err := p.deleteShare(r.Context(), sc.OrgID, id); err != nil {
-		http.Error(w, "failed to delete share", http.StatusInternalServerError)
 		return
 	}
 

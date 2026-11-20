@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/octarq-org/octarq/server/plugin"
@@ -342,5 +343,64 @@ func TestPlugin_ExportOnlyOwnItems(t *testing.T) {
 	_ = json.Unmarshal(w.Body.Bytes(), &exported)
 	if len(exported) != 1 || exported[0]["name"] != "Owner Item" {
 		t.Fatalf("export: expected only the caller's item, got %+v", exported)
+	}
+}
+
+func TestPlugin_ResolveSharedItemRejectsAmbiguousName(t *testing.T) {
+	p, mux, _ := setupTestEnv(t)
+
+	for i := 0; i < 2; i++ {
+		w := createVia(mux, "/api/twofa/accounts", owner42, "Duplicate Name")
+		if w.Code != http.StatusCreated {
+			t.Fatalf("create %d: expected 201, got %d (%s)", i, w.Code, w.Body.String())
+		}
+		created := decodeSummary(t, w)
+		if w := setShareVia(mux, owner42, created.ID, true); w.Code != http.StatusOK {
+			t.Fatalf("share %d: expected 200, got %d (%s)", i, w.Code, w.Body.String())
+		}
+	}
+
+	if _, _, err := p.GetCode(context.Background(), 1, "Duplicate Name"); err == nil {
+		t.Fatal("provider GetCode: expected an error for an ambiguous name")
+	} else if !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("provider GetCode: expected an ambiguous error, got %v", err)
+	}
+
+	mcpCtx := plugin.WithOrgID(context.Background(), 1)
+	if _, _, err := p.mcpGetCode(mcpCtx, nil, getCodeInput{AccountName: "Duplicate Name"}); err == nil {
+		t.Fatal("mcpGetCode: expected an error for an ambiguous name")
+	} else if !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("mcpGetCode: expected an ambiguous error, got %v", err)
+	}
+}
+
+func TestPlugin_DeleteRemovesShareBeforeVaultItem(t *testing.T) {
+	p, mux, db := setupTestEnv(t)
+
+	w := createVia(mux, "/api/twofa/accounts", owner42, "Ordered Delete")
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create: expected 201, got %d (%s)", w.Code, w.Body.String())
+	}
+	created := decodeSummary(t, w)
+	if w := setShareVia(mux, owner42, created.ID, true); w.Code != http.StatusOK {
+		t.Fatalf("share: expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+
+	if err := db.Migrator().DropTable(&TwoFAShare{}); err != nil {
+		t.Fatalf("drop share table: %v", err)
+	}
+
+	w = serveRequest(mux, "DELETE /api/twofa/accounts/{id}", "DELETE",
+		fmt.Sprintf("/api/twofa/accounts/%d", created.ID), nil, owner42, created.ID)
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("delete: expected 500 when share removal fails, got %d (%s)", w.Code, w.Body.String())
+	}
+
+	vs, err := p.vault()
+	if err != nil {
+		t.Fatalf("vault unavailable: %v", err)
+	}
+	if _, err := vs.GetMeta(context.Background(), 1, created.ID); err != nil {
+		t.Fatalf("delete order: expected the vault item to remain after a failed share delete, got %v", err)
 	}
 }
