@@ -74,10 +74,11 @@ func (*Plugin) Name() string { return "pt" }
 // Describe reports plugin metadata for the plugin manager.
 func (*Plugin) Describe() plugin.Info {
 	return plugin.Info{
-		Title:       "PT Accounts",
-		Description: "Manage private-tracker accounts: refresh logins, sign in daily, and track upload, ratio, bonus, and warnings.",
-		Category:    plugin.CategoryUtilities,
-		Tags:        []string{"pt", "tracker", "signin"},
+		Title:            "PT Accounts",
+		Description:      "Manage private-tracker accounts: refresh logins, sign in daily, and track upload, ratio, bonus, and warnings.",
+		Category:         plugin.CategoryUtilities,
+		Tags:             []string{"pt", "tracker", "signin"},
+		EnabledByDefault: true,
 	}
 }
 

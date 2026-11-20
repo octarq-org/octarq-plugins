@@ -14,15 +14,6 @@ import (
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
-// gateByRole makes the mock session refuse member writes, exactly as the host
-// does. Personal routes must not consult it.
-func gateByRole(p *Plugin) {
-	mHost := p.host.(*mockHost)
-	mHost.session.requireRole = func(r *http.Request, min string) bool {
-		return r.Header.Get("X-Role") != "member"
-	}
-}
-
 func serveRequest(mux *testMux, pattern, method, target string, body any, headers map[string]string, id uint) *httptest.ResponseRecorder {
 	var reader *bytes.Reader
 	if body != nil {
@@ -64,74 +55,55 @@ func decodeSummaries(t *testing.T, w *httptest.ResponseRecorder) []AccountSummar
 	return out
 }
 
-func createVia(mux *testMux, pattern, target string, headers map[string]string, name string) *httptest.ResponseRecorder {
-	return serveRequest(mux, pattern, "POST", target, map[string]any{
+func createVia(mux *testMux, target string, headers map[string]string, name string) *httptest.ResponseRecorder {
+	return serveRequest(mux, "POST /api/twofa/accounts", "POST", target, map[string]any{
 		"name":   name,
 		"secret": "JBSWY3DPEHPK3PXP",
 	}, headers, 0)
 }
 
-func TestPlugin_TeamVaultStaysAdminOnly(t *testing.T) {
-	p, mux, _ := setupTestEnv(t)
-	gateByRole(p)
+func setShareVia(mux *testMux, headers map[string]string, id uint, shared bool) *httptest.ResponseRecorder {
+	return serveRequest(mux, "POST /api/twofa/accounts/{id}/share", "POST",
+		fmt.Sprintf("/api/twofa/accounts/%d/share", id), map[string]any{"shared": shared}, headers, id)
+}
 
-	admin := map[string]string{"X-Role": "admin"}
-	member := map[string]string{"X-Role": "member"}
+var (
+	owner42  = map[string]string{"X-Role": "member", "X-Test-User": "42"}
+	member43 = map[string]string{"X-Role": "member", "X-Test-User": "43"}
+)
 
-	w := createVia(mux, "POST /api/twofa/accounts", "/api/twofa/accounts", admin, "Team AWS")
+func TestPlugin_PersonalVaultOwnedByCaller(t *testing.T) {
+	_, mux, _ := setupTestEnv(t)
+
+	w := createVia(mux, "/api/twofa/accounts", owner42, "My GitHub")
 	if w.Code != http.StatusCreated {
-		t.Fatalf("admin create: expected 201, got %d (%s)", w.Code, w.Body.String())
+		t.Fatalf("create: expected 201, got %d (%s)", w.Code, w.Body.String())
 	}
 	created := decodeSummary(t, w)
+	if created.ID == 0 || !created.Mine || created.Shared {
+		t.Fatalf("create: expected an unshared owned account, got %+v", created)
+	}
 
-	if w := createVia(mux, "POST /api/twofa/accounts", "/api/twofa/accounts", member, "Team AWS"); w.Code != http.StatusForbidden {
-		t.Fatalf("member create: expected 403, got %d (%s)", w.Code, w.Body.String())
+	w = serveRequest(mux, "GET /api/twofa/accounts", "GET", "/api/twofa/accounts", nil, owner42, 0)
+	if w.Code != http.StatusOK {
+		t.Fatalf("owner list: expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	if got := decodeSummaries(t, w); len(got) != 1 || got[0].Name != "My GitHub" || !got[0].Mine || got[0].Shared {
+		t.Fatalf("owner list: expected the unshared owned item, got %+v", got)
 	}
 
 	w = serveRequest(mux, "GET /api/twofa/accounts/{id}", "GET",
-		fmt.Sprintf("/api/twofa/accounts/%d?reveal=true", created.ID), nil, member, created.ID)
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("member reveal: expected 403, got %d (%s)", w.Code, w.Body.String())
-	}
-}
-
-func TestPlugin_PersonalVaultOwnedByCaller(t *testing.T) {
-	p, mux, _ := setupTestEnv(t)
-	gateByRole(p)
-
-	member42 := map[string]string{"X-Role": "member", "X-Test-User": "42"}
-	member43 := map[string]string{"X-Role": "member", "X-Test-User": "43"}
-
-	w := createVia(mux, "POST /api/personal/twofa/accounts", "/api/personal/twofa/accounts", member42, "My GitHub")
-	if w.Code != http.StatusCreated {
-		t.Fatalf("personal create: expected 201, got %d (%s)", w.Code, w.Body.String())
-	}
-	created := decodeSummary(t, w)
-	if created.ID == 0 {
-		t.Fatalf("personal create returned no id: %+v", created)
-	}
-
-	w = serveRequest(mux, "GET /api/personal/twofa/accounts", "GET", "/api/personal/twofa/accounts", nil, member42, 0)
+		fmt.Sprintf("/api/twofa/accounts/%d?reveal=true", created.ID), nil, owner42, created.ID)
 	if w.Code != http.StatusOK {
-		t.Fatalf("personal list: expected 200, got %d (%s)", w.Code, w.Body.String())
-	}
-	if got := decodeSummaries(t, w); len(got) != 1 || got[0].Name != "My GitHub" {
-		t.Fatalf("personal list: expected the caller's item, got %+v", got)
-	}
-
-	w = serveRequest(mux, "GET /api/personal/twofa/accounts/{id}", "GET",
-		fmt.Sprintf("/api/personal/twofa/accounts/%d?reveal=true", created.ID), nil, member42, created.ID)
-	if w.Code != http.StatusOK {
-		t.Fatalf("personal reveal: expected 200, got %d (%s)", w.Code, w.Body.String())
+		t.Fatalf("owner reveal: expected 200, got %d (%s)", w.Code, w.Body.String())
 	}
 	var revealed map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &revealed)
 	if revealed["secret"] != "JBSWY3DPEHPK3PXP" {
-		t.Fatalf("personal reveal: expected the stored secret, got %v", revealed["secret"])
+		t.Fatalf("owner reveal: expected the stored secret, got %v", revealed["secret"])
 	}
 
-	// Another member has a different personal org: nothing to list, nothing to fetch.
-	w = serveRequest(mux, "GET /api/personal/twofa/accounts", "GET", "/api/personal/twofa/accounts", nil, member43, 0)
+	w = serveRequest(mux, "GET /api/twofa/accounts", "GET", "/api/twofa/accounts", nil, member43, 0)
 	if w.Code != http.StatusOK {
 		t.Fatalf("other member list: expected 200, got %d (%s)", w.Code, w.Body.String())
 	}
@@ -139,222 +111,296 @@ func TestPlugin_PersonalVaultOwnedByCaller(t *testing.T) {
 		t.Fatalf("other member list: expected 0 items, got %+v", got)
 	}
 
-	w = serveRequest(mux, "GET /api/personal/twofa/accounts/{id}", "GET",
-		fmt.Sprintf("/api/personal/twofa/accounts/%d", created.ID), nil, member43, created.ID)
+	w = serveRequest(mux, "GET /api/twofa/accounts/{id}", "GET",
+		fmt.Sprintf("/api/twofa/accounts/%d", created.ID), nil, member43, created.ID)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("other member fetch: expected 404, got %d (%s)", w.Code, w.Body.String())
 	}
-
-	// The personal item never appears in the team vault.
-	w = serveRequest(mux, "GET /api/twofa/accounts", "GET", "/api/twofa/accounts", nil, member42, 0)
-	if w.Code != http.StatusOK {
-		t.Fatalf("team list: expected 200, got %d (%s)", w.Code, w.Body.String())
-	}
-	if got := decodeSummaries(t, w); len(got) != 0 {
-		t.Fatalf("team list: expected 0 items, got %+v", got)
-	}
 }
 
-// The owner check is the only boundary between two members who share a
-// personal org row: the org lookup alone would let them read each other.
-func TestPlugin_PersonalVaultRejectsForeignOwnerInSameOrg(t *testing.T) {
-	p, mux, _ := setupTestEnv(t)
-	gateByRole(p)
+func TestPlugin_OwnerOnlyOperationsReturn404ForOtherMembers(t *testing.T) {
+	_, mux, _ := setupTestEnv(t)
 
-	vs, err := p.vault()
-	if err != nil {
-		t.Fatalf("vault unavailable: %v", err)
+	w := createVia(mux, "/api/twofa/accounts", owner42, "Owner Only")
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create: expected 201, got %d (%s)", w.Code, w.Body.String())
 	}
-	foreign, err := vs.PutSecret(context.Background(), plugin.PutSecretRequest{
-		OrgID:          100, // the personal org the mock assigns to user 42
-		Scope:          plugin.VaultScopeUser,
-		OwnerUserID:    99,
-		CollectionSlug: "default",
-		ItemType:       "twofa_totp",
-		Name:           "Someone Else",
-		Metadata:       map[string]any{"issuer": "Other", "digits": 6, "period": 30, "algorithm": "SHA1"},
-		Payload:        map[string]any{"secret": "JBSWY3DPEHPK3PXP"},
-	})
-	if err != nil {
-		t.Fatalf("seed foreign personal item: %v", err)
-	}
+	created := decodeSummary(t, w)
+	idPath := fmt.Sprintf("/api/twofa/accounts/%d", created.ID)
 
-	member42 := map[string]string{"X-Role": "member", "X-Test-User": "42"}
-
-	w := serveRequest(mux, "GET /api/personal/twofa/accounts", "GET", "/api/personal/twofa/accounts", nil, member42, 0)
-	if w.Code != http.StatusOK {
-		t.Fatalf("list: expected 200, got %d (%s)", w.Code, w.Body.String())
-	}
-	if got := decodeSummaries(t, w); len(got) != 0 {
-		t.Fatalf("list: expected 0 items, got %+v", got)
-	}
-
-	idPath := fmt.Sprintf("/api/personal/twofa/accounts/%d", foreign.ID)
 	cases := []struct {
 		pattern string
 		method  string
 		target  string
 		body    any
 	}{
-		{"GET /api/personal/twofa/accounts/{id}", "GET", idPath, nil},
-		{"GET /api/personal/twofa/accounts/{id}", "GET", idPath + "?reveal=true", nil},
-		{"PUT /api/personal/twofa/accounts/{id}", "PUT", idPath, map[string]any{"name": "Tampered"}},
-		{"DELETE /api/personal/twofa/accounts/{id}", "DELETE", idPath, nil},
-		{"POST /api/personal/twofa/accounts/{id}/pin", "POST", idPath + "/pin", nil},
-		{"POST /api/personal/twofa/accounts/{id}/code", "POST", idPath + "/code", nil},
-		{"POST /api/personal/twofa/accounts/{id}/verify", "POST", idPath + "/verify", map[string]string{"code": "123456"}},
-		{"GET /api/personal/twofa/accounts/{id}/qr", "GET", idPath + "/qr", nil},
+		{"GET /api/twofa/accounts/{id}", "GET", idPath, nil},
+		{"GET /api/twofa/accounts/{id}", "GET", idPath + "?reveal=true", nil},
+		{"PUT /api/twofa/accounts/{id}", "PUT", idPath, map[string]any{"name": "Tampered"}},
+		{"DELETE /api/twofa/accounts/{id}", "DELETE", idPath, nil},
+		{"POST /api/twofa/accounts/{id}/pin", "POST", idPath + "/pin", nil},
+		{"GET /api/twofa/accounts/{id}/qr", "GET", idPath + "/qr", nil},
+		{"POST /api/twofa/accounts/{id}/share", "POST", idPath + "/share", map[string]any{"shared": true}},
 	}
 	for _, tc := range cases {
-		w := serveRequest(mux, tc.pattern, tc.method, tc.target, tc.body, member42, foreign.ID)
+		w := serveRequest(mux, tc.pattern, tc.method, tc.target, tc.body, member43, created.ID)
 		if w.Code != http.StatusNotFound {
 			t.Fatalf("%s %s: expected 404, got %d (%s)", tc.method, tc.target, w.Code, w.Body.String())
 		}
 	}
 }
 
-func TestPlugin_PersonalVaultFailsClosedWithoutPersonalOrg(t *testing.T) {
-	_, mux, _ := setupTestEnv(t)
-	headers := map[string]string{"X-Role": "member", "X-Test-User": "42", "X-Test-Personal-Org": "0"}
+func TestPlugin_SharedItemVisibleAndCodeReadable(t *testing.T) {
+	p, mux, _ := setupTestEnv(t)
 
-	cases := []struct {
+	w := createVia(mux, "/api/twofa/accounts", owner42, "Shared AWS")
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create: expected 201, got %d (%s)", w.Code, w.Body.String())
+	}
+	created := decodeSummary(t, w)
+
+	w = setShareVia(mux, owner42, created.ID, true)
+	if w.Code != http.StatusOK {
+		t.Fatalf("share: expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	var shareResp map[string]bool
+	_ = json.Unmarshal(w.Body.Bytes(), &shareResp)
+	if !shareResp["shared"] {
+		t.Fatalf("share: expected shared=true, got %+v", shareResp)
+	}
+
+	w = serveRequest(mux, "GET /api/twofa/accounts", "GET", "/api/twofa/accounts", nil, owner42, 0)
+	if got := decodeSummaries(t, w); len(got) != 1 || !got[0].Mine || !got[0].Shared {
+		t.Fatalf("owner list: expected mine=true shared=true, got %+v", got)
+	}
+
+	w = serveRequest(mux, "GET /api/twofa/accounts", "GET", "/api/twofa/accounts", nil, member43, 0)
+	if w.Code != http.StatusOK {
+		t.Fatalf("shared list: expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	list := decodeSummaries(t, w)
+	if len(list) != 1 || list[0].Name != "Shared AWS" || list[0].Mine || !list[0].Shared {
+		t.Fatalf("shared list: expected one mine=false shared=true item, got %+v", list)
+	}
+	if len(list[0].CurrentCode) != 6 {
+		t.Fatalf("shared list: expected a live code, got %q", list[0].CurrentCode)
+	}
+
+	w = serveRequest(mux, "POST /api/twofa/accounts/{id}/code", "POST",
+		fmt.Sprintf("/api/twofa/accounts/%d/code", created.ID), nil, member43, created.ID)
+	if w.Code != http.StatusOK {
+		t.Fatalf("shared code: expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	var codeResp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &codeResp)
+	code, _ := codeResp["code"].(string)
+	if len(code) != 6 {
+		t.Fatalf("shared code: expected a 6-digit code, got %v", codeResp)
+	}
+
+	w = serveRequest(mux, "POST /api/twofa/accounts/{id}/verify", "POST",
+		fmt.Sprintf("/api/twofa/accounts/%d/verify", created.ID), map[string]string{"code": code}, member43, created.ID)
+	if w.Code != http.StatusOK {
+		t.Fatalf("shared verify: expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	var verifyResp map[string]bool
+	_ = json.Unmarshal(w.Body.Bytes(), &verifyResp)
+	if !verifyResp["valid"] {
+		t.Fatalf("shared verify: expected the live code to be valid")
+	}
+
+	for _, tc := range []struct {
 		pattern string
 		method  string
 		target  string
 		body    any
 	}{
-		{"GET /api/personal/twofa/accounts", "GET", "/api/personal/twofa/accounts", nil},
-		{"POST /api/personal/twofa/accounts", "POST", "/api/personal/twofa/accounts", map[string]any{"name": "x", "secret": "JBSWY3DPEHPK3PXP"}},
-		{"GET /api/personal/twofa/accounts/{id}", "GET", "/api/personal/twofa/accounts/1", nil},
-		{"POST /api/personal/twofa/import", "POST", "/api/personal/twofa/import", map[string]any{"uris": []string{"otpauth://totp/x?secret=JBSWY3DPEHPK3PXP"}}},
-		{"GET /api/personal/twofa/export", "GET", "/api/personal/twofa/export", nil},
-		{"GET /api/personal/twofa/logs", "GET", "/api/personal/twofa/logs", nil},
+		{"GET /api/twofa/accounts/{id}", "GET", fmt.Sprintf("/api/twofa/accounts/%d?reveal=true", created.ID), nil},
+		{"PUT /api/twofa/accounts/{id}", "PUT", fmt.Sprintf("/api/twofa/accounts/%d", created.ID), map[string]any{"name": "Tampered"}},
+		{"DELETE /api/twofa/accounts/{id}", "DELETE", fmt.Sprintf("/api/twofa/accounts/%d", created.ID), nil},
+		{"POST /api/twofa/accounts/{id}/pin", "POST", fmt.Sprintf("/api/twofa/accounts/%d/pin", created.ID), nil},
+		{"GET /api/twofa/accounts/{id}/qr", "GET", fmt.Sprintf("/api/twofa/accounts/%d/qr", created.ID), nil},
+	} {
+		w := serveRequest(mux, tc.pattern, tc.method, tc.target, tc.body, member43, created.ID)
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("%s %s: expected 404 for a non-owner, got %d (%s)", tc.method, tc.target, w.Code, w.Body.String())
+		}
 	}
-	for _, tc := range cases {
-		w := serveRequest(mux, tc.pattern, tc.method, tc.target, tc.body, headers, 1)
-		if w.Code != http.StatusForbidden {
-			t.Fatalf("%s %s: expected 403, got %d (%s)", tc.method, tc.target, w.Code, w.Body.String())
-		}
-		if !strings.Contains(w.Body.String(), "Personal space is unavailable for this account.") {
-			t.Fatalf("%s %s: missing fail-closed message: %s", tc.method, tc.target, w.Body.String())
-		}
+
+	w = setShareVia(mux, owner42, created.ID, false)
+	if w.Code != http.StatusOK {
+		t.Fatalf("unshare: expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	w = serveRequest(mux, "GET /api/twofa/accounts", "GET", "/api/twofa/accounts", nil, member43, 0)
+	if got := decodeSummaries(t, w); len(got) != 0 {
+		t.Fatalf("after unshare: expected 0 items, got %+v", got)
+	}
+
+	if _, _, err := p.GetCode(context.Background(), 1, "Shared AWS"); err == nil {
+		t.Fatalf("provider GetCode after unshare: expected an error")
 	}
 }
 
-func TestPlugin_ScopesDoNotLeak(t *testing.T) {
+func TestPlugin_ShareToggleOwnerOnly(t *testing.T) {
+	_, mux, _ := setupTestEnv(t)
+
+	w := createVia(mux, "/api/twofa/accounts", owner42, "Owned")
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create: expected 201, got %d (%s)", w.Code, w.Body.String())
+	}
+	created := decodeSummary(t, w)
+
+	w = setShareVia(mux, member43, created.ID, true)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("non-owner share: expected 404, got %d (%s)", w.Code, w.Body.String())
+	}
+
+	w = setShareVia(mux, owner42, created.ID, true)
+	if w.Code != http.StatusOK {
+		t.Fatalf("owner share: expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+
+	w = setShareVia(mux, owner42, created.ID, true)
+	if w.Code != http.StatusOK {
+		t.Fatalf("owner share again: expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+
+	w = setShareVia(mux, owner42, created.ID, false)
+	if w.Code != http.StatusOK {
+		t.Fatalf("owner unshare: expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+}
+
+func TestPlugin_MCPListsSharedOnly(t *testing.T) {
 	p, mux, _ := setupTestEnv(t)
 
-	admin := map[string]string{"X-Role": "admin"}
-	member42 := map[string]string{"X-Role": "member", "X-Test-User": "42"}
-
-	w := createVia(mux, "POST /api/twofa/accounts", "/api/twofa/accounts", admin, "Team Only")
+	w := createVia(mux, "/api/twofa/accounts", owner42, "Shared Service")
 	if w.Code != http.StatusCreated {
-		t.Fatalf("team create: expected 201, got %d (%s)", w.Code, w.Body.String())
+		t.Fatalf("create shared: expected 201, got %d (%s)", w.Code, w.Body.String())
 	}
-	teamItem := decodeSummary(t, w)
+	shared := decodeSummary(t, w)
+	if w := setShareVia(mux, owner42, shared.ID, true); w.Code != http.StatusOK {
+		t.Fatalf("share: expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
 
-	w = createVia(mux, "POST /api/personal/twofa/accounts", "/api/personal/twofa/accounts", member42, "Personal Only")
+	w = createVia(mux, "/api/twofa/accounts", owner42, "Private Service")
 	if w.Code != http.StatusCreated {
-		t.Fatalf("personal create: expected 201, got %d (%s)", w.Code, w.Body.String())
-	}
-	personalItem := decodeSummary(t, w)
-
-	w = serveRequest(mux, "GET /api/twofa/accounts", "GET", "/api/twofa/accounts", nil, admin, 0)
-	if got := decodeSummaries(t, w); len(got) != 1 || got[0].Name != "Team Only" {
-		t.Fatalf("team list: expected only the team item, got %+v", got)
+		t.Fatalf("create private: expected 201, got %d (%s)", w.Code, w.Body.String())
 	}
 
-	w = serveRequest(mux, "GET /api/personal/twofa/accounts", "GET", "/api/personal/twofa/accounts", nil, member42, 0)
-	if got := decodeSummaries(t, w); len(got) != 1 || got[0].Name != "Personal Only" {
-		t.Fatalf("personal list: expected only the personal item, got %+v", got)
+	mcpCtx := plugin.WithOrgID(context.Background(), 1)
+	res, raw, err := p.mcpListAccounts(mcpCtx, nil, listAccountsInput{})
+	if err != nil {
+		t.Fatalf("mcpListAccounts failed: %v", err)
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatalf("mcpListAccounts returned no content")
+	}
+	buf, err := json.Marshal(raw)
+	if err != nil {
+		t.Fatalf("marshal mcp accounts: %v", err)
+	}
+	var items []struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(buf, &items); err != nil {
+		t.Fatalf("decode mcp accounts: %v", err)
+	}
+	if len(items) != 1 || items[0].Name != "Shared Service" {
+		t.Fatalf("mcpListAccounts: expected only the shared account, got %+v", items)
 	}
 
-	// Cross-scope fetches are not found.
-	w = serveRequest(mux, "GET /api/personal/twofa/accounts/{id}", "GET",
-		fmt.Sprintf("/api/personal/twofa/accounts/%d", teamItem.ID), nil, member42, teamItem.ID)
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("personal fetch of team item: expected 404, got %d (%s)", w.Code, w.Body.String())
+	if _, _, err := p.mcpGetCode(mcpCtx, nil, getCodeInput{AccountName: "Shared Service"}); err != nil {
+		t.Fatalf("mcpGetCode shared: %v", err)
 	}
-	w = serveRequest(mux, "GET /api/twofa/accounts/{id}", "GET",
-		fmt.Sprintf("/api/twofa/accounts/%d", personalItem.ID), nil, admin, personalItem.ID)
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("team fetch of personal item: expected 404, got %d (%s)", w.Code, w.Body.String())
+	if _, _, err := p.mcpGetCode(mcpCtx, nil, getCodeInput{AccountName: "Private Service"}); err == nil {
+		t.Fatalf("mcpGetCode private: expected an error")
+	}
+}
+
+func TestPlugin_ExportOnlyOwnItems(t *testing.T) {
+	_, mux, _ := setupTestEnv(t)
+
+	w := createVia(mux, "/api/twofa/accounts", member43, "Member Item")
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create member item: expected 201, got %d (%s)", w.Code, w.Body.String())
+	}
+	memberItem := decodeSummary(t, w)
+	if w := setShareVia(mux, member43, memberItem.ID, true); w.Code != http.StatusOK {
+		t.Fatalf("share member item: expected 200, got %d (%s)", w.Code, w.Body.String())
 	}
 
-	// An org-scoped item that happens to live in the personal org stays out of
-	// the personal vault: scope, not just org, is the boundary.
+	w = createVia(mux, "/api/twofa/accounts", owner42, "Owner Item")
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create owner item: expected 201, got %d (%s)", w.Code, w.Body.String())
+	}
+
+	w = serveRequest(mux, "GET /api/twofa/export", "GET", "/api/twofa/export", nil, owner42, 0)
+	if w.Code != http.StatusOK {
+		t.Fatalf("export: expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+	var exported []map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &exported)
+	if len(exported) != 1 || exported[0]["name"] != "Owner Item" {
+		t.Fatalf("export: expected only the caller's item, got %+v", exported)
+	}
+}
+
+func TestPlugin_ResolveSharedItemRejectsAmbiguousName(t *testing.T) {
+	p, mux, _ := setupTestEnv(t)
+
+	for i := 0; i < 2; i++ {
+		w := createVia(mux, "/api/twofa/accounts", owner42, "Duplicate Name")
+		if w.Code != http.StatusCreated {
+			t.Fatalf("create %d: expected 201, got %d (%s)", i, w.Code, w.Body.String())
+		}
+		created := decodeSummary(t, w)
+		if w := setShareVia(mux, owner42, created.ID, true); w.Code != http.StatusOK {
+			t.Fatalf("share %d: expected 200, got %d (%s)", i, w.Code, w.Body.String())
+		}
+	}
+
+	if _, _, err := p.GetCode(context.Background(), 1, "Duplicate Name"); err == nil {
+		t.Fatal("provider GetCode: expected an error for an ambiguous name")
+	} else if !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("provider GetCode: expected an ambiguous error, got %v", err)
+	}
+
+	mcpCtx := plugin.WithOrgID(context.Background(), 1)
+	if _, _, err := p.mcpGetCode(mcpCtx, nil, getCodeInput{AccountName: "Duplicate Name"}); err == nil {
+		t.Fatal("mcpGetCode: expected an error for an ambiguous name")
+	} else if !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("mcpGetCode: expected an ambiguous error, got %v", err)
+	}
+}
+
+func TestPlugin_DeleteRemovesShareBeforeVaultItem(t *testing.T) {
+	p, mux, db := setupTestEnv(t)
+
+	w := createVia(mux, "/api/twofa/accounts", owner42, "Ordered Delete")
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create: expected 201, got %d (%s)", w.Code, w.Body.String())
+	}
+	created := decodeSummary(t, w)
+	if w := setShareVia(mux, owner42, created.ID, true); w.Code != http.StatusOK {
+		t.Fatalf("share: expected 200, got %d (%s)", w.Code, w.Body.String())
+	}
+
+	if err := db.Migrator().DropTable(&TwoFAShare{}); err != nil {
+		t.Fatalf("drop share table: %v", err)
+	}
+
+	w = serveRequest(mux, "DELETE /api/twofa/accounts/{id}", "DELETE",
+		fmt.Sprintf("/api/twofa/accounts/%d", created.ID), nil, owner42, created.ID)
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("delete: expected 500 when share removal fails, got %d (%s)", w.Code, w.Body.String())
+	}
+
 	vs, err := p.vault()
 	if err != nil {
 		t.Fatalf("vault unavailable: %v", err)
 	}
-	orgScoped, err := vs.PutSecret(context.Background(), plugin.PutSecretRequest{
-		OrgID:          100,
-		Scope:          plugin.VaultScopeOrg,
-		CollectionSlug: "default",
-		ItemType:       "twofa_totp",
-		Name:           "Org Scoped In Personal Org",
-		Metadata:       map[string]any{"digits": 6, "period": 30, "algorithm": "SHA1"},
-		Payload:        map[string]any{"secret": "JBSWY3DPEHPK3PXP"},
-	})
-	if err != nil {
-		t.Fatalf("seed org-scoped item: %v", err)
-	}
-
-	w = serveRequest(mux, "GET /api/personal/twofa/accounts", "GET", "/api/personal/twofa/accounts", nil, member42, 0)
-	if got := decodeSummaries(t, w); len(got) != 1 || got[0].Name != "Personal Only" {
-		t.Fatalf("personal list: expected the org-scoped item to stay out, got %+v", got)
-	}
-	w = serveRequest(mux, "GET /api/personal/twofa/accounts/{id}", "GET",
-		fmt.Sprintf("/api/personal/twofa/accounts/%d", orgScoped.ID), nil, member42, orgScoped.ID)
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("personal fetch of org-scoped item: expected 404, got %d (%s)", w.Code, w.Body.String())
-	}
-}
-
-func TestPlugin_PersonalAuditStaysInPersonalOrg(t *testing.T) {
-	_, mux, _ := setupTestEnv(t)
-
-	admin := map[string]string{"X-Role": "admin"}
-	member42 := map[string]string{"X-Role": "member", "X-Test-User": "42"}
-
-	w := createVia(mux, "POST /api/personal/twofa/accounts", "/api/personal/twofa/accounts", member42, "Audited Personal")
-	if w.Code != http.StatusCreated {
-		t.Fatalf("personal create: expected 201, got %d (%s)", w.Code, w.Body.String())
-	}
-	created := decodeSummary(t, w)
-
-	w = serveRequest(mux, "GET /api/personal/twofa/accounts/{id}", "GET",
-		fmt.Sprintf("/api/personal/twofa/accounts/%d?reveal=true", created.ID), nil, member42, created.ID)
-	if w.Code != http.StatusOK {
-		t.Fatalf("personal reveal: expected 200, got %d (%s)", w.Code, w.Body.String())
-	}
-
-	w = serveRequest(mux, "GET /api/personal/twofa/logs", "GET", "/api/personal/twofa/logs", nil, member42, 0)
-	if w.Code != http.StatusOK {
-		t.Fatalf("personal logs: expected 200, got %d (%s)", w.Code, w.Body.String())
-	}
-	var personalLogs []TwoFAAuditLog
-	_ = json.Unmarshal(w.Body.Bytes(), &personalLogs)
-	var sawReveal bool
-	for _, entry := range personalLogs {
-		if entry.Action == "view_secret" && entry.AccountName == "Audited Personal" {
-			sawReveal = true
-			if entry.OrgID != 100 {
-				t.Fatalf("personal audit row: expected org 100, got %d", entry.OrgID)
-			}
-		}
-	}
-	if !sawReveal {
-		t.Fatalf("personal audit: expected a view_secret row, got %+v", personalLogs)
-	}
-
-	w = serveRequest(mux, "GET /api/twofa/logs", "GET", "/api/twofa/logs", nil, admin, 0)
-	if w.Code != http.StatusOK {
-		t.Fatalf("team logs: expected 200, got %d (%s)", w.Code, w.Body.String())
-	}
-	var teamLogs []TwoFAAuditLog
-	_ = json.Unmarshal(w.Body.Bytes(), &teamLogs)
-	if len(teamLogs) != 0 {
-		t.Fatalf("team audit: expected no personal rows, got %+v", teamLogs)
+	if _, err := vs.GetMeta(context.Background(), 1, created.ID); err != nil {
+		t.Fatalf("delete order: expected the vault item to remain after a failed share delete, got %v", err)
 	}
 }

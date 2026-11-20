@@ -187,7 +187,7 @@ Inbound HTTP Request (POST /api/webhook/{orgSlug}/email/inbound[/raw]/{token})
   ├── 4. Mailbox Resolution & Catch-All (plugins/mail/resolve.go)
   │      - Checks exact match in mailboxes table (owner_id = orgID, address = to, enabled = true)
   │      - Checks host status (mailHostDisabled); drops message if disabled
-  │      - Catch-All Evaluation: if mail.catch_all == "true" AND address NOT in reserved list
+  │      - Catch-All Evaluation: if catch_all == "true" AND address NOT in reserved list
   │        (admin, administrator, hostmaster, postmaster, webmaster) AND ownsMailHost(orgID, addr):
   │        -> auto-creates Mailbox{OrgID, Address: to, Enabled: true, Note: "auto (catch-all)"}
   │      - If unresolved: message dropped cleanly (returns {ok: true, stored: false})

@@ -1,6 +1,6 @@
 // Links feature API surface — the slice of the JSON API owned by the links
 // plugin. Fully self-contained without relative host leaks.
-import { req, type StatKV } from "@octarq/plugin-sdk";
+import { getAppLang, pluginURL, req, type StatKV } from "@octarq/plugin-sdk";
 
 
 export type { StatKV };
@@ -72,7 +72,6 @@ export interface Link {
   archived: boolean;
   enabled: boolean;
   clicks: number;
-  password?: string;
   hasPassword: boolean;
   routingRules?: any[];
   createdAt: string;
@@ -117,6 +116,16 @@ export const linksApi = {
   updateLink: (id: number, l: Partial<Link> & { password?: string }) =>
     req<Link>("PUT", `/api/links/${id}`, l),
   deleteLink: (id: number) => req("DELETE", `/api/links/${id}`),
+  exportCsv: async (): Promise<Blob> => {
+    const res = await fetch(pluginURL("/api/links/export.csv"), {
+      credentials: "same-origin",
+      headers: { "Accept-Language": getAppLang() },
+    });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    return res.blob();
+  },
   linkStats: (id: number, days = 30, metric: "pv" | "uv" = "uv") =>
     req<LinkStats>("GET", `/api/links/${id}/stats?days=${days}&metric=${metric}`),
   linkMetadata: (url: string) =>

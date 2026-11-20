@@ -28,6 +28,7 @@ Run these inside your worktree and confirm they pass:
   - No fallback, soft-degradation, or dual-track compatibility code.
   - Remove deprecated interfaces/fields directly rather than keeping shims.
   - Fail closed on missing configuration or invalid inputs.
+- **No comments in code**: `.go`, `.ts`, `.tsx`, and every other source file carry no comments. Only `SPEC.md`, `docs/`, `README`, and `PRODUCT.md` hold design notes; commit messages hold the why. Keep compiler and tool directives (`//go:build`, `//go:embed`, `//nolint`, `eslint-disable`, `@ts-expect-error`, `/* ui-color-ok */`).
 
 ## Design System Contract
 

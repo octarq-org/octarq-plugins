@@ -20,6 +20,7 @@ type mockSession struct {
 
 func (s *mockSession) UserID(r *http.Request) uint                     { return 1 }
 func (s *mockSession) OrgID(r *http.Request) uint                      { return s.orgID(r) }
+func (s *mockSession) PersonalOrgID(r *http.Request) uint              { return 1 }
 func (s *mockSession) OrgRole(r *http.Request) string                  { return "admin" }
 func (s *mockSession) RequireRole(r *http.Request, min string) bool    { return true }
 func (s *mockSession) RequirePerm(r *http.Request, p, min string) bool { return true }

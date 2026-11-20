@@ -96,10 +96,9 @@ export function LinkTableRow({
             {l.hasPassword && (
               <span
                 className="inline-flex items-center gap-1 text-[10px] text-warning-fg bg-warning-bg px-1.5 py-0.5 rounded font-mono"
-                title={`${t("links.accessProtectionPassword")}${l.password ? `: ${l.password}` : ""}`}
+                title={t("links.accessProtectionPassword")}
               >
                 <Lock className="h-2.5 w-2.5" />
-                {l.password && <span>{l.password}</span>}
               </span>
             )}
             {l.routingRules?.length ? (

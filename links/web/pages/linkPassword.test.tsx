@@ -22,7 +22,6 @@ const mockLinksWithPassword: Link[] = [
     archived: false,
     enabled: true,
     clicks: 5,
-    password: "SecretCode123",
     hasPassword: true,
     routingRules: [],
     createdAt: "2026-06-01T00:00:00Z",
@@ -38,7 +37,7 @@ function jsonResponse(body: unknown, status = 200) {
   };
 }
 
-describe("Link password plaintext display and edit form", () => {
+describe("Link password redaction and edit preservation", () => {
   let updatedPayload: any = null;
 
   beforeEach(() => {
@@ -54,6 +53,8 @@ describe("Link password plaintext display and edit form", () => {
       const path = urlObj.pathname;
       if (method === "GET" && path === "/api/links") return jsonResponse(mockLinksWithPassword);
       if (method === "GET" && path === "/api/domains") return jsonResponse([]);
+      if (method === "GET" && path === "/api/ai/assist/status") return jsonResponse({ configured: false, provider: "" });
+      if (method === "GET" && path === "/api/links/capabilities") return jsonResponse({ geoReady: false, mode: "unavailable" });
       if (method === "PUT" && path === "/api/links/1") {
         updatedPayload = JSON.parse((init?.body as string) || "{}");
         return jsonResponse({ ...mockLinksWithPassword[0], ...updatedPayload });
@@ -63,7 +64,7 @@ describe("Link password plaintext display and edit form", () => {
     vi.stubGlobal("fetch", fetchMock);
   });
 
-  it("displays password in plaintext on the link badge and pre-fills the plaintext input in edit form", async () => {
+  it("hides plaintext password in table, uses type=password with blank value on edit, and omits password when left blank", async () => {
     render(
       <MemoryRouter initialEntries={["/links"]}>
         <I18nProvider>
@@ -72,12 +73,14 @@ describe("Link password plaintext display and edit form", () => {
       </MemoryRouter>
     );
 
-    // 1. Password should be visible in plain text on the badge in the list
+    // 1. Lock badge shows generic protection title without plaintext password
     await waitFor(() => {
-      expect(screen.getByText("SecretCode123")).toBeDefined();
+      const lockBadge = screen.getByTitle("Access protection password");
+      expect(lockBadge).toBeDefined();
+      expect(lockBadge.textContent?.trim()).toBe("");
     });
 
-    // 2. Click Edit Link to open the editor modal
+    // 2. Open Edit Link modal
     const editBtn = screen.getByTitle("Edit link");
     fireEvent.click(editBtn);
 
@@ -85,18 +88,46 @@ describe("Link password plaintext display and edit form", () => {
       expect(screen.getByText("Edit link — Protected Link")).toBeDefined();
     });
 
-    // 3. The password input field should be type="text" and contain "SecretCode123"
-    const passwordInput = screen.getByDisplayValue("SecretCode123") as HTMLInputElement;
-    expect(passwordInput).toBeDefined();
-    expect(passwordInput.type).toBe("text");
+    // 3. Password input should be type="password", empty, and show passwordSetHint
+    expect(screen.getByText("Key set. Fill to overwrite, blank to keep")).toBeDefined();
+    const passwordInput = screen.getByPlaceholderText("e.g. 123456") as HTMLInputElement;
+    expect(passwordInput.type).toBe("password");
+    expect(passwordInput.value).toBe("");
 
-    // 4. Save without touching password -> payload should retain the password and not silently clear it
-    const saveBtn = screen.getByText("Save link");
-    fireEvent.click(saveBtn);
+    // 4. Save without filling password -> payload must omit password key to preserve existing password
+    fireEvent.click(screen.getByText("Save link"));
 
     await waitFor(() => {
       expect(updatedPayload).not.toBeNull();
     });
-    expect(updatedPayload.password).toBe("SecretCode123");
+    expect("password" in updatedPayload).toBe(false);
+  });
+
+  it("sends new password when filled on edit", async () => {
+    render(
+      <MemoryRouter initialEntries={["/links"]}>
+        <I18nProvider>
+          <LinksPage />
+        </I18nProvider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTitle("Edit link")).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTitle("Edit link"));
+    await waitFor(() => {
+      expect(screen.getByText("Edit link — Protected Link")).toBeDefined();
+    });
+
+    const passwordInput = screen.getByPlaceholderText("e.g. 123456") as HTMLInputElement;
+    fireEvent.change(passwordInput, { target: { value: "NewSecret456" } });
+    fireEvent.click(screen.getByText("Save link"));
+
+    await waitFor(() => {
+      expect(updatedPayload).not.toBeNull();
+    });
+    expect(updatedPayload.password).toBe("NewSecret456");
   });
 });

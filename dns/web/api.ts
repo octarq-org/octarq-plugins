@@ -164,7 +164,7 @@ export const dnsApi = {
   createProviderAccount: (data: any) => req<ProviderAccount>("POST", "/api/provider-accounts", data),
   updateProviderAccount: (id: number, data: any) => req<ProviderAccount>("PUT", `/api/provider-accounts/${id}`, data),
   deleteProviderAccount: (id: number) => req("DELETE", `/api/provider-accounts/${id}`),
-  dnsProviders: () => req<string[]>("GET", "/api/dns-providers"),
+  dnsProviders: () => req<string[]>("GET", "/api/dns/providers"),
 };
 
 export { dnsApi as api };

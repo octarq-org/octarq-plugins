@@ -1,72 +1,111 @@
 ---
 title: 2FA Vault
-description: Centralized TOTP two-factor authentication manager for shared accounts, with real-time verification codes and AI agent MCP access.
+description: Store TOTP accounts for third-party services, generate live codes, and share selected accounts with your workspace.
 category: operations
 order: 25
 ---
 
-The **2FA Vault** plugin gives your team and AI agents a secure, centralized place to store Time-based One-Time Password (TOTP) credentials for third-party services like AWS, Cloudflare, GitHub, registrars, and cloud providers.
+The **2FA Vault** plugin stores Time-based One-Time Password (TOTP) accounts for services like AWS, Cloudflare, GitHub, and your registrar. It generates live verification codes on demand.
 
-Rather than fragmenting authentication seeds across individual smartphones or browser extensions, the 2FA Vault keeps seeds encrypted at rest in your workspace while generating synchronized verification codes on demand.
+Open **2FA Vault** in the sidebar at `/personal/twofa`.
 
 :::note
-All seeds and shared secrets stored in the 2FA Vault are encrypted using AES-256-GCM authenticated encryption before touching the database. Plaintext secrets are never returned in list endpoints.
+The vault encrypts every secret before it writes to the database. List views never return plaintext secrets.
 :::
 
-## Two vaults: team and personal
+## One vault, private by default
 
-- **Team 2FA Vault** (`/governance/twofa`) belongs to the workspace. Admins add, edit, reveal and export credentials.
-- **Personal 2FA** (`/personal/twofa`) belongs to you. It lives in your personal space, not in the active workspace, and every member can manage their own entries.
+The 2FA Vault holds one list of accounts. Every account is private to the member who created it.
 
-A team admin cannot read your personal entries. Team entries never appear in the personal vault.
+You own the accounts that you add. Only you can read the secret, edit the account, or delete it.
 
-## Key Features
+## Share an account with the workspace
 
-- **Real-Time Code Generation**: View 6-digit or 8-digit verification codes that automatically refresh every 30 seconds with animated countdown rings.
-- **Agent-Native MCP Integration**: Connected AI agents (Cursor, Claude Code) can retrieve live codes via the `get_2fa_code` tool during automated operational tasks.
-- **Key URI & QR Code Import**: Paste any standard `otpauth://totp/...` URI or scan QR codes to instantly configure new accounts with issuer, account, algorithm, and period.
-- **Zero-Friction Sharing**: Share critical infrastructure access across teammates without needing to pass seeds around in chat apps or re-enrolling devices.
-- **Comprehensive Audit Trail**: Every code generation, secret reveal, export, and MCP tool call is logged with timestamp, actor, and IP address.
+You can share any account that you own. Sharing is per account, and the default is private.
 
-## Managing 2FA Accounts
+1. Find the account card.
+2. Turn on **Shared with workspace**.
 
-### Adding an Account
+Workspace members can now see the account and read its live codes.
 
-1. Open **Team 2FA Vault** (`/governance/twofa`) or **Personal 2FA** (`/personal/twofa`) in the sidebar.
-2. Click **+ Add Account**.
-3. Choose your preferred input method:
-   - **Manual Entry**: Enter the account title (e.g. `AWS Production`), issuer, username, and Base32 secret seed.
-   - **Key URI (`otpauth://`)**: Paste the provisioning link provided by the third-party service. Octarq will automatically parse the issuer, account, secret, and parameters.
-4. Add tags (e.g. `Cloud, Infrastructure`) for easy grouping and filtering.
-5. Click **Save Account**.
+To stop sharing, turn **Shared with workspace** off. The account becomes private again.
 
-:::tip
-Pin frequently used credentials to keep them permanently fixed at the top of your 2FA dashboard for immediate access.
-:::
+### What shared members can do
 
-### Viewing and Copying Verification Codes
+- They see the account in their vault list.
+- They read the live code.
+- They copy the code.
+- They verify a code.
+- They see a **Shared** badge on the card.
 
-Each credential card displays the current live numeric code formatted with a space (for example, `548 102`).
-- Click anywhere on the code or click the **Copy** button to copy the code directly to your clipboard.
-- The radial timer beside the code indicates how many seconds remain before the current code expires.
+### What shared members cannot do
 
-### Revealing Secrets & Displaying QR Codes
-
-If you ever need to enroll a backup physical authenticator device:
-1. Hover over the account card and click the **QR Code** action.
-2. The modal displays the encrypted seed, the raw `otpauth://` URI, and a scannable QR code.
-3. Inspecting or copying the secret creates an immutable record in your workspace audit log.
+- They cannot reveal the secret or the QR code.
+- They cannot edit the account.
+- They cannot pin, delete, or export the account.
+- They cannot turn sharing off. Only the owner controls sharing.
 
 :::caution
-In the team vault, only workspace admins can reveal plaintext seeds. In your personal vault, only you can. Always verify unfamiliar audit log entries in the audit trail.
+Sharing gives every member of the workspace access to live codes. Share only the accounts that the team needs.
 :::
 
-## Using 2FA with AI Agents (MCP)
+## Add an account
 
-Octarq exposes three dedicated tools to AI agents connected over the Model Context Protocol. These tools read the team vault only.
+1. Click **+ Add Account**.
+2. Choose an input method:
+   - **Manual Entry**: Enter the title, issuer, username, and Base32 secret.
+   - **Key URI**: Paste the `otpauth://` link from the service. The vault reads the fields for you.
+3. Add tags to group and filter accounts.
+4. Click **Save Account**.
 
-- `get_2fa_code(account_name)`: Returns the live TOTP code and remaining valid seconds.
-- `list_2fa_accounts(tag)`: Lists registered account names and tags without revealing secret keys.
-- `verify_2fa_code(account_name, code)`: Verifies whether an entered code is currently valid.
+:::tip
+Pin an account to keep it at the top of your list. Only the owner can pin an account.
+:::
 
-When an AI agent performs an operation such as logging into a cloud console or registering a domain, it can autonomously request the appropriate 2FA code without interrupting your workflow.
+## Read and copy codes
+
+Each card shows the current code. The card also shows the seconds left before the code expires.
+
+Click the code or click **Copy** to copy it.
+
+## Reveal a secret or show a QR code
+
+Only the owner can reveal a secret. Use this action to enroll a backup authenticator.
+
+1. Click the QR code action on the account card.
+2. The modal shows the secret, the `otpauth://` URI, and a QR code.
+3. Scan the QR code with your authenticator app.
+
+Each reveal is recorded in the audit log.
+
+## Import and export
+
+**Import** adds accounts to your own vault. Paste one `otpauth://` URI per line.
+
+**Export** creates a backup of your own accounts only. Shared accounts belong to another member and stay out of your export.
+
+:::danger
+The exported file contains plaintext secrets. Store it in a safe place. Never share it.
+:::
+
+## Use 2FA with AI agents
+
+Octarq exposes three tools over the Model Context Protocol (MCP). Agents have no user identity. They can use shared accounts only.
+
+- `get_2fa_code(account_name)`: Returns the live code and the seconds left.
+- `list_2fa_accounts(tag)`: Lists shared accounts. It never returns secrets or codes.
+- `verify_2fa_code(account_name, code)`: Reports whether a code is valid now.
+
+An agent can log in to a service without you. Agents never see your private accounts.
+
+## Audit trail
+
+The vault writes an audit entry for these actions:
+
+- Account creation, update, and deletion.
+- Secret reveal and QR display.
+- Code generation and verification.
+- Sharing and unsharing.
+- Import and export.
+
+Each entry records the actor, the time, and the source address.

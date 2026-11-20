@@ -12,12 +12,14 @@ vi.mock("../api", () => ({
     updateLink: vi.fn(),
     deleteLink: vi.fn(),
     domains: vi.fn(),
+    exportCsv: vi.fn(),
   },
   api: {
     links: vi.fn(),
     updateLink: vi.fn(),
     deleteLink: vi.fn(),
     domains: vi.fn(),
+    exportCsv: vi.fn(),
   },
   effectiveLinkHosts: (d: any) => [d.domain || d.name],
 }));

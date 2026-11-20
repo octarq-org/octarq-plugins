@@ -234,7 +234,7 @@ export function AddEditModal({ apiBase, onClose, account, onSaved, t }: Props) {
       <Field label={t("twofa.notes", "Notes")}>
         <Textarea
           rows={2}
-          placeholder="Emergency recovery credentials stored in 1Password vault"
+          placeholder={t("twofa.notesPlaceholder", "Store backup location or recovery notes.")}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
         />

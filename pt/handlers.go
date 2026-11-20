@@ -307,7 +307,45 @@ func (p *Plugin) verifySecrets(ctx context.Context, t *PTTracker, secret storedS
 
 // buildView assembles the API view for one tracker.
 func (p *Plugin) buildView(ctx context.Context, t *PTTracker) trackerView {
-	view := trackerView{PTTracker: *t}
+	view := trackerView{
+		TrackerViewFields: TrackerViewFields{
+			ID:                   t.ID,
+			CreatedAt:            t.CreatedAt,
+			UpdatedAt:            t.UpdatedAt,
+			Name:                 t.Name,
+			BaseURL:              t.BaseURL,
+			APIBaseURL:           t.APIBaseURL,
+			Domain:               t.Domain,
+			SchemaKey:            t.SchemaKey,
+			Username:             t.Username,
+			UserAgent:            t.UserAgent,
+			Timezone:             t.Timezone,
+			Enabled:              t.Enabled,
+			SigninEnabled:        t.SigninEnabled,
+			SigninWindowStartMin: t.SigninWindowStartMin,
+			SigninWindowEndMin:   t.SigninWindowEndMin,
+			StatsIntervalHours:   t.StatsIntervalHours,
+			TimeoutSeconds:       t.TimeoutSeconds,
+			LimitIntervalSeconds: t.LimitIntervalSeconds,
+			LimitCount:           t.LimitCount,
+			LimitSeconds:         t.LimitSeconds,
+			CookieValid:          t.CookieValid,
+			CookieRefreshedAt:    t.CookieRefreshedAt,
+			LastLoginAt:          t.LastLoginAt,
+			LastSigninAt:         t.LastSigninAt,
+			LastSigninOutcome:    t.LastSigninOutcome,
+			LastStatsAt:          t.LastStatsAt,
+			NextSigninAt:         t.NextSigninAt,
+			NextStatsAt:          t.NextStatsAt,
+			NeedsManualAction:    t.NeedsManualAction,
+			ManualReason:         t.ManualReason,
+			LastError:            t.LastError,
+			LastErrorAt:          t.LastErrorAt,
+			ConsecutiveFailures:  t.ConsecutiveFailures,
+			LatestSnapshotID:     t.LatestSnapshotID,
+			CreatedByUserID:      t.CreatedByUserID,
+		},
+	}
 
 	ad, err := p.registry().Get(adapter.Schema(t.SchemaKey))
 	if err == nil {
