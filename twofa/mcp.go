@@ -3,6 +3,7 @@ package twofa
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -25,26 +26,22 @@ type verifyCodeInput struct {
 	Code        string `json:"code"`
 }
 
-// RegisterMCP exposes the 2FA Vault tools to connected AI agents (Cursor, Claude Code, etc.),
-// allowing autonomous agents to query 2FA codes during automated workflows.
-// MCPTier reports the license tier these tools require. Community
-// connectors are operator utilities, free in every build.
 func (*Plugin) MCPTier() string { return "" }
 
 func (p *Plugin) RegisterMCP(srv *mcp.Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "get_2fa_code",
-		Description: "Generate the current live 6-digit TOTP two-factor authentication code for a registered account (e.g. AWS, GitHub, Cloudflare).",
+		Description: "Generate the current live TOTP code for an account shared with this workspace (e.g. AWS, GitHub, Cloudflare). Personal accounts are not visible.",
 	}, p.mcpGetCode)
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "list_2fa_accounts",
-		Description: "List all 2FA accounts registered in the workspace vault (name, issuer, tags). Does not reveal secrets or live codes.",
+		Description: "List 2FA accounts shared with this workspace (name, issuer, tags). Personal accounts are not visible. Does not reveal secrets or live codes.",
 	}, p.mcpListAccounts)
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "verify_2fa_code",
-		Description: "Verify whether a TOTP code is currently valid for a given 2FA account in the workspace.",
+		Description: "Verify whether a TOTP code is currently valid for an account shared with this workspace.",
 	}, p.mcpVerifyCode)
 }
 
@@ -86,17 +83,17 @@ func (p *Plugin) mcpListAccounts(ctx context.Context, _ *mcp.CallToolRequest, in
 	if orgID == 0 {
 		return nil, nil, fmt.Errorf("missing tenant context: unauthorized")
 	}
+	if p.db == nil {
+		return nil, nil, fmt.Errorf("share store unavailable")
+	}
 
 	vs, err := p.vault()
 	if err != nil {
 		return nil, nil, fmt.Errorf("credential vault unavailable: %w", err)
 	}
 
-	vaultItems, err := vs.ListItems(ctx, orgID, plugin.VaultFilter{
-		Scope:    plugin.VaultScopeOrg,
-		ItemType: "twofa_totp",
-	})
-	if err != nil {
+	var shares []TwoFAShare
+	if err := p.db.WithContext(ctx).Where("org_id = ?", orgID).Find(&shares).Error; err != nil {
 		return nil, nil, err
 	}
 
@@ -110,9 +107,19 @@ func (p *Plugin) mcpListAccounts(ctx context.Context, _ *mcp.CallToolRequest, in
 	}
 
 	tagFilter := strings.ToLower(strings.TrimSpace(in.Tag))
-	items := make([]mcpAccountItem, 0, len(vaultItems))
-	for _, vi := range vaultItems {
-		a := metaToAccount(vi)
+	items := make([]mcpAccountItem, 0, len(shares))
+	for _, sh := range shares {
+		meta, err := vs.GetMeta(ctx, orgID, sh.ItemID)
+		if err != nil {
+			if errors.Is(err, plugin.ErrSecretNotFound) {
+				continue
+			}
+			return nil, nil, err
+		}
+		if meta == nil || meta.OrgID != orgID || meta.ItemType != "twofa_totp" || meta.Scope != plugin.VaultScopeUser {
+			continue
+		}
+		a := metaToAccount(*meta)
 		if tagFilter != "" && !strings.Contains(strings.ToLower(a.Tags), tagFilter) {
 			continue
 		}

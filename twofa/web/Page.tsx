@@ -19,34 +19,19 @@ import { AddEditModal } from "./components/AddEditModal";
 import { SecretQrModal } from "./components/SecretQrModal";
 import { ImportExportModal } from "./components/ImportExportModal";
 
-export type TwoFAScope = "team" | "personal";
+const API_BASE = "/api/twofa";
 
-export default function TwoFAPage({ scope }: { scope: TwoFAScope }) {
+export default function TwoFAPage() {
   const { t } = useTranslation();
   const toast = useToast();
   const confirm = useConfirm();
-  const apiBase = scope === "personal" ? "/api/personal/twofa" : "/api/twofa";
-  const title =
-    scope === "personal"
-      ? t("twofa.personalPageTitle", "Personal 2FA")
-      : t("twofa.teamPageTitle", "Team 2FA Vault");
-  const description =
-    scope === "personal"
-      ? t(
-          "twofa.personalPageDesc",
-          "TOTP accounts that belong to you. Other workspace members cannot see them."
-        )
-      : t(
-          "twofa.teamPageDesc",
-          "Shared TOTP accounts for this workspace. Only admins can add, edit, or reveal secrets."
-        );
+
   const [accounts, setAccounts] = useState<AccountSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
-  // Modals state
   const [addEditOpen, setAddEditOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<AccountSummary | null>(null);
   const [secretQrOpen, setSecretQrOpen] = useState(false);
@@ -55,19 +40,18 @@ export default function TwoFAPage({ scope }: { scope: TwoFAScope }) {
 
   const fetchAccounts = useCallback(async () => {
     try {
-      setAccounts(await req<AccountSummary[]>("GET", `${apiBase}/accounts`));
+      setAccounts(await req<AccountSummary[]>("GET", `${API_BASE}/accounts`));
       setLoading(false);
     } catch (err: unknown) {
       setStatus(err instanceof ApiError ? err.status : 0);
       setLoading(false);
     }
-  }, [apiBase]);
+  }, []);
 
   useEffect(() => {
     fetchAccounts();
   }, [fetchAccounts]);
 
-  // 1-second interval to tick countdown and refresh codes at boundary
   useEffect(() => {
     const timer = setInterval(() => {
       setAccounts((prev) => {
@@ -96,10 +80,18 @@ export default function TwoFAPage({ scope }: { scope: TwoFAScope }) {
 
   const handleTogglePin = async (id: number) => {
     try {
-      await req("POST", `${apiBase}/accounts/${id}/pin`);
+      await req("POST", `${API_BASE}/accounts/${id}/pin`);
       fetchAccounts();
     } catch {
-      // A pin that did not save shows on the next read of the list.
+    }
+  };
+
+  const handleToggleShare = async (id: number, shared: boolean) => {
+    try {
+      await req("POST", `${API_BASE}/accounts/${id}/share`, { shared });
+      fetchAccounts();
+    } catch {
+      toast.error(t("twofa.shareFailed", "Could not update sharing."));
     }
   };
 
@@ -110,15 +102,13 @@ export default function TwoFAPage({ scope }: { scope: TwoFAScope }) {
     });
     if (!ok) return;
     try {
-      await req("DELETE", `${apiBase}/accounts/${id}`);
+      await req("DELETE", `${API_BASE}/accounts/${id}`);
       fetchAccounts();
       toast.success(t("twofa.deleted", "Account deleted."));
     } catch {
-      // The account stays in the list, which says it was not deleted.
     }
   };
 
-  // Collect all unique tags for filter pills
   const allTags = useMemo(() => {
     const tagSet = new Set<string>();
     accounts.forEach((acc) => {
@@ -133,7 +123,6 @@ export default function TwoFAPage({ scope }: { scope: TwoFAScope }) {
     return Array.from(tagSet);
   }, [accounts]);
 
-  // Filter accounts by search query and selected tag
   const filteredAccounts = useMemo(() => {
     return accounts.filter((acc) => {
       const query = searchTerm.toLowerCase();
@@ -156,26 +145,14 @@ export default function TwoFAPage({ scope }: { scope: TwoFAScope }) {
     });
   }, [accounts, searchTerm, selectedTag]);
 
-  // Locked/gated state fallback
   if (status === 402 || status === 404) {
     return (
       <PageShell title={t("twofa.pageTitle", "2FA Vault")}>
         <LockedFallback
           status={status}
           feature="2FA Vault"
-          description={t("twofa.pageDesc", "Centralized TOTP two-factor authentication manager for team & infrastructure accounts.")}
+          description={t("twofa.pageDesc", "TOTP accounts that belong to you.")}
         />
-      </PageShell>
-    );
-  }
-
-  // The personal vault fails closed when the account has no personal org.
-  if (scope === "personal" && status === 403) {
-    return (
-      <PageShell title={title} description={description}>
-        <Empty reason={t("twofa.personalUnavailable", "Personal space is unavailable for this account.")}>
-          <ShieldCheck className="h-8 w-8 text-foreground/30" />
-        </Empty>
       </PageShell>
     );
   }
@@ -184,15 +161,13 @@ export default function TwoFAPage({ scope }: { scope: TwoFAScope }) {
 
   return (
     <PageShell
-      title={title}
-      description={description}
+      title={t("twofa.pageTitle", "2FA Vault")}
+      description={t("twofa.pageDesc", "TOTP accounts that belong to you. Share an account to let workspace members read its codes.")}
       action={
         <div className="flex items-center gap-2">
-          {scope === "team" && (
-            <Button variant="ghost" size="sm" onClick={() => setImportExportOpen(true)} title={t("twofa.importExport", "Import / Export")}>
-              <RefreshCw className="h-3.5 w-3.5" /> {t("twofa.importExport", "Import / Export")}
-            </Button>
-          )}
+          <Button variant="ghost" size="sm" onClick={() => setImportExportOpen(true)} title={t("twofa.importExport", "Import / Export")}>
+            <RefreshCw className="h-3.5 w-3.5" /> {t("twofa.importExport", "Import / Export")}
+          </Button>
           <Button
             size="sm"
             onClick={() => {
@@ -205,8 +180,6 @@ export default function TwoFAPage({ scope }: { scope: TwoFAScope }) {
         </div>
       }
     >
-
-      {/* Filter and Search Bar */}
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="max-w-md flex-1">
           <Input
@@ -240,7 +213,6 @@ export default function TwoFAPage({ scope }: { scope: TwoFAScope }) {
         )}
       </div>
 
-      {/* Account Cards Grid */}
       {loading ? (
         <div
           role="status"
@@ -288,9 +260,7 @@ export default function TwoFAPage({ scope }: { scope: TwoFAScope }) {
           detail={
             isFiltering
               ? t("twofa.tryDifferentSearch", "Try searching with a different term or clearing active tag filters.")
-              : scope === "personal"
-                ? t("twofa.personalEmptyDesc", "Add your first personal TOTP credential.")
-                : t("twofa.emptyDesc", "Add your first TOTP credential to start managing shared two-factor authentication tokens.")
+              : t("twofa.emptyDesc", "Add your first TOTP credential. It stays private until you share it.")
           }
           action={
             !isFiltering ? (
@@ -315,6 +285,7 @@ export default function TwoFAPage({ scope }: { scope: TwoFAScope }) {
               key={acc.id}
               account={acc}
               onTogglePin={handleTogglePin}
+              onToggleShare={handleToggleShare}
               onViewSecret={(a) => {
                 setSecretQrAccount(a);
                 setSecretQrOpen(true);
@@ -330,10 +301,9 @@ export default function TwoFAPage({ scope }: { scope: TwoFAScope }) {
         </div>
       )}
 
-      {/* Modals */}
       {addEditOpen && (
         <AddEditModal
-          apiBase={apiBase}
+          apiBase={API_BASE}
           onClose={() => setAddEditOpen(false)}
           account={editingAccount}
           onSaved={fetchAccounts}
@@ -343,7 +313,7 @@ export default function TwoFAPage({ scope }: { scope: TwoFAScope }) {
 
       {secretQrOpen && (
         <SecretQrModal
-          apiBase={apiBase}
+          apiBase={API_BASE}
           onClose={() => {
             setSecretQrOpen(false);
             setSecretQrAccount(null);
@@ -355,7 +325,7 @@ export default function TwoFAPage({ scope }: { scope: TwoFAScope }) {
 
       {importExportOpen && (
         <ImportExportModal
-          apiBase={apiBase}
+          apiBase={API_BASE}
           onClose={() => setImportExportOpen(false)}
           onImported={fetchAccounts}
           t={t}

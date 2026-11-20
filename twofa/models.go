@@ -4,9 +4,6 @@ import (
 	"time"
 )
 
-// TwoFAAccount is the in-memory representation of a 2FA/TOTP account backed
-// by core VaultService (`item_type="twofa_totp"`). Secrets are never stored
-// in a plugin-owned table.
 type TwoFAAccount struct {
 	ID        uint      `json:"id"`
 	CreatedAt time.Time `json:"created_at"`
@@ -23,8 +20,6 @@ type TwoFAAccount struct {
 	Pinned    bool      `json:"pinned"`
 }
 
-// AccountSummary is a safe projection of TwoFAAccount containing live TOTP codes
-// for frontend dashboard rendering, omitting secret data.
 type AccountSummary struct {
 	ID               uint      `json:"id"`
 	CreatedAt        time.Time `json:"created_at"`
@@ -41,4 +36,16 @@ type AccountSummary struct {
 	Pinned           bool      `json:"pinned"`
 	CurrentCode      string    `json:"current_code,omitempty"`
 	SecondsRemaining int       `json:"seconds_remaining"`
+	Mine             bool      `json:"mine"`
+	Shared           bool      `json:"shared"`
 }
+
+type TwoFAShare struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	OrgID     uint      `gorm:"index;uniqueIndex:idx_twofa_share_org_item;not null" json:"org_id"`
+	ItemID    uint      `gorm:"uniqueIndex:idx_twofa_share_org_item;not null" json:"item_id"`
+	SharedBy  uint      `json:"shared_by"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+func (TwoFAShare) TableName() string { return "twofa_shares" }

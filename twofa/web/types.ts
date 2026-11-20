@@ -14,6 +14,8 @@ export interface AccountSummary {
   pinned: boolean;
   current_code?: string;
   seconds_remaining: number;
+  mine: boolean;
+  shared: boolean;
 }
 
 export interface AccountDetail extends AccountSummary {

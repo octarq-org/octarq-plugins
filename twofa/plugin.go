@@ -1,6 +1,3 @@
-// Package twofa provides an enterprise-grade 2FA / TOTP Authenticator Vault
-// for Octarq. It stores two-factor authentication seeds encrypted at rest,
-// generates live TOTP codes, and exposes MCP tools for AI agents.
 package twofa
 
 import (
@@ -10,20 +7,20 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/octarq-org/octarq/server/plugin"
+	"gorm.io/gorm"
 )
 
 //go:embed docs
 var docsFS embed.FS
 
-// Plugin is the 2FA Vault plugin struct composed into Octarq via app.Use(&twofa.Plugin{}).
 type Plugin struct {
 	ctx      *plugin.Context
 	host     plugin.Host
 	vaultSvc plugin.VaultService
+	db       *gorm.DB
 }
 
 func (*Plugin) Name() string { return "twofa" }
@@ -31,63 +28,54 @@ func (*Plugin) Name() string { return "twofa" }
 func (*Plugin) Describe() plugin.Info {
 	return plugin.Info{
 		Title:            "2FA Vault",
-		Description:      "Centralized TOTP two-factor authentication manager for team & infrastructure accounts with live code generation, encrypted storage, and AI agent MCP tools.",
+		Description:      "Personal TOTP two-factor authentication vault with live code generation, encrypted storage, opt-in workspace sharing, and AI agent MCP tools.",
 		EnabledByDefault: true,
 	}
 }
 
 func (*Plugin) Models() []any {
-	return nil
+	return []any{&TwoFAShare{}}
 }
 
 func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 	p.ctx = ctx
 	p.host = plugin.EnsureHost(ctx)
+	if ctx != nil {
+		p.db = ctx.DB
+	}
 
-	// Register cross-plugin machine contract
 	if ctx != nil && ctx.Provide != nil {
 		ctx.Provide(ServiceName, Provider(p))
 	}
 
-	// Register health check provider if SPI is available
 	if ctx != nil && ctx.Provide != nil {
 		ctx.Provide(plugin.ServiceHealthProvider, plugin.HealthProvider(p))
 	}
 
-	// The MCP composition path mounts this plugin with no HTTP surface (nil
-	// mux, nil Guard) because it only wants the MCP tools. Skip the routes
-	// there; never serve an unguarded one.
 	if mux == nil || ctx.Guard == nil {
 		return
 	}
 	guard := func(h http.Handler) http.Handler { return ctx.Guard(h) }
 
-	// The team vault (/api/twofa) is admin-gated inside the handlers; the
-	// personal vault (/api/personal/twofa) is owned by the caller. Both groups
-	// serve the same operations and resolve their scope from the path.
-	for _, base := range []string{"/api/twofa", "/api/personal/twofa"} {
-		mux.Handle("GET "+base+"/accounts", guard(http.HandlerFunc(p.listAccounts)))
-		mux.Handle("POST "+base+"/accounts", guard(http.HandlerFunc(p.createAccount)))
-		mux.Handle("GET "+base+"/accounts/{id}", guard(http.HandlerFunc(p.getAccount)))
-		mux.Handle("PUT "+base+"/accounts/{id}", guard(http.HandlerFunc(p.updateAccount)))
-		mux.Handle("DELETE "+base+"/accounts/{id}", guard(http.HandlerFunc(p.deleteAccount)))
-		mux.Handle("POST "+base+"/accounts/{id}/pin", guard(http.HandlerFunc(p.togglePin)))
-		mux.Handle("POST "+base+"/accounts/{id}/code", guard(http.HandlerFunc(p.getCode)))
-		mux.Handle("POST "+base+"/accounts/{id}/verify", guard(http.HandlerFunc(p.verifyCode)))
-		mux.Handle("GET "+base+"/accounts/{id}/qr", guard(http.HandlerFunc(p.getQRCode)))
-		mux.Handle("POST "+base+"/import", guard(http.HandlerFunc(p.importAccounts)))
-		mux.Handle("GET "+base+"/export", guard(http.HandlerFunc(p.exportAccounts)))
-	}
+	const base = "/api/twofa"
+	mux.Handle("GET "+base+"/accounts", guard(http.HandlerFunc(p.listAccounts)))
+	mux.Handle("POST "+base+"/accounts", guard(http.HandlerFunc(p.createAccount)))
+	mux.Handle("GET "+base+"/accounts/{id}", guard(http.HandlerFunc(p.getAccount)))
+	mux.Handle("PUT "+base+"/accounts/{id}", guard(http.HandlerFunc(p.updateAccount)))
+	mux.Handle("DELETE "+base+"/accounts/{id}", guard(http.HandlerFunc(p.deleteAccount)))
+	mux.Handle("POST "+base+"/accounts/{id}/pin", guard(http.HandlerFunc(p.togglePin)))
+	mux.Handle("POST "+base+"/accounts/{id}/share", guard(http.HandlerFunc(p.setShare)))
+	mux.Handle("POST "+base+"/accounts/{id}/code", guard(http.HandlerFunc(p.getCode)))
+	mux.Handle("POST "+base+"/accounts/{id}/verify", guard(http.HandlerFunc(p.verifyCode)))
+	mux.Handle("GET "+base+"/accounts/{id}/qr", guard(http.HandlerFunc(p.getQRCode)))
+	mux.Handle("POST "+base+"/import", guard(http.HandlerFunc(p.importAccounts)))
+	mux.Handle("GET "+base+"/export", guard(http.HandlerFunc(p.exportAccounts)))
 }
 
 func (*Plugin) Menus() []plugin.MenuItem {
 	return []plugin.MenuItem{
 		{
-			ID: "twofa", Label: "Team 2FA Vault", Path: "/governance/twofa", Icon: "shield",
-			Category: "Access", Area: "governance", RequiredRole: "admin", Order: 10,
-		},
-		{
-			ID: "personal-twofa", Label: "Personal 2FA", Path: "/personal/twofa", Icon: "shield",
+			ID: "twofa", Label: "2FA Vault", Path: "/personal/twofa", Icon: "shield",
 			Category: "Accounts", Area: "personal", Order: 20,
 		},
 	}
@@ -156,7 +144,6 @@ func (p *Plugin) Validate(ctx context.Context, host plugin.Host) error {
 	return nil
 }
 
-// GetCode implements the Provider contract for cross-plugin retrieval.
 func (p *Plugin) GetCode(ctx context.Context, orgID uint, accountName string) (string, int, error) {
 	if orgID == 0 {
 		return "", 0, errors.New("unauthorized org")
@@ -165,24 +152,13 @@ func (p *Plugin) GetCode(ctx context.Context, orgID uint, accountName string) (s
 	if err != nil {
 		return "", 0, err
 	}
-	items, err := vs.ListItems(ctx, orgID, plugin.VaultFilter{
-		Scope:    plugin.VaultScopeOrg,
-		ItemType: "twofa_totp",
-	})
+	item, err := p.resolveSharedItem(ctx, vs, orgID, accountName)
 	if err != nil {
 		return "", 0, err
 	}
-	name := strings.TrimSpace(accountName)
-	for _, it := range items {
-		acc := metaToAccount(it)
-		if strings.EqualFold(acc.Name, name) || strings.EqualFold(acc.Issuer, name) {
-			return vs.ComputeTOTP(ctx, orgID, it.ID)
-		}
-	}
-	return "", 0, fmt.Errorf("account %q not found in workspace %d", accountName, orgID)
+	return vs.ComputeTOTP(ctx, orgID, item.ID)
 }
 
-// VerifyCode implements the Provider contract for cross-plugin verification.
 func (p *Plugin) VerifyCode(ctx context.Context, orgID uint, accountName string, code string) (bool, error) {
 	if orgID == 0 {
 		return false, errors.New("unauthorized org")
@@ -191,29 +167,19 @@ func (p *Plugin) VerifyCode(ctx context.Context, orgID uint, accountName string,
 	if err != nil {
 		return false, err
 	}
-	items, err := vs.ListItems(ctx, orgID, plugin.VaultFilter{
-		Scope:    plugin.VaultScopeOrg,
-		ItemType: "twofa_totp",
-	})
+	item, err := p.resolveSharedItem(ctx, vs, orgID, accountName)
 	if err != nil {
 		return false, err
 	}
-	name := strings.TrimSpace(accountName)
-	for _, it := range items {
-		acc := metaToAccount(it)
-		if strings.EqualFold(acc.Name, name) || strings.EqualFold(acc.Issuer, name) {
-			sec, sErr := vs.GetSecret(ctx, orgID, it.ID)
-			if sErr != nil {
-				return false, fmt.Errorf("failed to resolve secret: %w", sErr)
-			}
-			secret := extractSecretFromPayload(sec.Payload)
-			return VerifyCode(secret, code, time.Now(), acc.Period, acc.Digits, acc.Algorithm, 1), nil
-		}
+	sec, err := vs.GetSecret(ctx, orgID, item.ID)
+	if err != nil {
+		return false, fmt.Errorf("failed to resolve secret: %w", err)
 	}
-	return false, fmt.Errorf("account %q not found in workspace %d", accountName, orgID)
+	acc := metaToAccount(*item)
+	secret := extractSecretFromPayload(sec.Payload)
+	return VerifyCode(secret, code, time.Now(), acc.Period, acc.Digits, acc.Algorithm, 1), nil
 }
 
-// Compile-time assertions for contracts
 var (
 	_ plugin.Plugin         = (*Plugin)(nil)
 	_ plugin.Validator      = (*Plugin)(nil)
