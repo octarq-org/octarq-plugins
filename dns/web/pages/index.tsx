@@ -162,16 +162,18 @@ export default function DomainsPage() {
       title={t("domains.pageTitle")}
       description={t("domains.pageDescription")}
       action={
-        <div className="flex gap-2">
-          <Button variant="ghost" size="sm" onClick={() => setSyncing(true)}>
-            <RefreshCw className="h-3.5 w-3.5" />
-            {t("domains.syncCloudflare")}
-          </Button>
-          <Button variant="primary" size="sm" onClick={() => setActive("new")}>
-            <Plus className="h-3.5 w-3.5" />
-            {t("domains.addDomain")}
-          </Button>
-        </div>
+        tab === "domains" && active === null ? (
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setSyncing(true)}>
+              <RefreshCw className="h-3.5 w-3.5" />
+              {t("domains.syncCloudflare")}
+            </Button>
+            <Button variant="primary" size="sm" onClick={() => setActive("new")}>
+              <Plus className="h-3.5 w-3.5" />
+              {t("domains.addDomain")}
+            </Button>
+          </div>
+        ) : undefined
       }
     >
 
