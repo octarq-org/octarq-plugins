@@ -14,8 +14,6 @@ export default function MailSetupStepWidget() {
     let cancelled = false;
     (async () => {
       try {
-        // Core Vault owns mail senders when it is mounted. Count the
-        // same registry the mail pages offer, not just the local table.
         const res = await fetch("/api/vault/items?provider_type=communication", {
           credentials: "same-origin",
         });
@@ -32,7 +30,6 @@ export default function MailSetupStepWidget() {
         );
         if (!cancelled) setSmtpCount(list.length);
       } catch {
-        // Leave the step in the unknown state instead of reporting zero.
       }
     })();
     return () => {

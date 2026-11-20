@@ -15,9 +15,6 @@ import (
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
-// Mount with a fully wired plugin.Context: every seam the plugin consumes is
-// present, the huma routes are registered into a live test API, and the root
-// short-link handler is served end to end.
 func TestMountWiresEverythingAndServesRoot(t *testing.T) {
 	seed, _ := setupFullLinksTestDB(t)
 	wipeLinksTables(t, seed)
@@ -74,7 +71,6 @@ func TestMountWiresEverythingAndServesRoot(t *testing.T) {
 		}
 	}
 
-	// The registered API routes dispatch through the plugin's handlers.
 	if err := db.Create(&Link{OrgID: 1, Slug: "e2e", Target: "https://e2e.example"}).Error; err != nil {
 		t.Fatalf("seed link: %v", err)
 	}
@@ -89,7 +85,6 @@ func TestMountWiresEverythingAndServesRoot(t *testing.T) {
 		t.Errorf("list response missing seeded link: %s", res.Body.String())
 	}
 
-	// Root handler: empty path 404s, unknown slug 404s, a real slug redirects.
 	if root == nil {
 		t.Fatal("root handler was not registered")
 		return
@@ -220,7 +215,6 @@ func TestTruncateStringBranches(t *testing.T) {
 	if got := truncateString(long, 6); got != "héllo " {
 		t.Errorf("multi-byte truncation: got %q, want %q", got, "héllo ")
 	}
-	// len > max but rune count <= max: byte length alone is a poor measure.
 	if got := truncateString(long, 20); got != long {
 		t.Errorf("string with len>max but few runes must pass through, got %q", got)
 	}
@@ -247,7 +241,6 @@ func TestRateLimiterWindowReset(t *testing.T) {
 	if l.Allow("1.1.1.1") {
 		t.Fatal("second request must be rate limited")
 	}
-	// Force the window to have lapsed; the counter must reset.
 	l.mu.Lock()
 	l.resets["1.1.1.1"] = time.Now().Add(-time.Minute)
 	l.mu.Unlock()

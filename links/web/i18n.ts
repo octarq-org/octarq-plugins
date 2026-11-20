@@ -1,7 +1,5 @@
 export const linksI18n = {
   en: {
-    // Shared-namespace contribution: this plugin's description in the
-    // plugin manager (core chrome looks up settings.pluginDesc.links).
     _shared: { settings: { pluginDesc: { links: "Short link creation, custom domain routing, and click analytics." } } },
     pageTitle: "Links",
     pageDescription: "Short links with click analytics, redirection, and routing",
@@ -11,7 +9,6 @@ export const linksI18n = {
     toggleArchivedTitle: "Toggle archived view",
     archived: "Archived",
     active: "Active",
-    // Query/hosts render beside these keys in mono — keep them out of the sentence.
     emptyFilteredReason: "No links match",
     emptyFilteredAction: "Clear search",
     emptyNoLinksReason: "This workspace has no short links yet.",

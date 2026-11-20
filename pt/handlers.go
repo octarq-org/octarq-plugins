@@ -20,19 +20,13 @@ import (
 )
 
 const (
-	// cookieMaxBytes bounds a pasted Cookie header. Real sessions are well under
-	// 2 KiB; anything larger is a paste accident or an attack on the parser.
 	cookieMaxBytes = 8192
 
 	defaultStatsIntervalHours = 6
 	defaultTimeoutSeconds     = 20
 )
 
-// errForbidden is the single denial used for a denied permission. The message
-// does not say which permission or which role would have worked.
 var errForbidden = huma.Error403Forbidden("You do not have permission for this action.")
-
-// ---------- helpers ----------
 
 func unwrapRequest(hctx huma.Context) (*http.Request, error) {
 	if hctx == nil {
@@ -45,15 +39,12 @@ func unwrapRequest(hctx huma.Context) (*http.Request, error) {
 	return r, nil
 }
 
-// pluginContext returns the mount context, or nil before a real mount.
 func (p *Plugin) pluginContext() *plugin.Context {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.ctx
 }
 
-// allowed asks the host permission resolver. It fails closed: an unwired host,
-// a nil session, or a nil mounted context denies the request.
 func (p *Plugin) allowed(r *http.Request, permKey, minRole string) bool {
 	ctx := p.pluginContext()
 	if ctx == nil {
@@ -62,7 +53,6 @@ func (p *Plugin) allowed(r *http.Request, permKey, minRole string) bool {
 	return ctx.HasPerm(r, permKey, minRole)
 }
 
-// session returns the mounted host session, or nil before a real mount.
 func (p *Plugin) session() plugin.HostSession {
 	host := p.hostRef()
 	if host == nil {
@@ -71,9 +61,6 @@ func (p *Plugin) session() plugin.HostSession {
 	return host.Session()
 }
 
-// requirePersonalOrg resolves the caller's personal org. Zero is fail-closed:
-// personal data never falls back to the active team workspace, and a 403 tells
-// the caller the account has no personal space.
 func (p *Plugin) requirePersonalOrg(r *http.Request) (uint, error) {
 	s := p.session()
 	if s == nil {
@@ -86,7 +73,6 @@ func (p *Plugin) requirePersonalOrg(r *http.Request) (uint, error) {
 	return orgID, nil
 }
 
-// requireUser returns the authenticated account id that owns the request.
 func (p *Plugin) requireUser(r *http.Request) (uint, error) {
 	if s := p.session(); s != nil {
 		if uid := s.UserID(r); uid != 0 {
@@ -96,9 +82,6 @@ func (p *Plugin) requireUser(r *http.Request) (uint, error) {
 	return 0, huma.Error401Unauthorized("Authentication required. Sign in to continue.")
 }
 
-// humaErrorFor maps infrastructure errors to responses. A missing vault or
-// tenant handle is a server fault; a missing row is a 404 that also covers
-// another owner's id, so existence never leaks.
 func (p *Plugin) humaErrorFor(err error) error {
 	switch {
 	case errors.Is(err, ErrNotFound):
@@ -112,7 +95,6 @@ func (p *Plugin) humaErrorFor(err error) error {
 	}
 }
 
-// newSecretID returns the immutable per-tracker vault subject.
 func newSecretID() (string, error) {
 	buf := make([]byte, 16)
 	if _, err := rand.Read(buf); err != nil {
@@ -121,9 +103,6 @@ func newSecretID() (string, error) {
 	return hex.EncodeToString(buf), nil
 }
 
-// normalizeBaseURL validates and trims a site URL. Only absolute http(s) URLs
-// without user info or query are accepted: the URL is later used as an SSRF
-// target by the plugin itself.
 func normalizeBaseURL(raw string) (string, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -150,7 +129,6 @@ func normalizeBaseURL(raw string) (string, error) {
 	return parsed.String(), nil
 }
 
-// normalizeAPIRawURL validates an optional API base URL.
 func normalizeAPIRawURL(raw string) (string, error) {
 	if strings.TrimSpace(raw) == "" {
 		return "", nil
@@ -162,7 +140,6 @@ func normalizeAPIRawURL(raw string) (string, error) {
 	return base, nil
 }
 
-// validateTimezone accepts an IANA name or the empty string.
 func validateTimezone(raw string) (string, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -174,9 +151,6 @@ func validateTimezone(raw string) (string, error) {
 	return trimmed, nil
 }
 
-// validateSigninWindow rejects a window whose start and end are equal but not
-// both zero: such a window is either "any time" or "never", and guessing is
-// worse than refusing.
 func validateSigninWindow(start, end int) error {
 	if start == 0 && end == 0 {
 		return nil
@@ -187,8 +161,6 @@ func validateSigninWindow(start, end int) error {
 	return nil
 }
 
-// cleanCookie validates a pasted Cookie header. Header injection through CRLF
-// and oversized values are refused rather than truncated.
 func cleanCookie(raw string) (string, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -209,8 +181,6 @@ func cleanCookie(raw string) (string, error) {
 	return trimmed, nil
 }
 
-// applyTrackerBody copies the optional settings from a request body onto a
-// tracker. It never touches secrets or SecretID.
 func applyTrackerBody(t *PTTracker, body trackerWriteBody) error {
 	if v := strings.TrimSpace(body.Name); v != "" {
 		t.Name = v
@@ -268,7 +238,6 @@ func applyTrackerBody(t *PTTracker, body trackerWriteBody) error {
 	return nil
 }
 
-// bodySecrets builds a secret payload from a write body.
 func bodySecrets(body trackerWriteBody) (storedSecret, error) {
 	cookie, err := cleanCookie(body.Cookie)
 	if err != nil {
@@ -281,7 +250,6 @@ func bodySecrets(body trackerWriteBody) (storedSecret, error) {
 	}, nil
 }
 
-// verifySecrets proves a candidate secret against the site before it is stored.
 func (p *Plugin) verifySecrets(ctx context.Context, t *PTTracker, secret storedSecret) (*adapter.LoginResult, error) {
 	ad, err := p.registry().Get(adapter.Schema(t.SchemaKey))
 	if err != nil {
@@ -305,7 +273,6 @@ func (p *Plugin) verifySecrets(ctx context.Context, t *PTTracker, secret storedS
 	})
 }
 
-// buildView assembles the API view for one tracker.
 func (p *Plugin) buildView(ctx context.Context, t *PTTracker) trackerView {
 	view := trackerView{
 		TrackerViewFields: TrackerViewFields{
@@ -367,7 +334,6 @@ func (p *Plugin) buildView(ctx context.Context, t *PTTracker) trackerView {
 	return view
 }
 
-// summarize aggregates the visible trackers without inventing values.
 func summarize(views []trackerView) summaryView {
 	out := summaryView{TrackerCount: len(views)}
 	var uploaded, downloaded int64
@@ -426,7 +392,6 @@ func summarize(views []trackerView) summaryView {
 	return out
 }
 
-// trackersOf loads every tracker of one owner as views.
 func (p *Plugin) trackersOf(ctx context.Context, orgID, ownerUserID uint) ([]trackerView, error) {
 	list, err := p.listTrackers(ctx, orgID, ownerUserID)
 	if err != nil {
@@ -439,7 +404,6 @@ func (p *Plugin) trackersOf(ctx context.Context, orgID, ownerUserID uint) ([]tra
 	return out, nil
 }
 
-// loadTracker loads one tracker after the permission check.
 func (p *Plugin) loadTracker(ctx context.Context, orgID, ownerUserID, id uint) (*PTTracker, error) {
 	t, err := p.findTracker(ctx, orgID, ownerUserID, id)
 	if err != nil {
@@ -447,8 +411,6 @@ func (p *Plugin) loadTracker(ctx context.Context, orgID, ownerUserID, id uint) (
 	}
 	return t, nil
 }
-
-// ---------- handlers ----------
 
 func (p *Plugin) listTrackersHandler(ctx context.Context, input *listTrackersInput) (*listTrackersOutput, error) {
 	r, err := unwrapRequest(input.Ctx)
@@ -615,8 +577,6 @@ func (p *Plugin) createTrackerHandler(ctx context.Context, input *createTrackerI
 		return nil, err
 	}
 
-	// Verify a supplied cookie or API key before any row is written, so a bad
-	// paste never leaves a tracker that quietly fails every night.
 	if verify, verifyErr := p.shouldVerify(caps, secret); verifyErr != nil {
 		return nil, verifyErr
 	} else if verify {
@@ -649,7 +609,6 @@ func (p *Plugin) createTrackerHandler(ctx context.Context, input *createTrackerI
 	return &trackerOutput{Body: p.buildView(ctx, t)}, nil
 }
 
-// shouldVerify reports whether the candidate secret can be proven right now.
 func (p *Plugin) shouldVerify(caps adapter.Capabilities, secret storedSecret) (bool, error) {
 	if secret.APIKey != "" && !caps.APIKeyAuth {
 		return false, huma.Error422UnprocessableEntity("This site type does not use an API key.")
@@ -666,8 +625,6 @@ func (p *Plugin) shouldVerify(caps adapter.Capabilities, secret storedSecret) (b
 	return false, nil
 }
 
-// storeSecrets saves the payload in VaultService. verified records whether the
-// site accepted it, which sets the tracker's cookie state.
 func (p *Plugin) storeSecrets(ctx context.Context, t *PTTracker, secret storedSecret, verified bool) error {
 	if err := p.storeVaultSecret(ctx, t, secret); err != nil {
 		return err
@@ -736,8 +693,6 @@ func (p *Plugin) updateTrackerHandler(ctx context.Context, input *updateTrackerI
 		return nil, p.humaErrorFor(err)
 	}
 
-	// Re-plan the next runs so a changed window or interval takes effect now
-	// instead of at the end of the old plan.
 	now := p.clock()
 	updates := map[string]any{
 		"next_stats_at":  planStatsAt(t, now),
@@ -774,8 +729,6 @@ func (p *Plugin) deleteTrackerHandler(ctx context.Context, input *trackerInput) 
 	if err := p.deleteTrackerCascade(ctx, orgID, t.ID); err != nil {
 		return nil, p.humaErrorFor(err)
 	}
-	// The rows are gone; a shred failure leaves an orphan key with no
-	// ciphertext, so the deletion still stands.
 	_ = p.shredSecret(ctx, orgID, t.VaultItemID, uid)
 	return &deleteOutput{Body: map[string]bool{"ok": true}}, nil
 }
@@ -885,7 +838,6 @@ func (p *Plugin) setCredentialHandler(ctx context.Context, input *credentialInpu
 	return out, nil
 }
 
-// readSecrets decrypts the stored payload from VaultService. Missing item is an empty payload.
 func (p *Plugin) readSecrets(ctx context.Context, t *PTTracker) (storedSecret, error) {
 	return p.readVaultSecret(ctx, t)
 }
@@ -985,9 +937,6 @@ func (p *Plugin) refreshHandler(ctx context.Context, input *trackerInput) (*acti
 	return &actionOutput{Body: out}, nil
 }
 
-// actionError maps an action failure. Infrastructure faults become HTTP
-// errors; business verdicts are reported as a 200 response with an outcome, so
-// a rejected credential is not mistaken for a broken server.
 func (p *Plugin) actionError(err error) error {
 	switch {
 	case err == nil:
@@ -1007,8 +956,6 @@ func (p *Plugin) actionError(err error) error {
 	return nil
 }
 
-// outcomeFrom renders the tracker's current state as an action result. A
-// sign-in record supplies the verdict when there is one.
 func (p *Plugin) outcomeFrom(t *PTTracker, res *PTSigninResult) actionOutcome {
 	out := actionOutcome{
 		CookieValid:  t.CookieValid,
@@ -1037,7 +984,6 @@ func (p *Plugin) outcomeFrom(t *PTTracker, res *PTSigninResult) actionOutcome {
 	return out
 }
 
-// failedOutcome renders an action error as a user-visible verdict.
 func (p *Plugin) failedOutcome(t *PTTracker, err error) actionOutcome {
 	return actionOutcome{
 		Outcome:      outcomeFromError(err),
@@ -1113,7 +1059,6 @@ func (p *Plugin) signinsHandler(ctx context.Context, input *signinsInput) (*sign
 }
 
 var (
-	// loginFormRe finds a form that posts a username field.
 	loginFormRe = regexp.MustCompile(`(?is)<form[^>]*>(.*?)</form>`)
 	captchaRe   = regexp.MustCompile(`(?i)(imagehash|imagestring|verify_code|captcha|验证码)`)
 )
@@ -1193,7 +1138,6 @@ func detectionMessage(view detectView) string {
 	}
 }
 
-// verificationMessage turns a probe failure into a sentence for the form.
 func verificationMessage(err error) string {
 	if err == nil {
 		return "The site did not accept the credential. Check it and try again."

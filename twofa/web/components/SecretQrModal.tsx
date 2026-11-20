@@ -29,7 +29,6 @@ export function SecretQrModal({ apiBase, onClose, account, t }: Props) {
     }
 
     setLoading(true);
-    // One read reveals the secret; the other draws its QR code.
     Promise.all([
       req<AccountDetail>("GET", `${apiBase}/accounts/${account.id}?reveal=true`).catch(() => null),
       req<{ qr_data_url?: string; uri?: string }>("GET", `${apiBase}/accounts/${account.id}/qr`).catch(() => null),
@@ -100,7 +99,6 @@ export function SecretQrModal({ apiBase, onClose, account, t }: Props) {
           <FormError err={error} />
         ) : (
           <>
-            {/* Scannable QR code */}
             {qrDataUrl && (
               <div className="flex flex-col items-center justify-center rounded-lg border border-border bg-well p-4">
                 <img
@@ -114,7 +112,6 @@ export function SecretQrModal({ apiBase, onClose, account, t }: Props) {
               </div>
             )}
 
-            {/* Secret key */}
             {detail?.secret && (
               <Field label={t("twofa.secretSeed", "Secret Seed (Base32)")}>
                 <div className="flex items-center gap-2">
@@ -127,7 +124,6 @@ export function SecretQrModal({ apiBase, onClose, account, t }: Props) {
               </Field>
             )}
 
-            {/* otpauth URI */}
             {uri && (
               <Field label={t("twofa.keyURI", "Standard Key URI")}>
                 <div className="flex items-center gap-2">
@@ -140,7 +136,6 @@ export function SecretQrModal({ apiBase, onClose, account, t }: Props) {
               </Field>
             )}
 
-            {/* Security audit notice */}
             <Alert variant="warning" icon={<AlertTriangle className="h-4 w-4" />}>
               {t("twofa.auditNotice", "Revealing this secret is recorded in the security audit trail.")}
             </Alert>

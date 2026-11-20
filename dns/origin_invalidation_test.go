@@ -9,24 +9,11 @@ import (
 	"github.com/octarq-org/octarq/server/origin"
 )
 
-// TestDomainWritesInvalidateOriginCache pins that the domains table and
-// origin's view of it cannot drift apart.
-//
-// origin caches its answers for minutes because the endpoints asking are
-// unauthenticated and a Host-header sprayer would otherwise be a free
-// full-table scan. That cache is only safe if every write here drops it. The
-// case that bites hardest is the first domain on a fresh instance: until one
-// exists, origin has no whitelist to check against and falls back to using the
-// request Host verbatim, and a stale "no domains registered" answer keeps that
-// fallback alive — accepting forged Hosts — after the operator has registered
-// the domain meant to close it.
 func TestDomainWritesInvalidateOriginCache(t *testing.T) {
 	p, mkCtx := setupFullDNSTestDB(t)
 	ctx := context.Background()
 	rv := origin.NewResolver(p.db)
 
-	// Warm the cache while the instance has no domains at all. Both answers
-	// below are now held for ttl unless a write invalidates them.
 	if rv.AnyRegistered() {
 		t.Fatal("a database with no domain rows reported a registered whitelist")
 	}
@@ -70,8 +57,6 @@ func TestDomainWritesInvalidateOriginCache(t *testing.T) {
 	}
 }
 
-// TestPurgeInvalidatesOriginCache covers workspace deletion, which drops the
-// rows in bulk without ever loading them — the path a GORM hook would miss.
 func TestPurgeInvalidatesOriginCache(t *testing.T) {
 	p, _ := setupFullDNSTestDB(t)
 	rv := origin.NewResolver(p.db)

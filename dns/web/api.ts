@@ -1,4 +1,3 @@
-// DNS feature API surface — domain lifecycle, DNS record CRUD, and DNS verification.
 
 import { req } from "@octarq/plugin-sdk";
 

@@ -76,7 +76,6 @@ func TestOTPAuth_BuildURI(t *testing.T) {
 		t.Errorf("URI missing issuer: %s", uri)
 	}
 
-	// Re-parsing built URI should match
 	parsed, parsedSec, err := ParseOTPAuthURI(uri)
 	if err != nil {
 		t.Fatalf("Re-parsing built URI failed: %v", err)
@@ -97,7 +96,6 @@ func TestOTPAuth_QRCode(t *testing.T) {
 		t.Fatalf("GenerateQRCodePNG failed: %v", err)
 	}
 
-	// PNG file signature: \x89PNG\r\n\x1a\n
 	pngHeader := []byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}
 	if !bytes.HasPrefix(pngBytes, pngHeader) {
 		t.Fatalf("Generated data is not a valid PNG")

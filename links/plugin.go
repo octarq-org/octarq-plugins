@@ -30,10 +30,8 @@ type Plugin struct {
 	host                plugin.Host
 }
 
-// Host returns the host runtime interface.
 func (p *Plugin) Host() plugin.Host { return p.host }
 
-// SetHost sets the host runtime interface.
 func (p *Plugin) SetHost(h plugin.Host) { p.host = h }
 
 var (
@@ -44,9 +42,6 @@ var (
 	_ plugin.Starter      = (*Plugin)(nil)
 )
 
-// Compile-time service contract assertions: these methods are provided to the
-// registry under the named contract types in Mount. A signature drift here
-// fails the build instead of silently breaking consumers' LookupServiceAs.
 var (
 	_ plugin.ExportFunc   = (*Plugin)(nil).exportData
 	_ plugin.PurgeFunc    = (*Plugin)(nil).purge
@@ -75,10 +70,6 @@ func (p *Plugin) Models() []any {
 	return []any{&Link{}, &LinkEvent{}}
 }
 
-// docs is this plugin's documentation directory. Adding a page means adding
-// "docs/<slug>.mdx" (plus its "<slug>.zh.mdx" translation) — the file name is
-// the slug and the frontmatter carries the rest; see plugin.HelpDocsFS.
-//
 //go:embed docs
 var docs embed.FS
 
@@ -146,12 +137,6 @@ func splitList(s string) []string {
 	return out
 }
 
-// hasRole reports whether the caller holds at least the given workspace role.
-//
-// A host that never wired RequireRole is refused rather than waved through. The
-// gate protects destructive and credential-bearing operations, so "the host did
-// not tell us who this is" has to mean no, not yes — an unwired seam would
-// otherwise silently disable every role check in this plugin.
 func (p *Plugin) hasRole(r *http.Request, min string) bool {
 	if p.requireRole == nil {
 		return false

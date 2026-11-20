@@ -6,9 +6,6 @@ import (
 	"strings"
 )
 
-// ExtractUnsubscribeURL extracts a valid unsubscribe URL from raw RFC822 MIME bytes.
-// It parses the List-Unsubscribe header according to RFC 2369 / RFC 8058,
-// preferring HTTP(S) URLs over mailto: targets.
 func ExtractUnsubscribeURL(raw []byte) string {
 	if len(raw) == 0 {
 		return ""
@@ -32,7 +29,6 @@ func extractFromRawHeaders(rawText string) string {
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
-			// End of header section
 			break
 		}
 		if len(trimmed) > 17 && strings.EqualFold(trimmed[:17], "List-Unsubscribe:") {
@@ -42,8 +38,6 @@ func extractFromRawHeaders(rawText string) string {
 	return ""
 }
 
-// ParseListUnsubscribeHeader cleans and parses a List-Unsubscribe header value.
-// It extracts bracketed or unbracketed URLs, preferring HTTP/HTTPS over mailto.
 func ParseListUnsubscribeHeader(hdr string) string {
 	cleaned := strings.TrimSpace(hdr)
 	if cleaned == "" {
@@ -53,11 +47,9 @@ func ParseListUnsubscribeHeader(hdr string) string {
 	var httpURL string
 	var mailtoURL string
 
-	// RFC 2369 items are separated by commas and enclosed in <...>
 	parts := strings.Split(cleaned, ",")
 	for _, p := range parts {
 		item := strings.TrimSpace(p)
-		// Extract inside < > if present
 		if start := strings.Index(item, "<"); start >= 0 {
 			if end := strings.Index(item[start+1:], ">"); end >= 0 {
 				item = strings.TrimSpace(item[start+1 : start+1+end])

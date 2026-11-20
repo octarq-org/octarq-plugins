@@ -8,11 +8,6 @@ import (
 	"github.com/octarq-org/octarq-plugins/pt/adapters/rousi"
 )
 
-// buildRegistry compiles in every supported dialect.
-//
-// Domain hints only preselect the schema in the add form. The stored schema is
-// always the one the user confirmed, because the NexusPHP family has branches
-// that no probe can tell apart reliably.
 func buildRegistry() *adapter.Registry {
 	r := adapter.NewRegistry()
 	r.MustRegister(nexusphp.New())

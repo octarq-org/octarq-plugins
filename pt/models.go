@@ -2,62 +2,38 @@ package pt
 
 import "time"
 
-// PTTracker is one private-tracker account. A row belongs to one user and
-// lives in that user's personal org: a team admin in the same workspace can
-// never see it.
-//
-// Credentials are not here. They live in the core VaultService so that a query
-// that lists trackers never loads ciphertext, and so a credential wipe does not
-// destroy the tracker's history.
 type PTTracker struct {
 	ID        uint      `gorm:"primarykey" json:"id"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 
-	// OwnerUserID is the account the tracker belongs to. It is the identity
-	// behind the personal org, kept as its own column so a query can never
-	// return another member's row even if the org scope is mis-bound.
 	OwnerUserID uint `gorm:"column:owner_user_id;not null;index;uniqueIndex:idx_pt_tracker_owner_name,priority:1" json:"-"`
 
-	// OrgID is the owner's personal org. Indexed, not unique: two users never
-	// share a personal org, but nothing may depend on that.
 	OrgID uint `gorm:"column:org_id;not null;index" json:"-"`
 
 	Name string `gorm:"size:120;not null;uniqueIndex:idx_pt_tracker_owner_name,priority:2" json:"name"`
 
-	// SecretID anchors the credential's KeyName in VaultService.
-	// It is generated once at creation and never changes, so renaming a
-	// tracker or correcting its schema cannot break the credential key.
 	SecretID    string `gorm:"size:64;not null;uniqueIndex" json:"-"`
 	VaultItemID uint   `gorm:"index" json:"-"`
 
-	BaseURL string `gorm:"size:512;not null" json:"base_url"`
-	// APIBaseURL is separate because the API host is not always derived from
-	// the site host (M-Team serves the site at kp.m-team.cc and the API at
-	// api.m-team.cc).
+	BaseURL    string `gorm:"size:512;not null" json:"base_url"`
 	APIBaseURL string `gorm:"size:512" json:"api_base_url,omitempty"`
 	Domain     string `gorm:"size:255;not null;index" json:"domain"`
 	SchemaKey  string `gorm:"column:schema_key;size:32;not null;index" json:"schema"`
 
-	// Username is the site account name. The matching login secret is stored
-	// encrypted in VaultService, never in this row.
 	Username  string `gorm:"size:255" json:"username,omitempty"`
 	UserAgent string `gorm:"size:512" json:"user_agent,omitempty"`
-	// Timezone is an IANA name. Empty means server local time.
-	Timezone string `gorm:"size:64" json:"timezone,omitempty"`
+	Timezone  string `gorm:"size:64" json:"timezone,omitempty"`
 
 	Enabled       bool `gorm:"not null;default:true" json:"enabled"`
 	SigninEnabled bool `gorm:"not null;default:true" json:"signin_enabled"`
 
-	// SigninWindowStartMin/EndMin are minutes from local midnight. 0/0 means
-	// any time. End <= Start means the window crosses midnight.
 	SigninWindowStartMin int `gorm:"not null;default:0" json:"signin_window_start_min"`
 	SigninWindowEndMin   int `gorm:"not null;default:0" json:"signin_window_end_min"`
 
 	StatsIntervalHours int `gorm:"not null;default:6" json:"stats_interval_hours"`
 	TimeoutSeconds     int `gorm:"not null;default:20" json:"timeout_seconds"`
 
-	// Rate limiting knobs. Zero means the adapter default applies.
 	LimitIntervalSeconds int `gorm:"not null;default:0" json:"limit_interval_seconds"`
 	LimitCount           int `gorm:"not null;default:0" json:"limit_count"`
 	LimitSeconds         int `gorm:"not null;default:0" json:"limit_seconds"`
@@ -73,8 +49,6 @@ type PTTracker struct {
 	NextSigninAt      *time.Time `gorm:"index" json:"next_signin_at,omitempty"`
 	NextStatsAt       *time.Time `gorm:"index" json:"next_stats_at,omitempty"`
 
-	// NeedsManualAction pauses automation until a human supplies a new
-	// credential (captcha, Cloudflare, interactive 2FA).
 	NeedsManualAction bool   `gorm:"not null;default:false;index" json:"needs_manual_action"`
 	ManualReason      string `gorm:"size:64" json:"manual_reason,omitempty"`
 
@@ -89,15 +63,8 @@ type PTTracker struct {
 	CreatedByUserID  uint  `gorm:"index" json:"created_by_user_id,omitempty"`
 }
 
-// TableName pins the table name; core migrations are dialect-neutral and the
-// pt_ prefix keeps this plugin's tables out of every other module's namespace.
 func (PTTracker) TableName() string { return "pt_trackers" }
 
-// PTSnapshot is one immutable statistics capture.
-//
-// Every metric is a pointer on purpose: a nil means "the site did not expose
-// this", which is not the same fact as zero. Zeroing unknowns would make a
-// suspended tracker look healthy.
 type PTSnapshot struct {
 	ID        uint      `gorm:"primarykey" json:"id"`
 	CreatedAt time.Time `json:"created_at"`
@@ -134,11 +101,6 @@ type PTSnapshot struct {
 
 func (PTSnapshot) TableName() string { return "pt_snapshots" }
 
-// PTSigninResult is one sign-in attempt and its typed outcome.
-//
-// The table is a ledger, not a flag: "already signed" and "sign-in succeeded"
-// are different facts, and "logged in but the site never confirmed the
-// sign-in" is a third one that must never be reported as success.
 type PTSigninResult struct {
 	ID        uint      `gorm:"primarykey" json:"id"`
 	CreatedAt time.Time `json:"created_at"`

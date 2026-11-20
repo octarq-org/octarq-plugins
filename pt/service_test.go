@@ -19,8 +19,6 @@ import (
 	"github.com/octarq-org/octarq-plugins/pt/adapter"
 )
 
-// ---------- fake host ----------
-
 type fakeSession struct{}
 
 func (fakeSession) UserID(*http.Request) uint                      { return 7 }
@@ -32,7 +30,6 @@ func (fakeSession) RequirePerm(*http.Request, string, string) bool { return true
 func (fakeSession) IsInstanceAdmin(*http.Request) bool             { return true }
 func (fakeSession) RevokeUserOrgSessions(uint, uint) int           { return 0 }
 
-// fakeHost embeds the interface so only the methods a test needs are real.
 type fakeHost struct {
 	plugin.Host
 	db *gorm.DB
@@ -47,8 +44,6 @@ func (h *fakeHost) TenantDB(orgID uint) *plugin.TenantDB {
 	}
 	return tdb
 }
-
-// ---------- fake NexusPHP site ----------
 
 type fakeSite struct {
 	server         *httptest.Server
@@ -76,7 +71,6 @@ func newFakeSite(t *testing.T) *fakeSite {
 </form>
 </body></html>`
 
-	// A session is a cookie the login endpoint issued, not any cookie at all.
 	authed := func(r *http.Request) bool {
 		c, err := r.Cookie("c_secure_uid")
 		return err == nil && c.Value == "42"
@@ -122,8 +116,6 @@ func newFakeSite(t *testing.T) *fakeSite {
 	return f
 }
 
-// ---------- fixture ----------
-
 type fixture struct {
 	plugin *Plugin
 	db     *gorm.DB
@@ -161,7 +153,6 @@ func newFixture(t *testing.T) *fixture {
 	return f
 }
 
-// createTracker inserts a tracker row and its Vault-backed credential.
 func (f *fixture) createTracker(t *testing.T, orgID, ownerUserID uint, name string, secret storedSecret) *PTTracker {
 	t.Helper()
 	ctx := context.Background()
@@ -198,8 +189,6 @@ func (f *fixture) createTracker(t *testing.T, orgID, ownerUserID uint, name stri
 	}
 	return tracker
 }
-
-// ---------- tests ----------
 
 func TestLoginStoresEncryptedCookie(t *testing.T) {
 	f := newFixture(t)
@@ -291,7 +280,6 @@ func TestSigninIsOncePerDay(t *testing.T) {
 		t.Fatalf("the site was contacted again: %d -> %d", requests, got)
 	}
 
-	// force bypasses the ledger on purpose, once the domain gap has passed.
 	f.now = f.now.Add(10 * time.Minute)
 	if _, err := f.plugin.signin(ctx, tracker, triggerManual, true); err != nil {
 		t.Fatalf("forced signin: %v", err)
@@ -307,31 +295,24 @@ func TestCredentialIsBoundToWorkspaceAndTracker(t *testing.T) {
 	first := f.createTracker(t, 1, 7, "first", storedSecret{Login: "secret"})
 	second := f.createTracker(t, 1, 7, "second", storedSecret{Login: "other"})
 
-	// First tracker's Vault item belongs only to org 1 and returns "secret".
 	sec1, err := f.vault.GetSecret(ctx, 1, first.VaultItemID)
 	if err != nil || sec1.Payload["login"] != "secret" {
 		t.Fatalf("org 1 read first: %+v, %v", sec1, err)
 	}
-	// Second tracker has a distinct VaultItemID.
 	if first.VaultItemID == second.VaultItemID {
 		t.Fatal("trackers share the same VaultItemID")
 	}
-	// Cross-workspace read fails closed.
 	if _, err := f.vault.GetSecret(ctx, 2, first.VaultItemID); !errors.Is(err, plugin.ErrSecretNotFound) {
 		t.Fatalf("expected ErrSecretNotFound across workspaces, got %v", err)
 	}
 }
 
-// TestVaultRefusesAnotherOwnersItem proves the owner check inside the vault
-// paths: an item id that resolves in the same personal org still refuses to
-// reveal, update, or shred when the owner does not match.
 func TestVaultRefusesAnotherOwnersItem(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	mine := f.createTracker(t, 1, 7, "mine", storedSecret{Login: "secret"})
 	theirs := f.createTracker(t, 1, 8, "theirs", storedSecret{Login: "other"})
 
-	// Simulate a mis-bound row: another owner's item id on this tracker.
 	theirs.VaultItemID = mine.VaultItemID
 
 	sec, err := f.plugin.readVaultSecret(ctx, theirs)
@@ -349,7 +330,6 @@ func TestVaultRefusesAnotherOwnersItem(t *testing.T) {
 		t.Fatalf("shred of another owner's item = %v", err)
 	}
 
-	// The original item survived and still holds its own payload.
 	kept, err := f.vault.GetSecret(ctx, 1, mine.VaultItemID)
 	if err != nil {
 		t.Fatalf("owner's item was damaged: %v", err)
@@ -359,8 +339,6 @@ func TestVaultRefusesAnotherOwnersItem(t *testing.T) {
 	}
 }
 
-// TestListTrackersIsOwnerScoped keeps the owner filter honest even inside one
-// personal org: a mis-bound row never appears in another account's list.
 func TestListTrackersIsOwnerScoped(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
@@ -397,7 +375,6 @@ func TestTenantIsolation(t *testing.T) {
 	if _, err := f.plugin.findTracker(ctx, 2, 7, tracker.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("cross-org lookup = %v", err)
 	}
-	// Same personal org, another account: the owner filter must hide the row.
 	if _, err := f.plugin.findTracker(ctx, 1, 8, tracker.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("cross-owner lookup = %v", err)
 	}
@@ -451,7 +428,6 @@ func TestCronSignsInDueTracker(t *testing.T) {
 	ctx := context.Background()
 	tracker := f.createTracker(t, 1, 7, "demo", storedSecret{Login: "secret"})
 
-	// A tracker with no planned run is due immediately.
 	if err := f.plugin.runTick(ctx); err != nil {
 		t.Fatalf("tick: %v", err)
 	}
@@ -481,7 +457,6 @@ func TestCronSkipsTrackersOutsideTheWindow(t *testing.T) {
 	ctx := context.Background()
 	tracker := f.createTracker(t, 1, 7, "demo", storedSecret{Login: "secret"})
 
-	// Window 22:00–23:00 UTC; the fixture clock is 09:00 UTC.
 	tracker.SigninWindowStartMin = 22 * 60
 	tracker.SigninWindowEndMin = 23 * 60
 	if err := f.plugin.saveTracker(ctx, tracker); err != nil {

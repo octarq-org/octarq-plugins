@@ -248,7 +248,6 @@ func (m *mockVaultService) ComputeTOTP(context.Context, uint, uint) (string, int
 	return "", 0, errors.New("not supported")
 }
 
-// seedVaultSMTPSender seeds an SMTPSender row backed by a VaultService secret.
 func seedVaultSMTPSender(p *Plugin, s SMTPSender, pass string) (SMTPSender, error) {
 	vs, err := p.vault()
 	if err != nil {

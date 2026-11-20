@@ -9,9 +9,6 @@ import (
 	"time"
 )
 
-// TestChallengerM1_ConcurrentLinkCreationProgrammatic tests that when 50 concurrent goroutines
-// invoke CreateLink via the plugin.LinkCreator SPI, each gets a unique slug, all 50 are inserted
-// without database collisions or race conditions, and zero crashes occur under -race.
 func TestChallengerM1_ConcurrentLinkCreationProgrammatic(t *testing.T) {
 	db := setupLinksTestDB(t)
 
@@ -52,7 +49,6 @@ func TestChallengerM1_ConcurrentLinkCreationProgrammatic(t *testing.T) {
 		t.Fatalf("expected all %d creations to succeed, got %d", workers, successCount.Load())
 	}
 
-	// Verify 50 rows exist in DB for Org 1
 	var count int64
 	if err := db.Model(&Link{}).Where("owner_id = ?", 1).Count(&count).Error; err != nil {
 		t.Fatalf("count links: %v", err)
@@ -62,8 +58,6 @@ func TestChallengerM1_ConcurrentLinkCreationProgrammatic(t *testing.T) {
 	}
 }
 
-// TestChallengerM1_CreateLinkMaliciousTargets tests that CreateLink strictly rejects dangerous
-// schemes (javascript, vbscript, data) and invalid targets without panic.
 func TestChallengerM1_CreateLinkMaliciousTargets(t *testing.T) {
 	db := setupLinksTestDB(t)
 	p := &Plugin{
@@ -86,15 +80,12 @@ func TestChallengerM1_CreateLinkMaliciousTargets(t *testing.T) {
 		}
 	}
 
-	// OrgID 0 must strictly fail closed
 	_, err := p.CreateLink(context.Background(), 0, "https://example.com")
 	if err == nil {
 		t.Error("expected error for orgID=0, got nil")
 	}
 }
 
-// TestChallengerM1_ClickEngineQueueStress stress-tests the click pipeline with concurrent
-// events to ensure non-blocking ingestion and graceful shutdown without leaks.
 func TestChallengerM1_ClickEngineQueueStress(t *testing.T) {
 	eng, db := newTestPipelineEngine(t)
 	defer eng.Close()

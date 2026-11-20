@@ -12,8 +12,6 @@ import (
 	"github.com/octarq-org/octarq-plugins/pt/adapter"
 )
 
-// errNoPersonalSpace refuses a tool call from an account with no personal org.
-// The active workspace is never a substitute.
 var errNoPersonalSpace = plugin.NewAgentError(
 	403,
 	"FORBIDDEN_NO_PERSONAL_SPACE",
@@ -22,8 +20,6 @@ var errNoPersonalSpace = plugin.NewAgentError(
 	false,
 )
 
-// errNoActor refuses a tool call that carries no user. Personal data is only
-// readable by the account that owns it.
 var errNoActor = plugin.NewAgentError(
 	401,
 	"UNAUTHORIZED_NO_ACTOR",
@@ -32,8 +28,6 @@ var errNoActor = plugin.NewAgentError(
 	false,
 )
 
-// errNoRole refuses a write tool called over a transport that carries no
-// identity. The stdio transport stamps a user but no token role.
 var errNoRole = plugin.NewAgentError(
 	403,
 	"FORBIDDEN_NO_ROLE",
@@ -42,12 +36,8 @@ var errNoRole = plugin.NewAgentError(
 	false,
 )
 
-// MCPTier reports the license tier these tools require. The plugin ships in the
-// Pro build only, so no per-tool tier applies.
 func (*Plugin) MCPTier() string { return "" }
 
-// RegisterMCP publishes the read tools and the two member actions. There is no
-// tool that changes configuration or reads credentials.
 func (p *Plugin) RegisterMCP(srv *mcp.Server) {
 	plugin.AddMCPTool(srv, "pt", &mcp.Tool{
 		Name:        "pt_list_trackers",
@@ -64,9 +54,6 @@ func (p *Plugin) RegisterMCP(srv *mcp.Server) {
 		Description: "Read the statistics history of one tracker, newest first.",
 	}, p.mcpTrackerHistory)
 
-	// The write tools decrypt a stored credential. The stdio composition
-	// mounts with a no-op host, so registering them there would expose tools
-	// that fail on every call.
 	if !p.vaultAvailable() {
 		return
 	}
@@ -82,7 +69,6 @@ func (p *Plugin) RegisterMCP(srv *mcp.Server) {
 	}, p.mcpRefreshStats)
 }
 
-// vaultAvailable reports whether this mount can resolve VaultService.
 func (p *Plugin) vaultAvailable() bool {
 	_, err := p.vault()
 	return err == nil
@@ -161,9 +147,6 @@ type mcpSigninOut struct {
 	NextSigninAt *time.Time `json:"next_signin_at,omitempty"`
 }
 
-// personalScope resolves the calling account and its personal org. Both are
-// required: a zero user or a zero org refuses the call instead of falling back
-// to the active workspace.
 func (p *Plugin) personalScope(ctx context.Context) (orgID, uid uint, err error) {
 	uid = plugin.UserIDFromContext(ctx)
 	if uid == 0 {
@@ -287,7 +270,6 @@ func (p *Plugin) mcpRefreshStats(ctx context.Context, _ *mcp.CallToolRequest, in
 	return nil, statsOut(snap), nil
 }
 
-// resolveTracker loads a tracker by id, or by name when no id is given.
 func (p *Plugin) resolveTracker(ctx context.Context, orgID, ownerUserID, id uint, name string) (*PTTracker, error) {
 	if id != 0 {
 		t, err := p.findTracker(ctx, orgID, ownerUserID, id)
@@ -370,8 +352,6 @@ func statsOut(snap *PTSnapshot) mcpStatsOut {
 	}
 }
 
-// toolError turns an internal failure into an agent error without leaking
-// internals. The tenant and vault cases keep their distinct codes.
 func toolError(err error) error {
 	switch {
 	case errors.Is(err, errTenantUnavailable), errors.Is(err, errVaultUnavailable):

@@ -42,9 +42,6 @@ export function DomainListHub({
         reason={t("domains.addFirstDomain")}
         detail={
           <>
-            {/* Empty renders detail inside one paragraph, so these lines are
-                block-level spans: a nested <p> would split the element and
-                drop the styling. */}
             <span className="block text-sm text-muted-foreground leading-relaxed">{t("domains.addFirstDomainHint")}</span>
             {accounts.length > 0 ? (
               <span className="mt-3 block text-xs text-muted-foreground">
@@ -86,7 +83,6 @@ export function DomainListHub({
 
   return (
     <div className="space-y-4">
-      {/* Filter bar and quick stats */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 flex-1 max-w-md">
           <Input
@@ -191,7 +187,6 @@ export function DomainListHub({
                   </div>
 
                   <div className="flex items-center gap-3 shrink-0">
-                    {/* Service Toggles */}
                     <div className="flex items-center gap-2 bg-well px-3 py-1.5 rounded-lg border border-border">
                       <button
                         type="button"
@@ -227,7 +222,6 @@ export function DomainListHub({
                       </button>
                     </div>
 
-                    {/* Quick Actions */}
                     <Button
                       variant="primary"
                       className="text-xs py-1.5 px-3 gap-1.5"

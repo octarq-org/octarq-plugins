@@ -12,10 +12,6 @@ import (
 	"testing"
 )
 
-// startTestSMPListener serves one minimal SMTP conversation on loopback so
-// testSMTPSender's delivery can be observed end to end. Loopback dials are
-// already permitted package-wide by TestMain — do not touch the global here:
-// a cleanup that flips it off mid-run kills parallel tests' in-flight dials.
 func startTestSMPListener(t *testing.T) (port string, received func() []string) {
 	t.Helper()
 
@@ -133,7 +129,7 @@ func TestSMTPSenderTest_DeliversThroughSender(t *testing.T) {
 	ctx := context.Background()
 
 	port, received := startTestSMPListener(t)
-	hostNum := 1 // setupFullMailTestDB pins X-Org-ID=1
+	hostNum := 1
 	id := seedTestSender(t, p, uint(hostNum), "127.0.0.1", mustAtoi(t, port))
 
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
@@ -158,7 +154,6 @@ func TestSMTPSenderTest_FailureIsActionable(t *testing.T) {
 	wipeMailTables(t, p)
 	ctx := context.Background()
 
-	// A port with no listener surfaces the dial error verbatim.
 	id := seedTestSender(t, p, 1, "127.0.0.1", closedPort(t))
 	_, err := p.testSMTPSender(ctx, &TestSMTPSenderInput{Ctx: mkCtx(httptest.NewRequest(http.MethodPost, "/", nil)), ID: id})
 	if err == nil {
@@ -178,8 +173,6 @@ func mustAtoi(t *testing.T, s string) int {
 	return n
 }
 
-// closedPort grabs a listening socket and closes it, leaving a port that
-// refuses connections for the lifetime of the test.
 func closedPort(t *testing.T) int {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -200,13 +193,10 @@ func TestSMTPSenderTest_RateLimit(t *testing.T) {
 	id := seedTestSender(t, p, 1, "127.0.0.1", closedPort(t))
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
 
-	// Consume the 10 allowed attempts
 	for i := 0; i < 10; i++ {
-		// Even when delivery fails (closed port), the rate limiter records the attempt
 		_, _ = p.testSMTPSender(ctx, &TestSMTPSenderInput{Ctx: mkCtx(req), ID: id})
 	}
 
-	// 11th attempt must be rejected with 429 rate limit error
 	_, err := p.testSMTPSender(ctx, &TestSMTPSenderInput{Ctx: mkCtx(req), ID: id})
 	if err == nil {
 		t.Fatal("expected rate limit error, got nil")

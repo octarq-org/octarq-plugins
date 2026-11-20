@@ -15,10 +15,8 @@ func TestMailboxRoleGate_CreateMailbox_ForbiddenForMember(t *testing.T) {
 	p, mkCtx := setupFullMailTestDB(t)
 	ctx := context.Background()
 
-	// createMailbox lowercases addresses, so use lower-cased name for comparisons
 	lowerName := strings.ToLower(t.Name())
 
-	// Member attempts to create a mailbox with valid input
 	req := httptest.NewRequest(http.MethodPost, "/api/mailboxes", nil)
 	req.Header.Set("X-Role", "member")
 	in := &CreateMailboxInput{
@@ -36,14 +34,12 @@ func TestMailboxRoleGate_CreateMailbox_ForbiddenForMember(t *testing.T) {
 		t.Fatalf("expected 403 StatusForbidden, got %v", err)
 	}
 
-	// Verify no DB write occurred
 	var count int64
 	p.db.Model(&Mailbox{}).Where("address = ?", "member-created@"+lowerName+".example.com").Count(&count)
 	if count != 0 {
 		t.Fatalf("expected 0 mailbox in DB, found %d (member write bypassed gate!)", count)
 	}
 
-	// Member attempts to create mailbox with invalid input (no @) -> must still fail at role gate (403, not 400)
 	reqBad := httptest.NewRequest(http.MethodPost, "/api/mailboxes", nil)
 	reqBad.Header.Set("X-Role", "member")
 	inBad := &CreateMailboxInput{
@@ -65,7 +61,6 @@ func TestMailboxRoleGate_CreateMailbox_AllowedForAdmin(t *testing.T) {
 	p, mkCtx := setupFullMailTestDB(t)
 	ctx := context.Background()
 
-	// createMailbox lowercases the address; match that here
 	lowerName := strings.ToLower(t.Name())
 
 	req := httptest.NewRequest(http.MethodPost, "/api/mailboxes", nil)
@@ -88,7 +83,6 @@ func TestMailboxRoleGate_UpdateMailbox_ForbiddenForMember(t *testing.T) {
 	p, mkCtx := setupFullMailTestDB(t)
 	ctx := context.Background()
 
-	// Seed existing mailbox
 	mb := Mailbox{OrgID: 1, Address: "existing@" + t.Name() + ".example.com", Note: "Original Note", Enabled: true}
 	if err := p.db.Create(&mb).Error; err != nil {
 		t.Fatalf("seed mailbox error: %v", err)
@@ -113,7 +107,6 @@ func TestMailboxRoleGate_UpdateMailbox_ForbiddenForMember(t *testing.T) {
 		t.Fatalf("expected 403 StatusForbidden, got %v", err)
 	}
 
-	// Verify DB state was NOT modified
 	var fresh Mailbox
 	p.db.First(&fresh, mb.ID)
 	if fresh.Note != "Original Note" || !fresh.Enabled {
@@ -149,7 +142,6 @@ func TestMailboxRoleGate_NonGatedEndpoint_AllowedForMember(t *testing.T) {
 	p, mkCtx := setupFullMailTestDB(t)
 	ctx := context.Background()
 
-	// Seed mailbox & email
 	mb := Mailbox{OrgID: 1, Address: "inbox@" + t.Name() + ".example.com", Enabled: true}
 	p.db.Create(&mb)
 
@@ -163,7 +155,6 @@ func TestMailboxRoleGate_NonGatedEndpoint_AllowedForMember(t *testing.T) {
 	}
 	p.db.Create(&email)
 
-	// Member updates email read state (non-gated operation)
 	req := httptest.NewRequest(http.MethodPut, "/api/emails/1", nil)
 	req.Header.Set("X-Role", "member")
 	bTrue := true

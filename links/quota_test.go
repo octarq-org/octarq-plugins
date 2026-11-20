@@ -18,8 +18,6 @@ func (f fakeQuotaChecker) Check(_ context.Context, _ uint, _ string, _ int64) er
 	return f.err
 }
 
-// withQuotaChecker swaps in a plugin.Context whose Lookup serves a QuotaChecker
-// always returning err; pass nil as checker to register no checker at all.
 func withQuotaChecker(p *Plugin, checker plugin.QuotaChecker) {
 	p.ctx = &plugin.Context{
 		Lookup: func(name string) (any, bool) {
@@ -44,8 +42,6 @@ func statusOf(t *testing.T, err error) int {
 	return se.GetStatus()
 }
 
-// No checker registered (self-hosted) must behave exactly as before the seam
-// existed: creation just works.
 func TestCreateLinkNoQuotaCheckerCreates(t *testing.T) {
 	t.Parallel()
 	p, mkCtx := setupFullLinksTestDB(t)
@@ -67,8 +63,6 @@ func TestCreateLinkNoQuotaCheckerCreates(t *testing.T) {
 	}
 }
 
-// Exceeded quota → 429, and crucially no row is written (the refusal must not
-// leave a half-created link behind).
 func TestCreateLinkQuotaExceededBlocksAndWritesNothing(t *testing.T) {
 	t.Parallel()
 	p, mkCtx := setupFullLinksTestDB(t)
@@ -88,8 +82,6 @@ func TestCreateLinkQuotaExceededBlocksAndWritesNothing(t *testing.T) {
 	}
 }
 
-// Unavailable (plan lacks the capability) → 402, not 429. The two must stay
-// distinct: one is "used up", the other is "upgrade to get this".
 func TestCreateLinkQuotaUnavailableIs402(t *testing.T) {
 	t.Parallel()
 	p, mkCtx := setupFullLinksTestDB(t)
@@ -109,8 +101,6 @@ func TestCreateLinkQuotaUnavailableIs402(t *testing.T) {
 	}
 }
 
-// quickCreateLink is a second door into the same table; leaving it ungated
-// would make the createLink gate cosmetic.
 func TestQuickCreateLinkQuotaExceededBlocks(t *testing.T) {
 	t.Parallel()
 	p, mkCtx := setupFullLinksTestDB(t)
@@ -144,8 +134,6 @@ func TestQuickCreateLinkQuotaUnavailableIs402(t *testing.T) {
 	}
 }
 
-// A host whose Context.Lookup is nil (old host / MCP composition) must not
-// panic — it must read as "no checker".
 func TestCreateLinkNilLookupNoPanic(t *testing.T) {
 	t.Parallel()
 	p, mkCtx := setupFullLinksTestDB(t)

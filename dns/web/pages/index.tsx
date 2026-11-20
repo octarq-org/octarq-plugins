@@ -108,8 +108,6 @@ export default function DomainsPage() {
           credentials: "same-origin",
         });
         if (res.status === 404) {
-          // Core Vault is unavailable on this instance: domain forms must offer
-          // the local provider_accounts registry instead of an empty list.
           const local = await dnsApi.providerAccounts();
           if (!cancelled) setAccounts(local);
           return;

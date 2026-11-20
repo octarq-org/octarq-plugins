@@ -15,21 +15,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// TestNotifyReceivesStoredConfigVerbatim is the regression test for a silent
-// delivery failure.
-//
-// Notification channel configs are encrypted at rest. The mail plugin used to
-// json.Unmarshal the stored value into a map and hand that to the core, which
-// re-marshalled it. Once configs were encrypted the unmarshal failed, the error
-// was discarded (`json.Unmarshal(...)` with no error check), the map stayed nil,
-// and every inbound-email and reputation notification went out with an empty
-// config — silently, forever.
-//
-// The contract now is: the plugin passes the stored value through untouched and
-// the core's dispatch owns the decrypt. This test pins that by asserting the
-// exact bytes the plugin forwards.
 func TestNotifyReceivesStoredConfigVerbatim(t *testing.T) {
-	const stored = "v1:AAAABBBBCCCC==" // shaped like ciphertext: not valid JSON
+	const stored = "v1:AAAABBBBCCCC=="
 
 	var gotType, gotConfig, gotText string
 	calls := 0
@@ -62,9 +49,6 @@ func TestNotifyReceivesStoredConfigVerbatim(t *testing.T) {
 	}
 }
 
-// TestEncryptedConfigReachesProvider drives the whole path the webhook uses —
-// stored ciphertext → plugin → core dispatch → registered provider — and asserts
-// the provider is handed decrypted, parseable JSON.
 func TestEncryptedConfigReachesProvider(t *testing.T) {
 	plain := `{"botToken":"secret-token","chatId":"42"}`
 	const sealed = "sealed:" + `{"botToken":"secret-token","chatId":"42"}`
@@ -105,10 +89,6 @@ func TestEncryptedConfigReachesProvider(t *testing.T) {
 	}
 }
 
-// TestInboundWebhookForwardsStoredConfig covers the actual call site. The two
-// tests above pin the wiring and the dispatch; this one drives a real inbound
-// delivery so that passing anything other than the stored config — the original
-// bug — is caught where it happened.
 func TestInboundWebhookForwardsStoredConfig(t *testing.T) {
 	const sealedConfig = "sealed:{\"botToken\":\"t\",\"chatId\":\"1\"}"
 
@@ -168,12 +148,6 @@ func TestInboundWebhookForwardsStoredConfig(t *testing.T) {
 	}
 }
 
-// Compile-time guard: notify must take the config as an opaque string. Typing it
-// as a parsed map is what made this plugin decode ciphertext in the first place,
-// so a change back to map[string]any should fail the build, not a test run.
-//
-// Written as a call rather than `var _ T = p.notify`, which staticcheck's QF1011
-// rejects for a "redundant" type — the type is the entire point here.
 func assertNotifyHookShape(func(ctx context.Context, kind, cfgJSON, message string) error) {}
 
 var _ = func(p *Plugin) { assertNotifyHookShape(p.notify) }

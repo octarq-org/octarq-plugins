@@ -71,7 +71,6 @@ func TestCoverageLift_DNSPodCreateRecord_WithPriority(t *testing.T) {
 }
 
 func TestCoverageLift_DNSPodUpdateRecord_WithTTLAndError(t *testing.T) {
-	// 1. Success with TTL > 0 and Priority
 	dSuccess := newDNSPodServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{
 			"Response": {
@@ -98,7 +97,6 @@ func TestCoverageLift_DNSPodUpdateRecord_WithTTLAndError(t *testing.T) {
 		t.Errorf("expected record ID 12345, got %q", rec.ID)
 	}
 
-	// 2. Error case triggering line 188-189
 	dErr := newDNSPodServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(`Internal Server Error`))

@@ -15,7 +15,7 @@ export function AuthBadges({
     if (!result || result === "none" || result === "") return null;
     const pass = result === "pass";
     const warn = result === "softfail" || result === "neutral";
-    if (compact && pass) return null; // only show problems in list view
+    if (compact && pass) return null;
 
     let tone: "success" | "warning" | "danger" = "danger";
     if (pass) tone = "success";

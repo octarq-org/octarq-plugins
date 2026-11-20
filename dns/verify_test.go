@@ -27,7 +27,7 @@ func openMemDB(t *testing.T) *gorm.DB {
 }
 
 func newVerifyHarness(t *testing.T) (*Plugin, http.Handler, *gorm.DB) {
-	db := openMemDB(t) // sqlite :memory:, AutoMigrate models.AllModels()
+	db := openMemDB(t)
 	mux := http.NewServeMux()
 	api := humago.New(mux, huma.DefaultConfig("t", "1.0"))
 	p := New()
@@ -66,7 +66,6 @@ func TestVerifyDNS(t *testing.T) {
 		t.Fatalf("failed to create domain: %v", err)
 	}
 
-	// 1. Stub healthy records
 	p.lookupTXT = func(name string) ([]string, error) {
 		switch name {
 		case "mytestdomain.com":
@@ -118,14 +117,11 @@ func TestVerifyDNS(t *testing.T) {
 		t.Errorf("DKIM healthy check failed: %+v", res.Dkim)
 	}
 
-	// 2. Stub unhealthy records (missing/unhealthy)
 	p.lookupTXT = func(name string) ([]string, error) {
 		switch name {
 		case "mytestdomain.com":
-			// spf without v=spf1 prefix
 			return []string{"spf1 ~all"}, nil
 		case "_dmarc.mytestdomain.com":
-			// dmarc without p=
 			return []string{"v=DMARC1; pct=100"}, nil
 		default:
 			return nil, fmt.Errorf("dns lookup failed")
@@ -178,14 +174,13 @@ func TestVerifyDNSMailHosts(t *testing.T) {
 		MailHosts: hostlist.HostList{
 			{Host: "mytestdomain.com", Enabled: true},
 			{Host: "mail.mytestdomain.com", Enabled: true},
-			{Host: "old.mytestdomain.com", Enabled: false}, // disabled — must be skipped
+			{Host: "old.mytestdomain.com", Enabled: false},
 		},
 	}
 	if err := db.Create(&dom).Error; err != nil {
 		t.Fatalf("failed to create domain: %v", err)
 	}
 
-	// Apex is healthy; the subdomain has SPF only.
 	p.lookupTXT = func(name string) ([]string, error) {
 		switch name {
 		case "mytestdomain.com":
@@ -224,7 +219,6 @@ func TestVerifyDNSMailHosts(t *testing.T) {
 	if len(res.Hosts) != 2 {
 		t.Fatalf("expected 2 enabled mail hosts, got %d: %+v", len(res.Hosts), res.Hosts)
 	}
-	// Top-level mirrors the apex.
 	if !res.Spf.Set || !res.Spf.Healthy {
 		t.Errorf("top-level SPF should mirror healthy apex: %+v", res.Spf)
 	}
@@ -250,10 +244,10 @@ func TestVerifyDNSLinkHosts(t *testing.T) {
 		Name:    "mytestdomain.com",
 		ForLink: true,
 		LinkHosts: hostlist.HostList{
-			{Host: "go.mytestdomain.com", Enabled: true},   // CNAME into zone → healthy
-			{Host: "s.mytestdomain.com", Enabled: true},    // proxied/A-only → set, unverified
-			{Host: "dead.mytestdomain.com", Enabled: true}, // NXDOMAIN → not set
-			{Host: "off.mytestdomain.com", Enabled: false}, // disabled → skipped
+			{Host: "go.mytestdomain.com", Enabled: true},
+			{Host: "s.mytestdomain.com", Enabled: true},
+			{Host: "dead.mytestdomain.com", Enabled: true},
+			{Host: "off.mytestdomain.com", Enabled: false},
 		},
 	}
 	if err := db.Create(&dom).Error; err != nil {
@@ -266,7 +260,7 @@ func TestVerifyDNSLinkHosts(t *testing.T) {
 		case "go.mytestdomain.com":
 			return "mytestdomain.com.", nil
 		case "s.mytestdomain.com":
-			return "s.mytestdomain.com.", nil // flattened/A-only: resolves to self
+			return "s.mytestdomain.com.", nil
 		case "off.mytestdomain.com":
 			t.Errorf("disabled link host should not be probed")
 			return "", fmt.Errorf("should not happen")

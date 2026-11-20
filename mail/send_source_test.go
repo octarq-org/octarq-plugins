@@ -68,7 +68,6 @@ func TestSendEmailSourceScoping(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Local source sends through the local row's Vault item.
 	if _, err := p.sendEmail(ctx, buildSendInput(sendReq(t), local.ID, "local")); err != nil {
 		t.Fatalf("local send: %v", err)
 	}
@@ -76,7 +75,6 @@ func TestSendEmailSourceScoping(t *testing.T) {
 		t.Errorf("local relay did not receive the message:\n%s", localGot())
 	}
 
-	// Integration source sends through the Vault integration ID.
 	if _, err := p.sendEmail(ctx, buildSendInput(sendReq(t), hubMeta.ID, "integration")); err != nil {
 		t.Fatalf("integration send: %v", err)
 	}
@@ -84,7 +82,6 @@ func TestSendEmailSourceScoping(t *testing.T) {
 		t.Errorf("hub relay did not receive the message:\n%s", hubGot())
 	}
 
-	// An absent integration ID must not resolve to a local row.
 	orphanHost, orphanPort, orphanGot := captureSMTP(t)
 	orphan, err := seedVaultSMTPSender(p, SMTPSender{OrgID: 1, Name: "orphan", Host: orphanHost, Port: orphanPort, User: "u", FromEmail: "orphan@example.com"}, "pw")
 	if err != nil {
@@ -97,7 +94,6 @@ func TestSendEmailSourceScoping(t *testing.T) {
 		t.Error("an absent integration must not fall back to the local sender table")
 	}
 
-	// A missing or unknown source is refused.
 	for _, source := range []string{"", "hub"} {
 		if _, err := p.sendEmail(ctx, buildSendInput(sendReq(t), local.ID, source)); err == nil {
 			t.Errorf("source %q must be refused", source)

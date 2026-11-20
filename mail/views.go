@@ -6,7 +6,6 @@ import (
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
-// RegisterViews registers the core tenant view for emails.
 func RegisterViews(ctx *plugin.Context) {
 	if ctx == nil || ctx.RegisterTenantView == nil {
 		return

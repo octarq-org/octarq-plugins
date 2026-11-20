@@ -4,9 +4,6 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { I18nProvider } from "@octarq/plugin-sdk";
 
-// See links/pages/emptyState.test.tsx — same contract: the page's empty state
-// must render through the shared Empty primitive (tagged with a testid here),
-// never a handwritten copy.
 vi.mock("@octarq/plugin-sdk", async (importOriginal) => {
   const ui = await importOriginal<typeof import("@octarq/plugin-sdk")>();
   return {
@@ -56,10 +53,7 @@ describe("DomainsPage empty state", () => {
     );
 
     await waitFor(() => {
-      // One canonical empty state, not a left-column leftover + right-column
-      // guide pair (the regression this guards against).
       expect(screen.getAllByTestId("shared-empty").length).toBe(1);
-      // The stale left-column plain-text empty is gone with it.
       expect(screen.queryByText(/add your first domain on the right/i)).toBeNull();
     });
   });

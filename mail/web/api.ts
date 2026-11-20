@@ -1,5 +1,3 @@
-// Mail feature API surface — the slice of the JSON API owned by the mail plugin.
-// Fully self-contained without relative host leaks.
 
 import { req } from "@octarq/plugin-sdk";
 
@@ -91,10 +89,10 @@ export interface Email {
   unsubscribeUrl?: string;
   read: boolean;
   note: string;
-  attachments: string; // JSON string of Attachment[]
-  authSpf: string;     // pass|fail|softfail|neutral|none|""
-  authDkim: string;    // pass|fail|none|""
-  authDmarc: string;   // pass|fail|none|""
+  attachments: string;
+  authSpf: string;
+  authDkim: string;
+  authDmarc: string;
   receivedAt: string;
   category?: "bill" | "otp" | "marketing" | "important" | "general" | string;
   summary?: string;
@@ -123,13 +121,11 @@ export interface MailSuppression {
 }
 
 export const mailApi = {
-  // Mailbox CRUD
   mailboxes: () => req<Mailbox[]>("GET", "/api/mailboxes"),
   createMailbox: (m: Partial<Mailbox>) => req<Mailbox>("POST", "/api/mailboxes", m),
   updateMailbox: (id: number, m: Partial<Mailbox>) => req<Mailbox>("PUT", `/api/mailboxes/${id}`, m),
   deleteMailbox: (id: number) => req("DELETE", `/api/mailboxes/${id}`),
 
-  // Email read & mutation
   emails: (mailboxId?: number, params?: { q?: string; folder?: string; limit?: number; offset?: number }) => {
     const sp = new URLSearchParams();
     if (mailboxId) sp.set("mailbox", mailboxId.toString());
@@ -163,7 +159,6 @@ export const mailApi = {
     trackLinks?: boolean;
   }) => req("POST", "/api/emails/send", m),
 
-  // Contacts
   contacts: (params?: { query?: string; q?: string; limit?: number; offset?: number }) => {
     const sp = new URLSearchParams();
     const q = params?.query ?? params?.q;
@@ -174,17 +169,14 @@ export const mailApi = {
     return req<MailContact[]>("GET", `/api/mail/contacts${qs ? "?" + qs : ""}`);
   },
 
-  // Drafts
   saveDraft: (d: { id?: number; mailboxId?: number; to: string; subject: string; text: string; html?: string }) =>
     req<Email>("POST", "/api/mail/drafts", d),
   deleteDraft: (id: number) => req<{ ok: boolean }>("DELETE", `/api/mail/drafts/${id}`),
 
-  // Suppressions
   suppressions: () => req<MailSuppression[]>("GET", "/api/mail/suppressions"),
   createSuppression: (address: string) => req<MailSuppression>("POST", "/api/mail/suppressions", { address }),
   deleteSuppression: (id: number) => req("DELETE", `/api/mail/suppressions/${id}`),
 
-  // Domains (used for mailbox creation host selection)
   domains: (params?: { q?: string; limit?: number; offset?: number }) => {
     const sp = new URLSearchParams();
     if (params?.q) sp.set("q", params.q);
@@ -194,7 +186,6 @@ export const mailApi = {
     return req<Domain[]>("GET", `/api/domains${qs ? "?" + qs : ""}`);
   },
 
-  // SMTP Senders
   smtpSenders: () => req<SMTPSender[]>("GET", "/api/smtp-senders"),
   createSMTPSender: (s: SMTPSenderInput) => req<SMTPSender>("POST", "/api/smtp-senders", s),
   updateSMTPSender: (id: number, s: Partial<SMTPSenderInput>) =>
@@ -202,13 +193,11 @@ export const mailApi = {
   deleteSMTPSender: (id: number) => req<void>("DELETE", `/api/smtp-senders/${id}`),
   testSMTPSender: (id: number) => req<{ ok: boolean }>("POST", `/api/smtp-senders/${id}/test`),
 
-  // Settings & Inbound Token
   settings: () => req<MailSettingsData>("GET", "/api/settings"),
   updateSettings: (s: Partial<MailSettingsData> & { inboundToken?: string }) =>
     req<any>("PUT", "/api/settings", s),
   inboundToken: () => req<{ inboundToken: string }>("GET", "/api/settings/inbound-token"),
 
-  // AI Assist
   aiAssistStatus: () => req<{ configured: boolean; provider: string }>("GET", "/api/ai/assist/status"),
   aiSummarizeEmail: (id: number) =>
     req<{ summary: string; category?: string; importance?: number; otp?: string }>(
@@ -216,7 +205,6 @@ export const mailApi = {
       `/api/ai/assist/summarize-email/${id}`,
     ),
 
-  // Overview
   overview: (includeBot = false) => req<any>("GET", `/api/overview?include_bot=${includeBot}`),
 };
 

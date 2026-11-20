@@ -14,8 +14,6 @@ import (
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
-// TestChallengerM1_ProviderRegistryStress stress-tests concurrent provider registration
-// and construction, guaranteeing thread-safety and fail-closed behavior on invalid inputs.
 func TestChallengerM1_ProviderRegistryStress(t *testing.T) {
 	const workers = 30
 	var wg sync.WaitGroup
@@ -25,7 +23,6 @@ func TestChallengerM1_ProviderRegistryStress(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			provName := fmt.Sprintf("stress-prov-%d", id%5)
-			// Concurrent Register
 			provider.Register(provName, func(credsJSON []byte) (provider.Provider, error) {
 				if len(credsJSON) == 0 {
 					return nil, fmt.Errorf("empty credentials")
@@ -33,7 +30,6 @@ func TestChallengerM1_ProviderRegistryStress(t *testing.T) {
 				return nil, nil
 			})
 
-			// Concurrent New with valid and invalid data
 			_, _ = provider.New(provName, []byte(`{"token":"abc"}`))
 			_, err := provider.New(provName, []byte{})
 			if err == nil {
@@ -43,15 +39,12 @@ func TestChallengerM1_ProviderRegistryStress(t *testing.T) {
 	}
 	wg.Wait()
 
-	// Unknown provider must fail closed
 	_, err := provider.New("non-existent-provider-xyz", []byte(`{}`))
 	if err == nil {
 		t.Fatal("expected error for non-existent provider, got nil")
 	}
 }
 
-// TestChallengerM1_DDNSConcurrentUpdate stress-tests concurrent DDNS update requests
-// through the HTTP router on the same token, ensuring atomic updates and zero race crashes.
 func TestChallengerM1_DDNSConcurrentUpdate(t *testing.T) {
 	_, srv, db := newVerifyHarness(t)
 	const orgID = uint(1)
@@ -65,7 +58,6 @@ func TestChallengerM1_DDNSConcurrentUpdate(t *testing.T) {
 		t.Fatalf("create domain: %v", err)
 	}
 
-	// Create DDNS token via HTTP endpoint
 	createReqBody := map[string]any{
 		"domainId":   dom.ID,
 		"recordName": "ddns-stress.example.com",
@@ -121,15 +113,11 @@ func TestChallengerM1_DDNSConcurrentUpdate(t *testing.T) {
 	wg.Wait()
 
 	t.Logf("DDNS concurrent updates completed: success=%d, fail=%d", successCount.Load(), failCount.Load())
-	// In the absence of an external provider mock, update may return 500 or 200, but MUST NOT panic or race.
 }
 
-// TestChallengerM1_FailClosedHostCredentials tests that failing host credentials
-// strictly fail closed without panic or silent corruption.
 func TestChallengerM1_FailClosedHostCredentials(t *testing.T) {
 	p, srv, db := newVerifyHarness(t)
 
-	// Replace vault with one that returns an error
 	mv := newMockVaultService()
 	mv.getErr = fmt.Errorf("kms backend unreachable")
 	p.vaultSvc = mv
@@ -151,7 +139,6 @@ func TestChallengerM1_FailClosedHostCredentials(t *testing.T) {
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 
-	// Must fail closed with 500 or 400, never succeed
 	if rec.Code == http.StatusOK {
 		t.Fatalf("expected fail-closed error, got 200 OK")
 	}

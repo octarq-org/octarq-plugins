@@ -20,10 +20,6 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// snsConfirmClient fetches the attacker-influenced SNS SubscribeURL. The host
-// allowlist below runs before it, but a hostname check alone can be rebound
-// between the check and the dial - this client re-validates the resolved IP at
-// dial time.
 var snsConfirmClient = safehttp.NewClient(10 * time.Second)
 
 type EmailBounceWebhookInput struct {
@@ -41,15 +37,11 @@ type EmailBounceWebhookOutput struct {
 	Body map[string]any
 }
 
-// POST /api/webhook/{orgSlug}/email/bounce/{token}
 func (p *Plugin) emailBounceWebhook(ctx context.Context, input *EmailBounceWebhookInput) (*EmailBounceWebhookOutput, error) {
 	if input.Ctx == nil {
 		return nil, huma.Error500InternalServerError("An unexpected error occurred while processing the request context.")
 	}
 	r, _ := humago.Unwrap(input.Ctx)
-	// Authenticate + scope by tenant (same scheme as inbound): the {orgSlug}
-	// names the org, the {token} must match its per-org secret. Without this a
-	// forged POST could spam an org's notification channels and audit log.
 	var org orgEntity
 	if p.db.Where("slug = ?", input.OrgSlug).First(&org).Error != nil {
 		return nil, huma.Error404NotFound("Workspace not found.")
@@ -59,7 +51,7 @@ func (p *Plugin) emailBounceWebhook(ctx context.Context, input *EmailBounceWebho
 		return nil, huma.Error401Unauthorized("Invalid webhook token. Provide a valid inbound webhook token.")
 	}
 
-	body, err := io.ReadAll(io.LimitReader(r.Body, 5<<20)) // 5 MiB cap
+	body, err := io.ReadAll(io.LimitReader(r.Body, 5<<20))
 	if err != nil {
 		return nil, huma.Error400BadRequest("Could not read webhook request body.")
 	}
@@ -69,10 +61,6 @@ func (p *Plugin) emailBounceWebhook(ctx context.Context, input *EmailBounceWebho
 		if snsType, ok := snsWrap["Type"].(string); ok {
 			if snsType == "SubscriptionConfirmation" {
 				if subURL, ok := snsWrap["SubscribeURL"].(string); ok && subURL != "" {
-					// SSRF guard: only auto-confirm to a genuine AWS SNS endpoint
-					// over https, and fetch through snsConfirmClient (blocks
-					// private/loopback/metadata IPs at dial time). SubscribeURL
-					// is attacker-influenced, so it must never be fetched blindly.
 					if !isAWSSNSURL(subURL) {
 						log.Printf("bounce: refusing SNS SubscribeURL with non-AWS host: %s", subURL)
 						return nil, huma.Error400BadRequest("Subscription URL must be a valid AWS SNS HTTPS endpoint.")
@@ -93,7 +81,6 @@ func (p *Plugin) emailBounceWebhook(ctx context.Context, input *EmailBounceWebho
 			}
 			if snsType == "Notification" {
 				if msgStr, ok := snsWrap["Message"].(string); ok && msgStr != "" {
-					// Replace body with the actual inner message bytes
 					body = []byte(msgStr)
 				}
 			}
@@ -133,7 +120,6 @@ func (p *Plugin) emailBounceWebhook(ctx context.Context, input *EmailBounceWebho
 	type suppressionKey struct {
 		address string
 	}
-	// Address -> count, reason, source
 	type suppressionData struct {
 		count  int
 		reason string
@@ -163,7 +149,7 @@ func (p *Plugin) emailBounceWebhook(ctx context.Context, input *EmailBounceWebho
 
 		auditLogs = append(auditLogs, auditLogEntity{
 			OrgID:      mb.OrgID,
-			ActorID:    0, // System
+			ActorID:    0,
 			Action:     "email.bounce",
 			TargetType: "mailbox",
 			TargetID:   mb.ID,
@@ -233,7 +219,6 @@ func (p *Plugin) emailBounceWebhook(ctx context.Context, input *EmailBounceWebho
 
 	if len(alertTexts) > 0 {
 		for _, alertText := range alertTexts {
-			// Capture variables for goroutine
 			alertText := alertText
 			if p.emit != nil {
 				safego.Go("mail.bounce-notify", func() {

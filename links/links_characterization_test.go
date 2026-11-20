@@ -10,9 +10,6 @@ import (
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
-// Stage 1: Characterization Locking Test for plugins/links
-// Locks exported interfaces, state machines, tenant isolation boundaries, and fail-closed error responses.
-
 func TestLinks_Characterization_InterfaceContracts(t *testing.T) {
 	t.Parallel()
 	var (
@@ -40,7 +37,6 @@ func TestLinks_Characterization_MultiTenantIsolation(t *testing.T) {
 	wipeLinksTables(t, p)
 	ctx := context.Background()
 
-	// Seed links in Org 1 and Org 2
 	l1 := Link{OrgID: 1, Host: "shared.example.com", Slug: "promo1", Target: "https://target1.example.com", Enabled: true}
 	l2 := Link{OrgID: 2, Host: "shared.example.com", Slug: "promo2", Target: "https://target2.example.com", Enabled: true}
 	if err := p.db.Create(&l1).Error; err != nil {
@@ -50,7 +46,6 @@ func TestLinks_Characterization_MultiTenantIsolation(t *testing.T) {
 		t.Fatalf("seed l2: %v", err)
 	}
 
-	// 1. Org 1 query cannot see Org 2's links
 	req1 := httptest.NewRequest(http.MethodGet, "/api/links", nil)
 	req1.Header.Set("X-Org-ID", "1")
 	out1, err := p.listLinks(ctx, &ListLinksInput{Ctx: mkCtx(req1)})
@@ -63,7 +58,6 @@ func TestLinks_Characterization_MultiTenantIsolation(t *testing.T) {
 		}
 	}
 
-	// 2. Org 1 cannot delete Org 2's link
 	reqDel := httptest.NewRequest(http.MethodDelete, "/api/links/2", nil)
 	reqDel.Header.Set("X-Org-ID", "1")
 	reqDel.Header.Set("X-Role", "admin")
@@ -72,7 +66,6 @@ func TestLinks_Characterization_MultiTenantIsolation(t *testing.T) {
 		t.Fatalf("expected error when org 1 tries to delete org 2 link, got nil")
 	}
 
-	// Verify l2 is still intact
 	var checkL2 Link
 	if err := p.db.Where("id = ?", l2.ID).First(&checkL2).Error; err != nil {
 		t.Fatalf("l2 was deleted or not found: %v", err)
@@ -84,7 +77,6 @@ func TestLinks_Characterization_FailClosedHostResolution(t *testing.T) {
 	db, p, engine := setupOwnershipTestDB(t)
 	defer engine.Close()
 
-	// Org 1 and Org 2 both claim "contested.example.com"
 	db.Create(&testDomain{
 		OrgID: 1,
 		Name:  "contested.example.com",
@@ -94,7 +86,6 @@ func TestLinks_Characterization_FailClosedHostResolution(t *testing.T) {
 		Name:  "contested.example.com",
 	})
 
-	// When a host is contested, ownsHost must FAIL CLOSED for both tenants
 	if p.ownsHost(1, "contested.example.com") {
 		t.Error("contested domain must fail closed for org 1")
 	}

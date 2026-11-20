@@ -25,7 +25,6 @@ func TestListLinksFiltersAndPaging(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/links", nil)
 	req.Header.Set("X-Org-ID", "1")
 
-	// Active only by default.
 	out, err := p.listLinks(ctx, &ListLinksInput{Ctx: mkCtx(req)})
 	if err != nil {
 		t.Fatalf("listLinks: %v", err)
@@ -34,7 +33,6 @@ func TestListLinksFiltersAndPaging(t *testing.T) {
 		t.Errorf("default list: got %d active links, want 2", len(out.Body))
 	}
 
-	// Archived filter exposes the hidden row.
 	reqA := httptest.NewRequest(http.MethodGet, "/api/links?archived=1", nil)
 	outA, err := p.listLinks(ctx, &ListLinksInput{Ctx: mkCtx(reqA), Archived: "1"})
 	if err != nil {
@@ -44,7 +42,6 @@ func TestListLinksFiltersAndPaging(t *testing.T) {
 		t.Errorf("archived list: got %+v", outA.Body)
 	}
 
-	// Tag filter.
 	outT, err := p.listLinks(ctx, &ListLinksInput{Ctx: mkCtx(req), Tag: "sales"})
 	if err != nil {
 		t.Fatalf("tag list: %v", err)
@@ -53,7 +50,6 @@ func TestListLinksFiltersAndPaging(t *testing.T) {
 		t.Errorf("tag list: got %+v", outT.Body)
 	}
 
-	// Host filter.
 	outH, err := p.listLinks(ctx, &ListLinksInput{Ctx: mkCtx(req), Host: "h2.example"})
 	if err != nil {
 		t.Fatalf("host list: %v", err)
@@ -62,7 +58,6 @@ func TestListLinksFiltersAndPaging(t *testing.T) {
 		t.Errorf("host list for h2.example: got %d links, want 0 (only archived lives there)", len(outH.Body))
 	}
 
-	// Limit clamps: negative/zero -> 50 default, >500 -> 50.
 	if _, err := p.listLinks(ctx, &ListLinksInput{Ctx: mkCtx(req), Limit: 600}); err != nil {
 		t.Errorf("oversized limit: %v", err)
 	}
@@ -74,7 +69,6 @@ func TestListLinksFiltersAndPaging(t *testing.T) {
 		t.Errorf("limit=1: got %d links", len(paged.Body))
 	}
 
-	// Q matches title/slug/target/note/tags.
 	outQ, err := p.listLinks(ctx, &ListLinksInput{Ctx: mkCtx(req), Q: "T two"})
 	if err != nil {
 		t.Fatalf("q list: %v", err)
@@ -83,7 +77,6 @@ func TestListLinksFiltersAndPaging(t *testing.T) {
 		t.Errorf("q list: got %+v", outQ.Body)
 	}
 
-	// Unauthenticated (org 0) is refused.
 	req0 := httptest.NewRequest(http.MethodGet, "/api/links", nil)
 	req0.Header.Set("X-Org-ID", "0")
 	if _, err := p.listLinks(ctx, &ListLinksInput{Ctx: mkCtx(req0)}); err == nil {
@@ -115,13 +108,11 @@ func TestGetLinkScopedToOrg(t *testing.T) {
 		t.Errorf("got %+v", out.Body)
 	}
 
-	// Another org's link is invisible.
 	req2 := httptest.NewRequest(http.MethodGet, "/api/links/2", nil)
 	if _, err := p.getLink(ctx, &GetLinkInput{Ctx: mkCtx(req2), ID: theirs.ID}); err == nil {
 		t.Error("cross-org getLink must 404")
 	}
 
-	// Missing id.
 	if _, err := p.getLink(ctx, &GetLinkInput{Ctx: mkCtx(req), ID: 999}); err == nil {
 		t.Error("missing link must 404")
 	}
@@ -142,8 +133,6 @@ func TestLinkMetadataHandler(t *testing.T) {
 	if body["favicon"] != "https://127.0.0.1/favicon.ico" {
 		t.Errorf("favicon = %v", body["favicon"])
 	}
-	// The SSRF-guarded client refuses loopback, so title/description stay empty
-	// rather than a network call happening in the test.
 	if body["title"] != "" || body["description"] != "" {
 		t.Errorf("unexpected fetched metadata: %v", body)
 	}
@@ -176,26 +165,21 @@ func TestCreateLinkEdgeBranches(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/links", nil)
 	req.Header.Set("X-Org-ID", "1")
 
-	// Empty target.
 	if _, err := p.createLink(ctx, &CreateLinkInput{Ctx: mkCtx(req), Body: linkDTO{Target: "  "}}); err == nil {
 		t.Error("empty target must fail")
 	}
-	// Dangerous scheme.
 	if _, err := p.createLink(ctx, &CreateLinkInput{Ctx: mkCtx(req), Body: linkDTO{Slug: "x", Target: "javascript:alert(1)"}}); err == nil {
 		t.Error("javascript target must fail")
 	}
-	// Reserved slug.
 	if _, err := p.createLink(ctx, &CreateLinkInput{Ctx: mkCtx(req), Body: linkDTO{Slug: "admin", Target: "https://x.example"}}); err == nil {
 		t.Error("reserved slug must be refused")
 	}
 
-	// Host owned by another org -> 403.
 	p.db.Create(&testDomain{OrgID: 2, Name: "org2-host.example", ForLink: true})
 	if _, err := p.createLink(ctx, &CreateLinkInput{Ctx: mkCtx(req), Body: linkDTO{Slug: "h", Host: "org2-host.example", Target: "https://x.example"}}); err == nil {
 		t.Error("unowned host must be refused")
 	}
 
-	// Multi-tenant mode with a base domain + org link host: hostless links are refused.
 	p.db.Where("key = ?", "base_domain").Delete(&testSetting{})
 	p.db.Create(&testSetting{Key: "base_domain", Value: "octarq.test"})
 	p.db.Create(&testDomain{OrgID: 1, Name: "own.example", ForLink: true})
@@ -204,11 +188,8 @@ func TestCreateLinkEdgeBranches(t *testing.T) {
 	if _, err := p.createLink(ctx, &CreateLinkInput{Ctx: mkCtx(reqH), Body: linkDTO{Slug: "nohost", Target: "https://x.example"}}); err == nil {
 		t.Error("hostless link must be refused when a base domain is configured")
 	}
-	// The base-domain scenario is test-scoped; drop it so the remaining creates
-	// in this test are host-optional again.
 	p.db.Where("key = ?", "base_domain").Delete(&testSetting{})
 
-	// Duplicate (host, slug) -> 409.
 	if _, err := p.createLink(ctx, &CreateLinkInput{Ctx: mkCtx(req), Body: linkDTO{Slug: "dup", Target: "https://x.example"}}); err != nil {
 		t.Fatalf("first create: %v", err)
 	}
@@ -216,7 +197,6 @@ func TestCreateLinkEdgeBranches(t *testing.T) {
 		t.Error("duplicate slug must be refused")
 	}
 
-	// Success path with hooks: enabled=false respected, audit + event + cache.
 	audited := 0
 	p.audit = func(*http.Request, string, string, uint, map[string]any) { audited++ }
 	published := 0

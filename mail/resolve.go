@@ -9,8 +9,6 @@ import (
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
-// domainMailHost is a local projection of the domains table, eliminating direct
-// dependency on plugins/dns models.
 type domainMailHost struct {
 	OrgID     uint              `gorm:"column:owner_id"`
 	Name      string            `gorm:"column:name"`
@@ -65,8 +63,6 @@ func (p *Plugin) OnEmail(handler func(plugin.EmailEvent)) {
 	p.emailHandlers = append(p.emailHandlers, handler)
 }
 
-// mailHostDisabled reports whether host is listed as a mail host on the owner's domain
-// but every such listing is disabled (so mail to it should be dropped).
 func (p *Plugin) mailHostDisabled(orgID uint, host string) bool {
 	if orgID == 0 {
 		return false
@@ -88,23 +84,6 @@ func (p *Plugin) mailHostDisabled(orgID uint, host string) bool {
 	return listed
 }
 
-// mailAddressDomainNotAnotherTenants reports whether orgID may create a mailbox
-// at addr — true unless addr's domain is a mail host belonging to a *different*
-// workspace.
-//
-// Scope note, because the weaker half of this rule is deliberate. The defect
-// being fixed is cross-tenant squatting: mailbox addresses were globally unique,
-// so one workspace could take `billing@victim.com` and permanently block the
-// tenant that actually owns victim.com from ever creating it. That is what this
-// refuses.
-//
-// It does NOT require the domain to be one the workspace has already registered.
-// Requiring that would be a stricter and arguably better rule — you cannot
-// receive mail at a domain you have not set up — but it is a product behaviour
-// change, not a security fix: creating a mailbox ahead of registering its domain
-// works today and is exercised by existing tests. Delivery is unaffected either
-// way; the inbound path is already gated on the org's own token and its own mail
-// hosts (see resolveMailbox), so an unregistered mailbox simply never receives.
 func (p *Plugin) mailAddressDomainNotAnotherTenants(orgID uint, addr string) bool {
 	if orgID == 0 || p.db == nil {
 		return false
@@ -123,26 +102,21 @@ func (p *Plugin) mailAddressDomainNotAnotherTenants(orgID uint, addr string) boo
 	}
 	for _, d := range doms {
 		if d.OrgID == orgID {
-			continue // your own domain never blocks you
+			continue
 		}
 		for _, mh := range d.MailHosts {
 			if hostlist.NormalizeHost(mh.Host) == normHost {
-				return false // this hostname belongs to another workspace
+				return false
 			}
 		}
 	}
 	return true
 }
 
-// resolveMailbox finds an enabled mailbox for the address within the given org,
-// optionally creating one when catch-all is on and the recipient's domain (also
-// owned by that org) is managed for mail. Scoping by org keeps one tenant's
-// inbound webhook from delivering into another tenant's mailboxes.
 func (p *Plugin) resolveMailbox(orgID uint, addr string) (*Mailbox, bool) {
 	if addr == "" {
 		return nil, false
 	}
-	// Drop mail to a temporarily disabled mail host, even for existing mailboxes.
 	if at := strings.LastIndex(addr, "@"); at >= 0 && p.mailHostDisabled(orgID, addr[at+1:]) {
 		return nil, false
 	}
@@ -153,18 +127,9 @@ func (p *Plugin) resolveMailbox(orgID uint, addr string) (*Mailbox, bool) {
 	if p.getWorkspaceSetting(orgID, "catch_all") != "true" {
 		return nil, false
 	}
-	// Reserved local-parts are never auto-created by catch-all.
 	if p.isReservedMailbox(orgID, addr) {
 		return nil, false
 	}
-	// The recipient host must be one of THIS org's mail-enabled domain's mail
-	// hosts (apex or a configured subdomain like mail.example.com).
-	//
-	// Strict on purpose, and deliberately NOT the looser rule manual creation
-	// uses: this path creates a mailbox by itself, from an inbound message, with
-	// no operator in the loop. "Not another tenant's" is not enough when nobody
-	// is choosing — anything routed at this org's webhook would materialise a
-	// mailbox.
 	if !p.ownsMailHost(orgID, addr) {
 		return nil, false
 	}
@@ -175,11 +140,6 @@ func (p *Plugin) resolveMailbox(orgID uint, addr string) (*Mailbox, bool) {
 	return &mb, true
 }
 
-// ownsMailHost reports whether addr's domain is one of orgID's own enabled mail
-// hosts (the apex Name when a domain lists none explicitly).
-//
-// This is the strict form, used where a mailbox is created without an operator
-// deciding — see resolveMailbox's catch-all branch.
 func (p *Plugin) ownsMailHost(orgID uint, addr string) bool {
 	if orgID == 0 || p.db == nil {
 		return false

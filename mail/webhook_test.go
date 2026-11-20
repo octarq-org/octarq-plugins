@@ -11,8 +11,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// TestEmitEmailFansOut verifies OnEmail handlers all receive the event and that
-// dispatch is asynchronous (a slow handler doesn't block the others).
 func TestEmitEmailFansOut(t *testing.T) {
 	p := &Plugin{}
 
@@ -52,12 +50,10 @@ func TestEmitEmailFansOut(t *testing.T) {
 	}
 }
 
-// TestOnEmailNilIgnored ensures a nil handler is silently dropped (no panic on
-// dispatch).
 func TestOnEmailNilIgnored(t *testing.T) {
 	p := &Plugin{}
 	p.OnEmail(nil)
-	p.emitEmail(plugin.EmailEvent{ID: 1}) // must not panic
+	p.emitEmail(plugin.EmailEvent{ID: 1})
 }
 
 func TestMailDispatcherProvided(t *testing.T) {
@@ -81,7 +77,6 @@ func TestMailDispatcherProvided(t *testing.T) {
 func TestOwnsMailHostSecurityBoundary(t *testing.T) {
 	p := &Plugin{}
 
-	// 1. Nil DB or OrgID 0
 	if p.ownsMailHost(0, "user@example.com") {
 		t.Error("ownsMailHost with orgID=0 expected false")
 	}
@@ -98,7 +93,6 @@ func TestOwnsMailHostSecurityBoundary(t *testing.T) {
 	}
 	p.db = db
 
-	// 2. Invalid address inputs
 	invalidAddrs := []string{"invalid-addr", "user@", "@domain.com", ""}
 	for _, addr := range invalidAddrs {
 		if p.ownsMailHost(1, addr) {
@@ -106,7 +100,6 @@ func TestOwnsMailHostSecurityBoundary(t *testing.T) {
 		}
 	}
 
-	// 3. Domain for_mail = false
 	db.Create(&testDomain{
 		OrgID:   1,
 		Name:    "nomail.com",
@@ -116,7 +109,6 @@ func TestOwnsMailHostSecurityBoundary(t *testing.T) {
 		t.Error("ownsMailHost for domain with ForMail=false expected false")
 	}
 
-	// 4. Domain owned by Org 1 with no explicit MailHosts -> uses apex Name
 	db.Create(&testDomain{
 		OrgID:   1,
 		Name:    "apexmail.com",
@@ -126,12 +118,10 @@ func TestOwnsMailHostSecurityBoundary(t *testing.T) {
 		t.Error("ownsMailHost for apex domain expected true")
 	}
 
-	// 5. Cross-org isolation: Org 2 should NOT own Org 1's domain
 	if p.ownsMailHost(2, "info@apexmail.com") {
 		t.Error("ownsMailHost for Org 2 on Org 1's domain expected false (cross-tenant breach)")
 	}
 
-	// 6. Subdomain / MailHosts explicit
 	db.Create(&testDomain{
 		OrgID:   1,
 		Name:    "custom.com",

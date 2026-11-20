@@ -131,13 +131,11 @@ func TestMailRecordUsageSuccessAndFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 1. sendMail path success
 	err = p.sendMail(100, "user@example.com", "hello", "body", "body")
 	if err != nil {
 		t.Fatalf("sendMail failed: %v", err)
 	}
 
-	// 2. sendEmail HTTP path success (2 recipients)
 	req := httptest.NewRequest(http.MethodPost, "/api/emails/send", nil)
 	input := &SendEmailInput{
 		Ctx: humago.NewContext(nil, req, httptest.NewRecorder()),
@@ -161,13 +159,12 @@ func TestMailRecordUsageSuccessAndFailure(t *testing.T) {
 		t.Fatalf("sendEmail failed: %v", err)
 	}
 
-	// 3. Send failure path: bad port
 	if _, err := seedVaultSMTPSender(p, SMTPSender{
 		ID:        2,
 		OrgID:     200,
 		Name:      "fail-relay",
 		Host:      "127.0.0.1",
-		Port:      1, // unreachable port
+		Port:      1,
 		User:      "test",
 		FromEmail: "noreply@example.com",
 	}, "pw"); err != nil {
@@ -203,11 +200,9 @@ func TestMailRecordUsageSuccessAndFailure(t *testing.T) {
 	if len(calls) != 2 {
 		t.Fatalf("expected 2 successful RecordUsage calls, got %d", len(calls))
 	}
-	// Call 1 from sendMail: quantity = 1
 	if calls[0].orgID != 100 || calls[0].metric != plugin.MetricMailOut || calls[0].n != 1 {
 		t.Errorf("call 0 unexpected: %+v", calls[0])
 	}
-	// Call 2 from sendEmail HTTP: quantity = 2 (len(msg.To))
 	if calls[1].orgID != 100 || calls[1].metric != plugin.MetricMailOut || calls[1].n != 2 {
 		t.Errorf("call 1 unexpected: %+v", calls[1])
 	}

@@ -9,35 +9,25 @@ import (
 	"github.com/octarq-org/octarq-plugins/dns/provider"
 )
 
-// BlueprintStatus represents how a recommended email DNS record compares to the
-// live provider state.
 type BlueprintStatus string
 
 const (
-	// BlueprintStatusOK means the record exists and its content matches.
-	BlueprintStatusOK BlueprintStatus = "ok"
-	// BlueprintStatusMissing means the record does not exist in the provider.
-	BlueprintStatusMissing BlueprintStatus = "missing"
-	// BlueprintStatusMismatch means a record of the same type+name exists but
-	// its content differs from the recommended value.
+	BlueprintStatusOK       BlueprintStatus = "ok"
+	BlueprintStatusMissing  BlueprintStatus = "missing"
 	BlueprintStatusMismatch BlueprintStatus = "mismatch"
 )
 
-// EmailBlueprintRecord is one recommended email DNS record together with its
-// current status as observed in the DNS provider.
 type EmailBlueprintRecord struct {
 	Type     string          `json:"type"`
-	Name     string          `json:"name"`    // relative, e.g. "@" or "_dmarc"
-	Content  string          `json:"content"` // recommended value
+	Name     string          `json:"name"`
+	Content  string          `json:"content"`
 	TTL      int             `json:"ttl"`
 	Priority *int            `json:"priority,omitempty"`
 	Status   BlueprintStatus `json:"status"`
 }
 
-// mxPriority returns a pointer to the given integer (helper for inline literals).
 func mxPriority(n int) *int { return &n }
 
-// emailBlueprintRecords returns the hardcoded Cloudflare Email Routing template.
 func emailBlueprintRecords() []EmailBlueprintRecord {
 	return []EmailBlueprintRecord{
 		{Type: "MX", Name: "@", Content: "route1.mx.cloudflare.net", TTL: 1, Priority: mxPriority(10)},
@@ -47,12 +37,6 @@ func emailBlueprintRecords() []EmailBlueprintRecord {
 	}
 }
 
-// normaliseRecordName converts a provider-returned FQDN record name to the
-// relative "@" or subdomain form used in the blueprint.
-//
-// Providers (Cloudflare) return names as FQDNs (e.g. "example.com",
-// "_dmarc.example.com"). We strip the apex domain suffix so that blueprint
-// names like "@" and "_dmarc" compare cleanly.
 func normaliseRecordName(name, apex string) string {
 	name = strings.TrimSuffix(name, ".")
 	apex = strings.TrimSuffix(apex, ".")
@@ -67,8 +51,6 @@ func normaliseRecordName(name, apex string) string {
 	return name
 }
 
-// computeBlueprintStatus compares each blueprint record against the live
-// provider records and fills in the Status field.
 func computeBlueprintStatus(recs []EmailBlueprintRecord, live []provider.Record, apex string) []EmailBlueprintRecord {
 	out := make([]EmailBlueprintRecord, len(recs))
 	for i, bp := range recs {
@@ -78,13 +60,10 @@ func computeBlueprintStatus(recs []EmailBlueprintRecord, live []provider.Record,
 			if !strings.EqualFold(lr.Type, bp.Type) || !strings.EqualFold(normName, bp.Name) {
 				continue
 			}
-			// Type+name match found.
 			if strings.TrimSpace(lr.Content) == strings.TrimSpace(bp.Content) {
 				status = BlueprintStatusOK
 				break
 			}
-			// For MX we require type+name+content all match (multiple MX records
-			// are normal). Keep looking for a content match before marking mismatch.
 			if status == BlueprintStatusMissing {
 				status = BlueprintStatusMismatch
 			}
@@ -95,21 +74,16 @@ func computeBlueprintStatus(recs []EmailBlueprintRecord, live []provider.Record,
 	return out
 }
 
-// --- GET /api/domains/{id}/email-blueprint ---
-
-// EmailBlueprintInput is the request input for the email-blueprint endpoint.
 type EmailBlueprintInput struct {
 	Ctx huma.Context `hidden:"true"`
 	ID  uint         `path:"id"`
 }
 
-// Resolve stores the huma context.
 func (i *EmailBlueprintInput) Resolve(ctx huma.Context) []error {
 	i.Ctx = ctx
 	return nil
 }
 
-// EmailBlueprintOutput wraps the list of blueprint records.
 type EmailBlueprintOutput struct {
 	Body []EmailBlueprintRecord
 }
@@ -131,7 +105,6 @@ func (p *Plugin) emailBlueprint(ctx context.Context, input *EmailBlueprintInput)
 	blueprint := emailBlueprintRecords()
 
 	if dom.ProviderAccountID == 0 {
-		// No provider configured — every record is unknown/missing.
 		for i := range blueprint {
 			blueprint[i].Status = BlueprintStatusMissing
 		}
@@ -152,21 +125,16 @@ func (p *Plugin) emailBlueprint(ctx context.Context, input *EmailBlueprintInput)
 	return &EmailBlueprintOutput{Body: blueprint}, nil
 }
 
-// --- POST /api/domains/{id}/apply-email-blueprint ---
-
-// ApplyEmailBlueprintInput is the request input for the apply endpoint.
 type ApplyEmailBlueprintInput struct {
 	Ctx huma.Context `hidden:"true"`
 	ID  uint         `path:"id"`
 }
 
-// Resolve stores the huma context.
 func (i *ApplyEmailBlueprintInput) Resolve(ctx huma.Context) []error {
 	i.Ctx = ctx
 	return nil
 }
 
-// ApplyEmailBlueprintOutput reports how many records were created vs skipped.
 type ApplyEmailBlueprintOutput struct {
 	Body struct {
 		OK      bool `json:"ok"`

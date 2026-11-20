@@ -86,7 +86,6 @@ export function EmailBlueprintPanel({
     }
   }
 
-  // Load on first render
   if (records === null && !loading && !err) {
     loadBlueprint();
   }

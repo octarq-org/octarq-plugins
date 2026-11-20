@@ -27,7 +27,6 @@ export function AddEditModal({ apiBase, onClose, account, onSaved, t }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Form fields
   const [name, setName] = useState("");
   const [issuer, setIssuer] = useState("");
   const [accountName, setAccountName] = useState("");
@@ -45,7 +44,7 @@ export function AddEditModal({ apiBase, onClose, account, onSaved, t }: Props) {
       setName(account.name);
       setIssuer(account.issuer || "");
       setAccountName(account.account || "");
-      setSecret(""); // secret remains untouched unless user enters a new one
+      setSecret("");
       setAlgorithm(account.algorithm || "SHA1");
       setDigits(account.digits || 6);
       setPeriod(account.period || 30);
@@ -70,7 +69,6 @@ export function AddEditModal({ apiBase, onClose, account, onSaved, t }: Props) {
     setError("");
   }, [account]);
 
-  // Handle parsing of otpauth URI
   const handleParseURI = (raw: string) => {
     setUriInput(raw);
     setError("");
@@ -112,7 +110,7 @@ export function AddEditModal({ apiBase, onClose, account, onSaved, t }: Props) {
       const p = q.get("period");
       if (p) setPeriod(parseInt(p, 10));
 
-      setTab("manual"); // Switch back to form so user sees parsed values
+      setTab("manual");
     } catch {
       setError(t("twofa.errMalformedURI", "Malformed otpauth URI"));
     }

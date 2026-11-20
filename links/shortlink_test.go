@@ -45,11 +45,9 @@ func TestAnonymizeIP(t *testing.T) {
 }
 
 func TestClientIPPrecedence(t *testing.T) {
-	// Precedence only applies when the proxy is trusted.
 	SetTrustProxy(true)
 	defer SetTrustProxy(false)
 
-	// X-Forwarded-For wins, taking the first hop.
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	r.RemoteAddr = "10.0.0.9:1234"
 	r.Header.Set("X-Forwarded-For", "1.2.3.4, 5.6.7.8")
@@ -58,7 +56,6 @@ func TestClientIPPrecedence(t *testing.T) {
 		t.Errorf("XFF precedence: got %q want 1.2.3.4", got)
 	}
 
-	// X-Real-IP next.
 	r = httptest.NewRequest(http.MethodGet, "/", nil)
 	r.RemoteAddr = "10.0.0.9:1234"
 	r.Header.Set("X-Real-IP", "9.9.9.9")
@@ -66,7 +63,6 @@ func TestClientIPPrecedence(t *testing.T) {
 		t.Errorf("X-Real-IP precedence: got %q want 9.9.9.9", got)
 	}
 
-	// RemoteAddr fallback, port stripped.
 	r = httptest.NewRequest(http.MethodGet, "/", nil)
 	r.RemoteAddr = "10.0.0.9:1234"
 	if got := clientIP(r); got != "10.0.0.9" {
@@ -74,11 +70,8 @@ func TestClientIPPrecedence(t *testing.T) {
 	}
 }
 
-// TestClientIPIgnoresProxyHeadersWhenUntrusted asserts that when trustProxy is
-// off (the default), spoofable X-Forwarded-For / X-Real-IP headers are ignored
-// and only RemoteAddr is used — a client can't forge its analytics attribution.
 func TestClientIPIgnoresProxyHeadersWhenUntrusted(t *testing.T) {
-	SetTrustProxy(false) // default, but be explicit
+	SetTrustProxy(false)
 
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	r.RemoteAddr = "10.0.0.9:1234"
@@ -113,7 +106,6 @@ func newTestEngine(t *testing.T) *Engine {
 	if err := db.AutoMigrate(&Link{}, &LinkEvent{}, &testDomain{}, &testProviderAccount{}, &testSetting{}, &testOrg{}); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	// Clear any rows left by a prior test sharing the in-memory cache.
 	db.Where("1 = 1").Delete(&Link{})
 
 	return NewEngine(db, mockCtx())
@@ -121,11 +113,7 @@ func newTestEngine(t *testing.T) *Engine {
 
 func TestLookupHostPreference(t *testing.T) {
 	s := newTestEngine(t)
-	// The org owns example.com, so both its exact-host and host-agnostic links
-	// are legitimate. An exact-host link on an unregistered host would be an
-	// unauthorized claim and is covered by TestLookupRefusesUnregisteredHostClaim.
 	s.db.Create(&testDomain{OrgID: 1, Name: "example.com", ForLink: true})
-	// A host-agnostic link and a host-specific link share the same slug.
 	s.db.Create(&Link{OrgID: 1, Slug: "x", Host: "", Target: "https://any", Enabled: true})
 	s.db.Create(&Link{OrgID: 1, Slug: "x", Host: "go.example.com", Target: "https://exact", Enabled: true})
 
@@ -137,7 +125,6 @@ func TestLookupHostPreference(t *testing.T) {
 		t.Errorf("host preference: got %q want https://exact", link.Target)
 	}
 
-	// A different host under the same zone falls back to the host-agnostic link.
 	link, ok = s.Lookup("other.example.com", "x")
 	if !ok || link.Target != "https://any" {
 		t.Errorf("fallback: ok=%v target=%q want https://any", ok, link.Target)
@@ -146,8 +133,6 @@ func TestLookupHostPreference(t *testing.T) {
 
 func TestLookupDisabledAndExpired(t *testing.T) {
 	s := newTestEngine(t)
-	// Create then update: GORM substitutes the column default:true for a
-	// zero-value bool at insert time, so force Enabled=false explicitly.
 	off := Link{Slug: "off", Target: "https://x", Enabled: true}
 	s.db.Create(&off)
 	s.db.Model(&off).Update("enabled", false)
@@ -160,13 +145,10 @@ func TestLookupDisabledAndExpired(t *testing.T) {
 	}
 }
 
-// Expiry/click-limit are enforced in Handle (so ExpiredURL can be honored),
-// not in Lookup.
 func TestHandleExpiryAndClickLimit(t *testing.T) {
 	s := newTestEngine(t)
 	past := time.Now().Add(-time.Hour)
 
-	// Expired with no ExpiredURL -> 404.
 	old := &Link{Slug: "old", Target: "https://x", Enabled: true, ExpiresAt: &past}
 	s.db.Create(old)
 	l, ok := s.Lookup("h", "old")
@@ -179,7 +161,6 @@ func TestHandleExpiryAndClickLimit(t *testing.T) {
 		t.Errorf("expired link without ExpiredURL: got %d, want 404", rec.Code)
 	}
 
-	// Expired with ExpiredURL -> 302 to that URL.
 	s.db.Create(&Link{Slug: "exp", Target: "https://x", Enabled: true, ExpiresAt: &past, ExpiredURL: "https://fallback.example"})
 	l2, _ := s.Lookup("h", "exp")
 	rec2 := httptest.NewRecorder()
@@ -188,7 +169,6 @@ func TestHandleExpiryAndClickLimit(t *testing.T) {
 		t.Errorf("expired link with ExpiredURL: got %d -> %q", rec2.Code, rec2.Header().Get("Location"))
 	}
 
-	// Over click limit -> 404.
 	s.db.Create(&Link{Slug: "cap", Target: "https://x", Enabled: true, ClickLimit: 5, Clicks: 5})
 	l3, _ := s.Lookup("h", "cap")
 	rec3 := httptest.NewRecorder()
@@ -200,8 +180,6 @@ func TestHandleExpiryAndClickLimit(t *testing.T) {
 
 func TestLookupLinkHostDisabled(t *testing.T) {
 	s := newTestEngine(t)
-	// This test registers its own domain; clear ones left by earlier tests
-	// sharing the in-memory cache (name has a unique index).
 	s.db.Where("1 = 1").Delete(&testDomain{})
 
 	d := testDomain{
@@ -364,13 +342,11 @@ func TestRecordUsage(t *testing.T) {
 	link := &Link{Slug: "testusage", Target: "https://example.com", Enabled: true, OrgID: 42}
 	db.Create(link)
 
-	// Non-bot click
 	r1 := httptest.NewRequest(http.MethodGet, "/testusage", nil)
 	r1.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)")
 	w1 := httptest.NewRecorder()
 	eng.Handle(w1, r1, link)
 
-	// Bot click
 	r2 := httptest.NewRequest(http.MethodGet, "/testusage", nil)
 	r2.Header.Set("User-Agent", "Googlebot/2.1")
 	w2 := httptest.NewRecorder()

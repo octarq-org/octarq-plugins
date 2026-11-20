@@ -49,7 +49,6 @@ func TestDNSCrossOrgIsolation(t *testing.T) {
 	const org1 uint = 1
 	const org2 uint = 2
 
-	// Setup fake DNS provider
 	fake := &fakeDNSProvider{
 		records: []provider.Record{
 			{ID: "rec-org2-1", Type: "A", Name: "app.org2.example.com", Content: "2.2.2.2", TTL: 300},
@@ -57,7 +56,6 @@ func TestDNSCrossOrgIsolation(t *testing.T) {
 	}
 	provName := registerFakeProvider(t, "crossorg-dns-prov", fake)
 
-	// Org 1 resources
 	acc1, err := seedVaultProviderAccount(p, org1, "org1-cf", provName, map[string]any{"apiToken": "t1"})
 	if err != nil {
 		t.Fatal(err)
@@ -70,7 +68,6 @@ func TestDNSCrossOrgIsolation(t *testing.T) {
 	}
 	db.Create(&tok1)
 
-	// Org 2 resources
 	acc2, err := seedVaultProviderAccount(p, org2, "org2-cf", provName, map[string]any{"apiToken": "t2"})
 	if err != nil {
 		t.Fatal(err)
@@ -86,9 +83,6 @@ func TestDNSCrossOrgIsolation(t *testing.T) {
 	ctxOrg1Admin := makeDNSOrgCtx(org1, "admin")
 	ctxOrg2Admin := makeDNSOrgCtx(org2, "admin")
 
-	// ==================== 1. Domain Endpoints Isolation ====================
-
-	// 1a. List Domains: Org 1 must only see dom1
 	domListOut, err := p.listDomains(ctx, &ListDomainsInput{Ctx: ctxOrg1Admin})
 	if err != nil {
 		t.Fatalf("listDomains: %v", err)
@@ -97,7 +91,6 @@ func TestDNSCrossOrgIsolation(t *testing.T) {
 		t.Errorf("listDomains: Org 1 saw domains %+v, want only dom1 (%d)", domListOut.Body, dom1.ID)
 	}
 
-	// 1b. Create Domain with Org 2's Provider Account: must be rejected
 	_, err = p.createDomain(ctx, &CreateDomainInput{
 		Ctx: ctxOrg1Admin,
 		Body: domainDTO{
@@ -114,7 +107,6 @@ func TestDNSCrossOrgIsolation(t *testing.T) {
 		t.Errorf("createDomain: rogue domain was created using Org 2 provider account")
 	}
 
-	// 1c. Update Domain: Org 1 cannot update Org 2's domain
 	maliciousNote := "malicious-domain-update"
 	_, err = p.updateDomain(ctx, &UpdateDomainInput{
 		Ctx:  ctxOrg1Admin,
@@ -130,7 +122,6 @@ func TestDNSCrossOrgIsolation(t *testing.T) {
 		t.Fatalf("updateDomain: Org 2 domain was modified by Org 1")
 	}
 
-	// 1d. Update Domain: Org 1 cannot rebind its domain to Org 2's provider account
 	_, err = p.updateDomain(ctx, &UpdateDomainInput{
 		Ctx:  ctxOrg1Admin,
 		ID:   dom1.ID,
@@ -145,7 +136,6 @@ func TestDNSCrossOrgIsolation(t *testing.T) {
 		t.Fatalf("updateDomain: Org 1 domain bound to Org 2 provider account")
 	}
 
-	// 1e. Delete Domain: Org 1 cannot delete Org 2's domain
 	_, err = p.deleteDomain(ctx, &DeleteDomainInput{
 		Ctx: ctxOrg1Admin,
 		ID:  dom2.ID,
@@ -158,9 +148,6 @@ func TestDNSCrossOrgIsolation(t *testing.T) {
 		t.Fatalf("deleteDomain: Org 2 domain was deleted by Org 1")
 	}
 
-	// ==================== 2. Record Endpoints Isolation ====================
-
-	// 2a. List Records: Org 1 cannot list records for Org 2's domain
 	_, err = p.listRecords(ctx, &ListRecordsInput{
 		Ctx: ctxOrg1Admin,
 		ID:  dom2.ID,
@@ -169,7 +156,6 @@ func TestDNSCrossOrgIsolation(t *testing.T) {
 		t.Errorf("listRecords: expected error when Org 1 lists records of Org 2 domain, got nil")
 	}
 
-	// 2b. Create Record: Org 1 cannot create a record under Org 2's domain
 	_, err = p.createRecord(ctx, &CreateRecordInput{
 		Ctx: ctxOrg1Admin,
 		ID:  dom2.ID,
@@ -188,7 +174,6 @@ func TestDNSCrossOrgIsolation(t *testing.T) {
 		}
 	}
 
-	// 2c. Update Record: Org 1 cannot update a record under Org 2's domain
 	_, err = p.updateRecord(ctx, &UpdateRecordInput{
 		Ctx: ctxOrg1Admin,
 		ID:  dom2.ID,
@@ -208,7 +193,6 @@ func TestDNSCrossOrgIsolation(t *testing.T) {
 		}
 	}
 
-	// 2d. Delete Record: Org 1 cannot delete a record under Org 2's domain
 	_, err = p.deleteRecord(ctx, &DeleteRecordInput{
 		Ctx: ctxOrg1Admin,
 		ID:  dom2.ID,
@@ -223,9 +207,6 @@ func TestDNSCrossOrgIsolation(t *testing.T) {
 		}
 	}
 
-	// ==================== 3. DDNS Token Endpoints Isolation ====================
-
-	// 3a. List DDNS Tokens: Org 1 only sees tok1
 	ddnsListOut, err := p.listDDNSTokens(ctx, &listDDNSTokensInput{Ctx: ctxOrg1Admin})
 	if err != nil {
 		t.Fatalf("listDDNSTokens: %v", err)
@@ -234,7 +215,6 @@ func TestDNSCrossOrgIsolation(t *testing.T) {
 		t.Errorf("listDDNSTokens: Org 1 saw DDNS tokens %+v, want only tok1 (%d)", ddnsListOut.Body, tok1.ID)
 	}
 
-	// 3b. Create DDNS Token (ddns_crud.go:84): Org 1 cannot create token for Org 2's domain
 	createTokIn := &createDDNSTokenInput{
 		Ctx: ctxOrg1Admin,
 	}
@@ -252,7 +232,6 @@ func TestDNSCrossOrgIsolation(t *testing.T) {
 		t.Fatalf("createDDNSToken: DDNS token created against Org 2 domain")
 	}
 
-	// 3c. Delete DDNS Token (ddns_crud.go:169): Org 1 cannot delete Org 2's DDNS token
 	_, err = p.deleteDDNSToken(ctx, &deleteDDNSTokenInput{
 		Ctx: ctxOrg1Admin,
 		ID:  tok2.ID,
@@ -265,21 +244,16 @@ func TestDNSCrossOrgIsolation(t *testing.T) {
 		t.Fatalf("deleteDDNSToken: Org 2 DDNS token was deleted by Org 1")
 	}
 
-	// ==================== 4. Reverse Checks (Org 2 vs Org 1) ====================
-
-	// Org 2 cannot update Org 1 domain
 	_, err = p.updateDomain(ctx, &UpdateDomainInput{Ctx: ctxOrg2Admin, ID: dom1.ID, Body: domainDTO{Note: "x"}})
 	if err == nil {
 		t.Errorf("updateDomain: expected error for Org 2 updating Org 1 domain")
 	}
 
-	// Org 2 cannot delete Org 1 domain
 	_, err = p.deleteDomain(ctx, &DeleteDomainInput{Ctx: ctxOrg2Admin, ID: dom1.ID})
 	if err == nil {
 		t.Errorf("deleteDomain: expected error for Org 2 deleting Org 1 domain")
 	}
 
-	// Org 2 cannot create DDNS token under Org 1 domain
 	createTokIn2 := &createDDNSTokenInput{Ctx: ctxOrg2Admin}
 	createTokIn2.Body.DomainID = dom1.ID
 	createTokIn2.Body.RecordName = "rogue-ddns-2"
@@ -288,7 +262,6 @@ func TestDNSCrossOrgIsolation(t *testing.T) {
 		t.Errorf("createDDNSToken: expected error for Org 2 on Org 1 domain")
 	}
 
-	// Org 2 cannot delete Org 1 DDNS token
 	_, err = p.deleteDDNSToken(ctx, &deleteDDNSTokenInput{Ctx: ctxOrg2Admin, ID: tok1.ID})
 	if err == nil {
 		t.Errorf("deleteDDNSToken: expected error for Org 2 deleting Org 1 token")

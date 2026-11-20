@@ -14,7 +14,6 @@ import (
 	"github.com/octarq-org/octarq/server/origin"
 )
 
-// patchedSyncDomains simulates the proposed remediation in AUDIT_REPORT.md (Finding RES-02)
 func (p *Plugin) patchedSyncDomains(ctx context.Context, input *SyncDomainsInput, evictedNames *[]string) (*SyncDomainsOutput, error) {
 	if input.Ctx == nil {
 		return nil, huma.Error500InternalServerError("Missing huma context")
@@ -95,13 +94,11 @@ func (p *Plugin) patchedSyncDomains(ctx context.Context, input *SyncDomainsInput
 	}, nil
 }
 
-// TestVerification_RES02_Remediation verifies the refined RES-02 remediation in AUDIT_REPORT.md
 func TestVerification_RES02_Remediation(t *testing.T) {
 	t.Parallel()
 	p, mkCtx := setupFreshTestDB(t)
 	rv := origin.NewResolver(p.db)
 
-	// 1. Setup Org 1 owning "existing-org1.com" (to be updated)
 	domOrg1 := Domain{
 		OrgID:             1,
 		Name:              "existing-org1.com",
@@ -112,7 +109,6 @@ func TestVerification_RES02_Remediation(t *testing.T) {
 		t.Fatalf("setup Org 1 existing domain: %v", err)
 	}
 
-	// 2. Setup Org 2 owning "contested-org2.com" (to simulate unique constraint collision against Org 1)
 	domOrg2 := Domain{
 		OrgID:             2,
 		Name:              "contested-org2.com",
@@ -123,10 +119,6 @@ func TestVerification_RES02_Remediation(t *testing.T) {
 		t.Fatalf("setup Org 2 domain: %v", err)
 	}
 
-	// 3. Configure a fake DNS Provider for Org 1 with 3 zones:
-	// - "existing-org1.com" (should hit Update branch)
-	// - "brand-new-org1.com" (should hit Create branch - success)
-	// - "contested-org2.com" (should hit Create branch - fail with unique constraint error)
 	fake := &fakeDNSProvider{
 		zones: []provider.Zone{
 			{ID: "z-updated", Name: "existing-org1.com"},
@@ -140,7 +132,6 @@ func TestVerification_RES02_Remediation(t *testing.T) {
 		t.Fatalf("setup Org 1 provider: %v", err)
 	}
 
-	// Warm origin resolver cache
 	ownerOld, _ := rv.OwnerOf("app.existing-org1.com")
 	if ownerOld != 1 {
 		t.Fatalf("expected existing-org1.com owner=1, got %d", ownerOld)
@@ -170,7 +161,6 @@ func TestVerification_RES02_Remediation(t *testing.T) {
 	t.Logf("patchedSyncDomains returned output: %+v", body)
 	t.Logf("Evicted items: %+v", evicted)
 
-	// Verify counts: total=3, updated=1, created=1 (contested must not count as created)
 	if body["total"] != 3 {
 		t.Errorf("expected total 3, got %v", body["total"])
 	}
@@ -181,29 +171,23 @@ func TestVerification_RES02_Remediation(t *testing.T) {
 		t.Errorf("expected created 1, got %v", body["created"])
 	}
 
-	// Verify DB state for updated domain
 	var updatedDom Domain
 	p.db.First(&updatedDom, domOrg1.ID)
 	if updatedDom.ZoneID != "z-updated" || updatedDom.ProviderAccountID != accOrg1.ID {
 		t.Errorf("updated domain mismatch: %+v", updatedDom)
 	}
 
-	// Verify DB state for newly created domain
 	var createdDom Domain
 	if err := p.db.Where("owner_id = ? AND name = ?", 1, "brand-new-org1.com").First(&createdDom).Error; err != nil {
 		t.Errorf("expected created domain brand-new-org1.com in DB, got error: %v", err)
 	}
 
-	// Verify DB state for contested domain (Org 1 must NOT have a row for contested-org2.com)
 	var contestedRows []Domain
 	p.db.Where("owner_id = ? AND name = ?", 1, "contested-org2.com").Find(&contestedRows)
 	if len(contestedRows) != 0 {
 		t.Errorf("contested domain was improperly inserted for Org 1!")
 	}
 
-	// Verify Origin Cache Invalidation list
-	// Must contain updated:existing-org1.com and created:brand-new-org1.com
-	// Must NOT contain contested-org2.com
 	if len(evicted) != 2 {
 		t.Fatalf("expected exactly 2 evictions, got %d: %+v", len(evicted), evicted)
 	}
@@ -214,13 +198,11 @@ func TestVerification_RES02_Remediation(t *testing.T) {
 		t.Errorf("expected created eviction, got %s", evicted[1])
 	}
 
-	// Verify newly created domain is recognized by resolver after cache invalidation
 	ownerNew, ok := rv.OwnerOf("app.brand-new-org1.com")
 	if !ok || ownerNew != 1 {
 		t.Errorf("expected brand-new-org1.com to resolve to org 1, got ok=%v org=%d", ok, ownerNew)
 	}
 
-	// Verify contested domain remains owned by Org 2
 	ownerContestedAfter, ok := rv.OwnerOf("app.contested-org2.com")
 	if !ok || ownerContestedAfter != 2 {
 		t.Errorf("expected contested-org2.com to remain owned by org 2, got ok=%v org=%d", ok, ownerContestedAfter)

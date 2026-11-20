@@ -209,7 +209,6 @@ func (m *mockVaultService) ComputeTOTP(context.Context, uint, uint) (string, int
 	return "", 0, errors.New("not supported")
 }
 
-// seedVaultProviderAccount creates a ProviderAccount backed by a VaultService secret.
 func seedVaultProviderAccount(p *Plugin, orgID uint, name, typ string, payload map[string]any) (ProviderAccount, error) {
 	vs, err := p.vault()
 	if err != nil {

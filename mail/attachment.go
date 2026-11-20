@@ -50,7 +50,6 @@ func (p *Plugin) loadRawEmail(ctx context.Context, e *Email) []byte {
 	return nil
 }
 
-// rawEmail streams the original RFC822 message as a downloadable .eml file.
 func (p *Plugin) rawEmail(ctx context.Context, input *RawEmailInput) (*struct{}, error) {
 	if input.Ctx == nil {
 		return nil, huma.Error500InternalServerError("An unexpected error occurred while processing the request context.")

@@ -30,7 +30,6 @@ func newTestPipelineEngine(t *testing.T) (*Engine, *gorm.DB) {
 	return eng, db
 }
 
-// 1. Batching Test: N clicks produce write transactions far less than N.
 func TestClickPipelineBatching(t *testing.T) {
 	eng, db := newTestPipelineEngine(t)
 	defer eng.Close()
@@ -81,7 +80,6 @@ func TestClickPipelineBatching(t *testing.T) {
 	}
 }
 
-// 2. Bounded Queue Dropping Test: filling queue increments drop counter without blocking.
 func TestClickPipelineBoundedQueueDropping(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
 	if err != nil {
@@ -91,14 +89,11 @@ func TestClickPipelineBoundedQueueDropping(t *testing.T) {
 		t.Fatalf("migrate: %v", err)
 	}
 
-	// Create engine with tiny queue capacity for test
 	eng := &Engine{
 		db:    db,
 		ctx:   mockCtx(),
 		queue: make(chan clickItem, 5),
 	}
-	// Do NOT start worker so queue stays full
-	// Push 10 events into queue of size 5
 	start := time.Now()
 	for i := 0; i < 10; i++ {
 		rec := httptest.NewRecorder()
@@ -119,7 +114,6 @@ func TestClickPipelineBoundedQueueDropping(t *testing.T) {
 	}
 }
 
-// 3. Shutdown Flush Test: triggering Close flushes all queued items.
 func TestClickPipelineShutdownFlush(t *testing.T) {
 	eng, db := newTestPipelineEngine(t)
 
@@ -135,7 +129,6 @@ func TestClickPipelineShutdownFlush(t *testing.T) {
 		eng.Handle(rec, req, link)
 	}
 
-	// Trigger shutdown flush
 	eng.Close()
 
 	var totalEvents int64
@@ -145,7 +138,6 @@ func TestClickPipelineShutdownFlush(t *testing.T) {
 	}
 }
 
-// 4. Rate Limit Test: exceeding threshold still returns 302 redirect but drops analytics event.
 func TestClickPipelineRateLimiting(t *testing.T) {
 	eng, db := newTestPipelineEngine(t)
 	defer eng.Close()
@@ -181,7 +173,6 @@ func TestClickPipelineRateLimiting(t *testing.T) {
 	}
 }
 
-// 5. Minimal Endpoint Ownership Validation Test: host belonging to another org returns 403.
 func TestQuickCreateLinkHostOwnership(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
 	if err != nil {
@@ -191,7 +182,6 @@ func TestQuickCreateLinkHostOwnership(t *testing.T) {
 		t.Fatalf("migrate: %v", err)
 	}
 
-	// Create domain owned by Org 2
 	dom2 := testDomain{
 		OrgID:   2,
 		Name:    "org2domain.com",
@@ -201,9 +191,8 @@ func TestQuickCreateLinkHostOwnership(t *testing.T) {
 
 	p := New()
 	p.db = db
-	p.auth.OrgID = func(r *http.Request) uint { return 1 } // Context belongs to Org 1
+	p.auth.OrgID = func(r *http.Request) uint { return 1 }
 
-	// Case A: Org 1 tries to create link targeting Org 2's host -> MUST BE 403 Forbidden
 	reqA := httptest.NewRequest(http.MethodPost, "/api/links/quick", nil)
 	inputA := &QuickCreateLinkInput{
 		Ctx: humago.NewContext(nil, reqA, httptest.NewRecorder()),
@@ -221,7 +210,6 @@ func TestQuickCreateLinkHostOwnership(t *testing.T) {
 		t.Errorf("unowned host creation: expected 403 Forbidden, got %v", errA)
 	}
 
-	// Case B: Org 1 creates valid link with default/owned host -> 201 Created
 	reqB := httptest.NewRequest(http.MethodPost, "/api/links/quick", nil)
 	inputB := &QuickCreateLinkInput{
 		Ctx: humago.NewContext(nil, reqB, httptest.NewRecorder()),

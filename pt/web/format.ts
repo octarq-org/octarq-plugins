@@ -1,6 +1,3 @@
-// Display helpers. Traffic is 1024-based, which is what every tracker reports and
-// what users expect from "GB" on a PT site. A missing value renders as the
-// caller's unknown label, never as zero.
 
 const UNITS = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"] as const;
 
@@ -43,8 +40,6 @@ export function formatDateTime(value: string | undefined, unknown: string, local
 
 export type BadgeToneName = "default" | "info" | "success" | "warning" | "danger";
 
-// outcomeTone maps a sign-in verdict to a badge tone. "Not confirmed" stays
-// amber on purpose: it is not a failure, but it is not a success either.
 export function outcomeTone(outcome: string | undefined): BadgeToneName {
   switch (outcome) {
     case "success":
@@ -68,7 +63,6 @@ export function outcomeTone(outcome: string | undefined): BadgeToneName {
   }
 }
 
-// outcomeKey maps a sign-in verdict to its translation key.
 export function outcomeKey(outcome: string | undefined): string {
   switch (outcome) {
     case "success":
@@ -94,7 +88,6 @@ export function outcomeKey(outcome: string | undefined): string {
   }
 }
 
-// minutesToClock renders a minutes-from-midnight window bound as HH:MM.
 export function minutesToClock(minutes: number): string {
   const bounded = ((minutes % 1440) + 1440) % 1440;
   const hh = Math.floor(bounded / 60).toString().padStart(2, "0");

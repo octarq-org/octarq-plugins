@@ -11,8 +11,6 @@ import (
 	"github.com/octarq-org/octarq-plugins/dns/provider"
 )
 
-// validateRecord catches the most common reasons Cloudflare rejects a record
-// before we make the API call, returning a friendly message (or "" if valid).
 func validateRecord(rec provider.Record) string {
 	if strings.TrimSpace(rec.Type) == "" {
 		return "record type is required"
@@ -29,8 +27,6 @@ func validateRecord(rec provider.Record) string {
 	return ""
 }
 
-// recordsProvider loads the domain (scoped to the caller's org) and builds its
-// DNS provider.
 func (p *Plugin) recordsProviderForOrg(orgID uint, id uint) (provider.Provider, *Domain, error) {
 	var dom Domain
 	if p.db.Where("id = ? AND owner_id = ?", id, orgID).First(&dom).Error != nil {

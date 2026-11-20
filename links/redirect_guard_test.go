@@ -9,10 +9,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// newGuardDB opens a per-test in-memory database. The other links tests share
-// one anonymous shared-cache DB (they clear rows defensively); these guards
-// assert exact ownership states, so they need storage that no other test
-// touches.
 func newGuardDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
@@ -36,12 +32,6 @@ func seedOrgs(t *testing.T, db *gorm.DB, n int) {
 	}
 }
 
-// Guard 1: a host that no domain registers — the shared dashboard host
-// app.octarq.org, a bare instance hostname, an IP — must still serve
-// host-agnostic links (host = ""). This is the branch mail click tracking
-// runs on: plugins/mail's wrapLinksInEmail creates Host:"" links and serves
-// them from the shared host when the org has no custom link domain. Refusing
-// here would break Cloud click tracking for every tenant without a domain.
 func TestLookupServesHostAgnosticOnUnregisteredHost(t *testing.T) {
 	db := newGuardDB(t)
 	seedOrgs(t, db, 2)
@@ -57,10 +47,6 @@ func TestLookupServesHostAgnosticOnUnregisteredHost(t *testing.T) {
 	}
 }
 
-// Guard 2: a Link row that claims an exact host no domain registers is an
-// unauthorized claim — the write side only lets an org put links on hosts it
-// owns, so such a row can only be a dirty insert. It must not be served, and
-// it must not shadow the host-agnostic fallback either.
 func TestLookupRefusesUnregisteredHostClaim(t *testing.T) {
 	db := newGuardDB(t)
 	seedOrgs(t, db, 2)
@@ -74,13 +60,6 @@ func TestLookupRefusesUnregisteredHostClaim(t *testing.T) {
 	}
 }
 
-// Guard 3: when two orgs claim the same host — one by registering it as a
-// domain name, the other by listing it in their own domain's LinkHosts — the
-// redirect must refuse to serve the host rather than pick a side. Both
-// insertion orders are tested because the original bug was a first-match
-// scan: with only the attacker-first order the test would go red under the
-// bug, but with only the victim-first order it would stay green and prove
-// nothing.
 func TestLookupRefusesContestedHost(t *testing.T) {
 	for _, order := range []string{"victim-first", "attacker-first"} {
 		t.Run(order, func(t *testing.T) {
@@ -108,9 +87,6 @@ func TestLookupRefusesContestedHost(t *testing.T) {
 				}
 			}
 
-			// The victim's own link on their apex and the attacker's
-			// host-agnostic link share the slug; the host-agnostic one is what
-			// the original bug served on the victim's host.
 			if err := db.Create(&Link{OrgID: 1, Slug: "promo", Host: "victim.test", Target: "https://legit.example", Enabled: true}).Error; err != nil {
 				t.Fatalf("seed victim link: %v", err)
 			}
@@ -127,9 +103,6 @@ func TestLookupRefusesContestedHost(t *testing.T) {
 	}
 }
 
-// Guard 4: a host that one org owns resolves only that org's links. Another
-// org's host-agnostic link must not appear on it — the owner_id filter is the
-// tenant boundary on the redirect path.
 func TestLookupScopesOwnedHostToOwner(t *testing.T) {
 	db := newGuardDB(t)
 	seedOrgs(t, db, 2)
@@ -151,7 +124,6 @@ func TestLookupScopesOwnedHostToOwner(t *testing.T) {
 		t.Fatalf("owner's own link on owned host: ok=%v, want found", ok)
 	}
 
-	// Org 2's host-agnostic link must not be served on org 1's host.
 	if _, ok := eng.Lookup("victim.test", "y"); ok {
 		t.Fatal("another org's host-agnostic link resolved on a host owned by a different org")
 	}

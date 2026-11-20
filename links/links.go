@@ -13,7 +13,6 @@ import (
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
-// linkDTO is the create/update payload.
 type linkDTO struct {
 	Host         string       `json:"host,omitempty"`
 	Slug         string       `json:"slug,omitempty"`
@@ -69,7 +68,6 @@ func (p *Plugin) listLinks(ctx context.Context, input *ListLinksInput) (*ListLin
 	}
 	var links []Link
 	q := p.orgDB(r).Order("created_at DESC")
-	// Archived links are hidden unless explicitly requested (?archived=1).
 	if input.Archived == "1" {
 		q = q.Where("archived = ?", true)
 	} else {
@@ -195,11 +193,6 @@ func (p *Plugin) createLink(ctx context.Context, input *CreateLinkInput) (*Creat
 	if err := validateRedirectTargets(&l); err != nil {
 		return nil, err
 	}
-	// Metered consumption: ask the (hosted-only) quota checker whether this
-	// org may create another link. A self-hosted install has no checker, so
-	// this always passes there — unlimited links are the self-hosted selling
-	// point, and the check must run before the row exists (no partial record
-	// when it refuses).
 	if err := p.checkQuota(ctx, l.OrgID, "links", 1); err != nil {
 		return nil, err
 	}

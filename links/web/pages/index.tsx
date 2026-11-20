@@ -130,9 +130,6 @@ export default function LinksPage() {
         pluginGate.degrade(err.status);
         return;
       }
-      // Everything else used to be swallowed: the first page rendered the
-      // "no links yet" empty state over a 500, and a failed next page looked
-      // like the end of the list.
       setError({ detail: err.status ? `HTTP ${err.status}` : err.message });
     } finally {
       setLoading(false);
@@ -169,8 +166,6 @@ export default function LinksPage() {
       await linksApi.updateLink(l.id, { archived: !l.archived });
       loadMore(true);
     } catch {
-      // A rejected mutation used to bubble out of the click handler as an
-      // unhandled rejection, leaving the row unchanged with no feedback.
       toast.error(t("links.actionFailed"));
     }
   };
@@ -205,10 +200,6 @@ export default function LinksPage() {
     }
   };
 
-  // The empty state below carries the same action. Two primary buttons that do
-  // the same thing on one screen split attention, so the header keeps it only
-  // when the empty state cannot show it: another tab, a load failure, a search
-  // with no hits, or a list still loading.
   const emptyStateOwnsCreate = tab === "links" && !error && !loading && links.length === 0 && !q;
 
   return (
@@ -238,7 +229,6 @@ export default function LinksPage() {
 
       {tab === "links" && (
         <div className="space-y-4" data-testid="links-projection-view">
-          {/* Search, Filter Tabs & Batch Toolbar */}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex max-w-sm flex-1 items-center gap-2">
               <div className="relative w-full">
@@ -277,7 +267,6 @@ export default function LinksPage() {
             </div>
           </div>
 
-          {/* Links Data Table / Empty Views */}
           {error && links.length === 0 ? (
             <TableError errorText={error.detail} onRetry={() => loadMore(true)} />
           ) : loading && links.length === 0 ? (
@@ -398,7 +387,6 @@ export default function LinksPage() {
 
       {tab === "anomalies" && (
         <div className="space-y-6" data-testid="anomalies-projection-view">
-          {/* Overview Stat Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
               label={t("links.anomalyTraffic", "Traffic Anomalies")}
@@ -435,7 +423,6 @@ export default function LinksPage() {
             />
           </div>
 
-          {/* Anomaly Real-Time Monitor Card */}
           <Panel
             title={t("links.tabAnomalies", "Anomaly Monitoring")}
             description={t("links.anomalyDesc", "Real-time monitors track 404 floods, redirect loops, and abnormal traffic spikes.")}
@@ -455,7 +442,6 @@ export default function LinksPage() {
 
       {tab === "reserved" && (
         <div className="space-y-6" data-testid="reserved-projection-view">
-          {/* Guidance Banner */}
           <div className="flex items-center justify-between p-3 rounded-lg border border-primary/20 bg-accent-soft text-xs text-foreground">
             <div className="flex items-center gap-2">
               <Blocks className="h-4 w-4 text-accent-fg shrink-0" />

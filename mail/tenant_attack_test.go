@@ -19,7 +19,6 @@ func TestMail_CrossTenantAttack_AntiPenetration(t *testing.T) {
 	p, db := setupCrossOrgMailDB(t)
 	ctx := context.Background()
 
-	// Seed data for Org 1
 	mb1 := Mailbox{
 		OrgID:   1,
 		Address: "inbox@org1.example.com",
@@ -71,7 +70,6 @@ func TestMail_CrossTenantAttack_AntiPenetration(t *testing.T) {
 		t.Fatalf("seed email1: %v", err)
 	}
 
-	// Seed data for Org 2
 	mb2 := Mailbox{
 		OrgID:   2,
 		Address: "inbox@org2.example.com",
@@ -133,7 +131,6 @@ func TestMail_CrossTenantAttack_AntiPenetration(t *testing.T) {
 		return humago.NewContext(nil, req, httptest.NewRecorder())
 	}
 
-	// Attack Scenario 1: Tenant 1 attempts to UPDATE Tenant 2's Mailbox
 	t.Run("UpdateOtherTenantMailbox_Returns404", func(t *testing.T) {
 		hCtx := makeCtxForOrg(1, http.MethodPut, "/api/mailboxes/update")
 		in := &UpdateMailboxInput{
@@ -159,7 +156,6 @@ func TestMail_CrossTenantAttack_AntiPenetration(t *testing.T) {
 		}
 	})
 
-	// Attack Scenario 2: Tenant 1 attempts to DELETE Tenant 2's Mailbox
 	t.Run("DeleteOtherTenantMailbox_Returns404", func(t *testing.T) {
 		hCtx := makeCtxForOrg(1, http.MethodDelete, "/api/mailboxes/delete")
 		in := &DeleteMailboxInput{
@@ -183,7 +179,6 @@ func TestMail_CrossTenantAttack_AntiPenetration(t *testing.T) {
 		}
 	})
 
-	// Attack Scenario 3: Tenant 1 attempts to UPDATE Tenant 2's SMTP Sender
 	t.Run("UpdateOtherTenantSMTPSender_Returns404", func(t *testing.T) {
 		hCtx := makeCtxForOrg(1, http.MethodPut, "/api/smtp/update")
 		newName := "Hacked SMTP"
@@ -217,7 +212,6 @@ func TestMail_CrossTenantAttack_AntiPenetration(t *testing.T) {
 		}
 	})
 
-	// Attack Scenario 4: Tenant 1 attempts to DELETE Tenant 2's SMTP Sender
 	t.Run("DeleteOtherTenantSMTPSender_Returns404", func(t *testing.T) {
 		hCtx := makeCtxForOrg(1, http.MethodDelete, "/api/smtp/delete")
 		in := &DeleteSMTPSenderInput{
@@ -241,7 +235,6 @@ func TestMail_CrossTenantAttack_AntiPenetration(t *testing.T) {
 		}
 	})
 
-	// Attack Scenario 5: Tenant 1 attempts to DELETE Tenant 2's Suppression
 	t.Run("DeleteOtherTenantSuppression_Returns404", func(t *testing.T) {
 		hCtx := makeCtxForOrg(1, http.MethodDelete, "/api/suppressions/delete")
 		in := &DeleteSuppressionInput{
@@ -265,7 +258,6 @@ func TestMail_CrossTenantAttack_AntiPenetration(t *testing.T) {
 		}
 	})
 
-	// Attack Scenario 6: Tenant 1 attempts to READ or DELETE Tenant 2's Email
 	t.Run("AccessOtherTenantEmail_Returns404", func(t *testing.T) {
 		hCtx := makeCtxForOrg(1, http.MethodGet, "/api/emails/get")
 		getIn := &GetEmailInput{
@@ -300,39 +292,32 @@ func TestMail_CrossTenantAttack_AntiPenetration(t *testing.T) {
 		}
 	})
 
-	// Attack Scenario 7: Direct TenantDB injection / privilege escalation
 	t.Run("DirectTenantDB_FailClosedEnforcement", func(t *testing.T) {
 		tdb1 := p.tenantDB(1)
 		if tdb1 == nil {
 			t.Fatalf("tenantDB(1) is nil")
 		}
 
-		// Injecting Mailbox with OrgID 2
 		if err := tdb1.Create(&Mailbox{OrgID: 2, Address: "evil@org2.com"}).Error; err == nil {
 			t.Fatalf("expected error creating Mailbox OrgID 2 in TenantDB(1), got nil")
 		}
 
-		// Injecting SMTPSender with OrgID 2
 		if err := tdb1.Create(&SMTPSender{OrgID: 2, Name: "Evil SMTP"}).Error; err == nil {
 			t.Fatalf("expected error creating SMTPSender OrgID 2 in TenantDB(1), got nil")
 		}
 
-		// Injecting MailSuppression with OrgID 2
 		if err := tdb1.Create(&MailSuppression{OrgID: 2, Address: "evil@org2.com"}).Error; err == nil {
 			t.Fatalf("expected error creating MailSuppression OrgID 2 in TenantDB(1), got nil")
 		}
 
-		// Injecting MailContact with OrgID 2
 		if err := tdb1.Create(&MailContact{OrgID: 2, Address: "evil@org2.com"}).Error; err == nil {
 			t.Fatalf("expected error creating MailContact OrgID 2 in TenantDB(1), got nil")
 		}
 
-		// Overwrite Mailbox 2 via Save
 		if err := tdb1.Save(&Mailbox{ID: mb2.ID, OrgID: 2, Note: "hacked"}).Error; err == nil {
 			t.Fatalf("expected error saving Mailbox OrgID 2 in TenantDB(1), got nil")
 		}
 
-		// Querying Mailbox 2 via TenantDB 1
 		var forbidden Mailbox
 		if err := tdb1.Where("id = ?", mb2.ID).First(&forbidden).Error; err == nil {
 			t.Fatalf("tenant 1 read tenant 2 mailbox: %+v", forbidden)
@@ -340,7 +325,6 @@ func TestMail_CrossTenantAttack_AntiPenetration(t *testing.T) {
 			t.Fatalf("expected gorm.ErrRecordNotFound, got: %v", err)
 		}
 
-		// Querying SMTPSender 2 via TenantDB 1
 		var forbiddenSender SMTPSender
 		if err := tdb1.Where("id = ?", s2.ID).First(&forbiddenSender).Error; err == nil {
 			t.Fatalf("tenant 1 read tenant 2 sender: %+v", forbiddenSender)
@@ -349,7 +333,6 @@ func TestMail_CrossTenantAttack_AntiPenetration(t *testing.T) {
 		}
 	})
 
-	// Attack Scenario 8: High-concurrency cross-tenant queries (-race test)
 	t.Run("ConcurrentCrossTenantAccess_NoStateLeak", func(t *testing.T) {
 		var wg sync.WaitGroup
 		errCh := make(chan error, 40)

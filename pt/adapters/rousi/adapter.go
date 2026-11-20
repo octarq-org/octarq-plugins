@@ -1,6 +1,3 @@
-// Package rousi implements the Rousi dialect. Rousi publishes a REST account
-// API and a documented attendance endpoint, so it is the one API-key site the
-// plugin can sign in to.
 package rousi
 
 import (
@@ -13,10 +10,8 @@ import (
 	"github.com/octarq-org/octarq-plugins/pt/adapter"
 )
 
-// Adapter is the Rousi dialect.
 type Adapter struct{}
 
-// New returns the dialect.
 func New() *Adapter { return &Adapter{} }
 
 func (*Adapter) Schema() adapter.Schema { return adapter.SchemaRousi }
@@ -53,8 +48,6 @@ func (a *Adapter) Stats(ctx context.Context, s *adapter.Session) (*adapter.UserS
 	return parseProfile(root, s.Site.Timezone)
 }
 
-// Signin calls the documented attendance endpoint. Only a zero code counts as
-// success; a message that merely looks positive is not enough.
 func (a *Adapter) Signin(ctx context.Context, s *adapter.Session) (*adapter.SigninResult, error) {
 	if strings.TrimSpace(s.Secret.APIKey) == "" {
 		return &adapter.SigninResult{
@@ -195,7 +188,6 @@ func parseProfile(root map[string]any, loc *time.Location) (*adapter.UserStats, 
 	return out, nil
 }
 
-// origin returns the site origin. Rousi's API lives on the site host.
 func origin(s *adapter.Session) (string, error) {
 	raw := s.Site.APIBaseURL
 	if strings.TrimSpace(raw) == "" {

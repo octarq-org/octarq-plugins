@@ -26,8 +26,6 @@ type LinkStatsOutput struct {
 	Body map[string]any
 }
 
-// linkStats returns basic analytics: totals, a daily time series, and the
-// top referers / countries / devices / browsers over the requested window.
 func (p *Plugin) linkStats(ctx context.Context, input *LinkStatsInput) (*LinkStatsOutput, error) {
 	if input.Ctx == nil {
 		return nil, huma.Error500InternalServerError("Request context is unavailable. Try again.")
@@ -41,7 +39,6 @@ func (p *Plugin) linkStats(ctx context.Context, input *LinkStatsInput) (*LinkSta
 	if tdb == nil {
 		return nil, huma.Error401Unauthorized("Authentication required. Sign in to continue.")
 	}
-	// Ensure the link belongs to the caller's org before exposing its analytics.
 	var l Link
 	if tdb.Where("id = ?", input.ID).First(&l).Error != nil {
 		return nil, huma.Error404NotFound("Link not found")

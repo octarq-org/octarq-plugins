@@ -9,8 +9,6 @@ import (
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
-// storedSecret is the decrypted credential payload. It is never logged, never
-// returned by an API handler, and never written to a column in plaintext.
 type storedSecret struct {
 	Login  string `json:"login,omitempty"`
 	Cookie string `json:"cookie,omitempty"`
@@ -22,7 +20,6 @@ func (s storedSecret) empty() bool {
 	return s.Login == "" && s.Cookie == "" && s.APIKey == "" && s.Token == ""
 }
 
-// credentialSubject is the per-tracker KeyName inside VaultService.
 func credentialSubject(secretID string) string {
 	return "pt.tracker." + secretID
 }
@@ -74,9 +71,6 @@ func secretFromPayload(payload map[string]any) storedSecret {
 	}
 }
 
-// verifyUserSecret refuses a vault item that is not a user-scope item of the
-// given owner. A mismatch reads as ErrNotFound: an id from another owner must
-// be indistinguishable from a missing one.
 func verifyUserSecret(meta *plugin.VaultItemMeta, ownerUserID uint) error {
 	if meta == nil || ownerUserID == 0 ||
 		meta.Scope != plugin.VaultScopeUser || meta.OwnerUserID != ownerUserID {
@@ -85,8 +79,6 @@ func verifyUserSecret(meta *plugin.VaultItemMeta, ownerUserID uint) error {
 	return nil
 }
 
-// vaultMetaOf returns the tracker's credential metadata only when the item is a
-// user-scope item owned by the tracker's owner. Anything else is invisible.
 func (p *Plugin) vaultMetaOf(ctx context.Context, t *PTTracker) *plugin.VaultItemMeta {
 	if t.VaultItemID == 0 {
 		return nil
@@ -127,8 +119,6 @@ func (p *Plugin) storeVaultSecret(ctx context.Context, t *PTTracker, secret stor
 		metaMap["last_login_at"] = t.LastLoginAt.UTC().Format(time.RFC3339)
 	}
 
-	// An existing item is updated only after it proves to be this owner's
-	// user-scope item. A missing one drops the anchor; a foreign one refuses.
 	if t.VaultItemID > 0 {
 		existing, err := vs.GetMeta(ctx, t.OrgID, t.VaultItemID)
 		switch {
@@ -201,7 +191,6 @@ func (p *Plugin) readVaultSecret(ctx context.Context, t *PTTracker) (storedSecre
 		}
 		return storedSecret{}, err
 	}
-	// The payload is revealed only after the item proves to be this owner's.
 	if err := verifyUserSecret(&sec.Meta, t.OwnerUserID); err != nil {
 		return storedSecret{}, err
 	}

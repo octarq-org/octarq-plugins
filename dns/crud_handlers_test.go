@@ -69,11 +69,9 @@ func TestDNSDomainCRUDHandlers(t *testing.T) {
 	p, mkCtx := setupFullDNSTestDB(t)
 	ctx := context.Background()
 
-	// Seed ProviderAccount
 	acc := ProviderAccount{OrgID: 1, Name: "Test Provider", Type: "cloudflare"}
 	p.db.Create(&acc)
 
-	// 1. Create Domain
 	reqCreate := httptest.NewRequest(http.MethodPost, "/api/dns/domains", nil)
 	createIn := &CreateDomainInput{
 		Ctx: mkCtx(reqCreate),
@@ -89,7 +87,6 @@ func TestDNSDomainCRUDHandlers(t *testing.T) {
 	}
 	domID := outCreate.Body.ID
 
-	// 2. List Domains
 	reqList := httptest.NewRequest(http.MethodGet, "/api/dns/domains?q=mydomain", nil)
 	listOut, err := p.listDomains(ctx, &ListDomainsInput{
 		Ctx: mkCtx(reqList),
@@ -99,7 +96,6 @@ func TestDNSDomainCRUDHandlers(t *testing.T) {
 		t.Fatalf("listDomains error=%v, count=%d", err, len(listOut.Body))
 	}
 
-	// 3. Update Domain
 	bTrue := true
 	reqUp := httptest.NewRequest(http.MethodPut, "/api/dns/domains/1", nil)
 	upOut, err := p.updateDomain(ctx, &UpdateDomainInput{
@@ -111,7 +107,6 @@ func TestDNSDomainCRUDHandlers(t *testing.T) {
 		t.Fatalf("updateDomain error=%v, out=%+v", err, upOut)
 	}
 
-	// 4. Delete Domain - member forbidden
 	reqDelMember := httptest.NewRequest(http.MethodDelete, "/api/dns/domains/1", nil)
 	reqDelMember.Header.Set("X-Role", "member")
 	_, err = p.deleteDomain(ctx, &DeleteDomainInput{Ctx: mkCtx(reqDelMember), ID: domID})
@@ -119,7 +114,6 @@ func TestDNSDomainCRUDHandlers(t *testing.T) {
 		t.Error("expected 403 when deleting domain as member")
 	}
 
-	// Delete Domain - admin success
 	reqDelAdmin := httptest.NewRequest(http.MethodDelete, "/api/dns/domains/1", nil)
 	reqDelAdmin.Header.Set("X-Role", "admin")
 	delOut, err := p.deleteDomain(ctx, &DeleteDomainInput{Ctx: mkCtx(reqDelAdmin), ID: domID})

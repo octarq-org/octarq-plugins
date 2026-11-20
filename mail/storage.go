@@ -10,7 +10,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// MailRawBlob stores raw email RFC822 blobs in the database when using DB storage.
 type MailRawBlob struct {
 	Key       string    `gorm:"primaryKey;size:255" json:"key"`
 	Data      []byte    `json:"-"`
@@ -19,7 +18,6 @@ type MailRawBlob struct {
 
 func (MailRawBlob) TableName() string { return "mail_raw_blobs" }
 
-// DBStorageProvider implements plugin.StorageProvider backed by GORM database.
 type DBStorageProvider struct {
 	db *gorm.DB
 }
@@ -74,9 +72,6 @@ func (p *DBStorageProvider) DeleteBatch(ctx context.Context, keys []string) erro
 	return nil
 }
 
-// Stat asks the database for the byte count instead of loading the blob and
-// measuring it: this is the call the storage meter makes, and a multi-megabyte
-// original does not need to travel to the process to have its length taken.
 func (p *DBStorageProvider) Stat(ctx context.Context, key string) (int64, error) {
 	if p.db == nil {
 		return 0, errors.New("database connection is nil")

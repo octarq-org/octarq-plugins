@@ -31,16 +31,13 @@ func setupTestPlugin(t *testing.T) (*Plugin, *gorm.DB) {
 		},
 	}
 
-	// Create test orgs
 	db.Create(&testOrg{ID: 1, Slug: "org1", InboundToken: "tok1"})
 	db.Create(&testOrg{ID: 2, Slug: "org2", InboundToken: "tok2"})
 
-	// Create mailbox for org 1
 	db.Create(&Mailbox{ID: 1, OrgID: 1, Address: "hardbounce@example.com", Enabled: true})
 	db.Create(&Mailbox{ID: 2, OrgID: 1, Address: "softbounce@example.com", Enabled: true})
 	db.Create(&Mailbox{ID: 3, OrgID: 1, Address: "complaint@example.com", Enabled: true})
 
-	// Create mailbox for org 2
 	db.Create(&Mailbox{ID: 4, OrgID: 2, Address: "hardbounce@example.com", Enabled: true})
 
 	return p, db
@@ -60,7 +57,6 @@ func callBounceWebhook(p *Plugin, orgSlug, token, jsonPayload string) (*EmailBou
 	return p.emailBounceWebhook(context.Background(), input)
 }
 
-// 1. bounceType: Permanent → 进抑制列表
 func TestBounceTypePermanentEntersSuppressionList(t *testing.T) {
 	p, db := setupTestPlugin(t)
 
@@ -83,7 +79,6 @@ func TestBounceTypePermanentEntersSuppressionList(t *testing.T) {
 	}
 }
 
-// 2. bounceType: Transient → 不进抑制列表，但审计仍然写了
 func TestBounceTypeTransientDoesNotEnterSuppressionList(t *testing.T) {
 	p, db := setupTestPlugin(t)
 
@@ -103,7 +98,6 @@ func TestBounceTypeTransientDoesNotEnterSuppressionList(t *testing.T) {
 		t.Errorf("transient bounce must NOT enter suppression list, but count was %d", count)
 	}
 
-	// Audit log still written
 	var auditCount int64
 	db.Model(&testAuditLog{}).Where("org_id = ? AND action = ?", 1, "email.bounce").Count(&auditCount)
 	if auditCount == 0 {
@@ -111,7 +105,6 @@ func TestBounceTypeTransientDoesNotEnterSuppressionList(t *testing.T) {
 	}
 }
 
-// 3. complaint → 进抑制列表
 func TestComplaintEntersSuppressionList(t *testing.T) {
 	p, db := setupTestPlugin(t)
 
@@ -134,7 +127,6 @@ func TestComplaintEntersSuppressionList(t *testing.T) {
 	}
 }
 
-// 4. 同一地址收到 5 次 Permanent 退信 → 列表里只有一条记录 (upsert)
 func TestMultiplePermanentBouncesUpsertsSingleRecord(t *testing.T) {
 	p, db := setupTestPlugin(t)
 
@@ -162,11 +154,9 @@ func TestMultiplePermanentBouncesUpsertsSingleRecord(t *testing.T) {
 	}
 }
 
-// 5. 发信拦截：抑制列表里的地址，发信调用不投递并返回明确状态
 func TestSendInterceptionForSuppressedAddress(t *testing.T) {
 	p, db := setupTestPlugin(t)
 
-	// Manually add to suppression list for org 1
 	db.Create(&MailSuppression{
 		OrgID:   1,
 		Address: "blocked@example.com",
@@ -174,21 +164,18 @@ func TestSendInterceptionForSuppressedAddress(t *testing.T) {
 		Count:   1,
 	})
 
-	// Add SMTP sender for org 1
 	if _, err := seedVaultSMTPSender(p, SMTPSender{
 		ID: 10, OrgID: 1, Name: "sup-relay", Host: "127.0.0.1", Port: 25, User: "u", FromEmail: "sender@example.com",
 	}, "p"); err != nil {
 		t.Fatal(err)
 	}
 
-	// Test direct sendMail function
 	err := p.sendMail(1, "blocked@example.com", "Subject", "HTML", "Text")
 	if err == nil {
 		t.Fatal("expected sendMail to fail for suppressed address, but it succeeded")
 		return
 	}
 
-	// Test sendEmail HTTP handler
 	req := httptest.NewRequest("POST", "/api/emails/send", nil)
 	input := &SendEmailInput{
 		Ctx: mkCtx(req),
@@ -198,7 +185,6 @@ func TestSendInterceptionForSuppressedAddress(t *testing.T) {
 	input.Body.Subject = "Subject"
 	input.Body.Text = "Text"
 
-	// Mock p.orgID for request
 	p.orgID = func(r *http.Request) uint { return 1 }
 
 	_, sendErr := p.sendEmail(context.Background(), input)
@@ -208,11 +194,9 @@ func TestSendInterceptionForSuppressedAddress(t *testing.T) {
 	}
 }
 
-// 6. org 隔离：A org 抑制了 x@y.com，B org 发给 x@y.com 必须照常发出
 func TestOrgIsolationForSuppressionList(t *testing.T) {
 	p, db := setupTestPlugin(t)
 
-	// Suppress x@y.com in Org 1 ONLY
 	db.Create(&MailSuppression{
 		OrgID:   1,
 		Address: "x@y.com",
@@ -220,12 +204,10 @@ func TestOrgIsolationForSuppressionList(t *testing.T) {
 		Count:   1,
 	})
 
-	// Verify Org 1 is suppressed
 	if !p.isSuppressed(1, "x@y.com") {
 		t.Error("expected x@y.com to be suppressed for Org 1")
 	}
 
-	// Verify Org 2 is NOT suppressed for x@y.com
 	if p.isSuppressed(2, "x@y.com") {
 		t.Error("x@y.com MUST NOT be suppressed for Org 2 (Org isolation failure)")
 	}

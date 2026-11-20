@@ -8,8 +8,6 @@ import (
 	"github.com/octarq-org/octarq-plugins/pt/adapter"
 )
 
-// credentialView reports what is stored without exposing any part of it. The
-// API never returns ciphertext, the account secret, the cookie, or the API key.
 type credentialView struct {
 	HasLoginSecret bool       `json:"has_login_secret"`
 	HasCookie      bool       `json:"has_cookie"`
@@ -19,9 +17,6 @@ type credentialView struct {
 	LastLoginAt    *time.Time `json:"last_login_at,omitempty"`
 }
 
-// TrackerViewFields holds the public fields of a tracker without any promoted methods.
-// Having no methods allows Huma's reflect.StructOf OpenAPI schema linker to wrap it
-// without encountering Go's "embedded type with methods not implemented" panic.
 type TrackerViewFields struct {
 	ID        uint      `json:"id"`
 	CreatedAt time.Time `json:"created_at"`
@@ -72,7 +67,6 @@ type TrackerViewFields struct {
 	CreatedByUserID  uint  `json:"created_by_user_id,omitempty"`
 }
 
-// trackerView is one tracker plus everything the card needs.
 type trackerView struct {
 	TrackerViewFields
 	SchemaLabel    string               `json:"schema_label"`
@@ -82,8 +76,6 @@ type trackerView struct {
 	LastSignin     *PTSigninResult      `json:"last_signin,omitempty"`
 }
 
-// summaryView aggregates the visible trackers. Totals cover only the trackers
-// whose latest snapshot reported the value, so the numbers never invent data.
 type summaryView struct {
 	TrackerCount       int      `json:"tracker_count"`
 	EnabledCount       int      `json:"enabled_count"`
@@ -97,8 +89,6 @@ type summaryView struct {
 	WarningCount       int      `json:"warning_count"`
 }
 
-// overviewView is the dashboard-level summary plus the capability matrix the
-// add form renders.
 type overviewView struct {
 	Summary            summaryView          `json:"summary"`
 	Schemas            []adapter.SchemaInfo `json:"schemas"`
@@ -106,9 +96,6 @@ type overviewView struct {
 	ServerTimezone     string               `json:"server_timezone"`
 }
 
-// trackerWriteBody is the create and update payload. Every field is optional in
-// the schema; the handler enforces which ones the current operation needs, so
-// create and update can share one shape.
 type trackerWriteBody struct {
 	Name       string `json:"name,omitempty" maxLength:"120"`
 	Schema     string `json:"schema,omitempty" maxLength:"32"`
@@ -116,7 +103,6 @@ type trackerWriteBody struct {
 	APIBaseURL string `json:"api_base_url,omitempty" maxLength:"512"`
 	Username   string `json:"username,omitempty" maxLength:"255"`
 
-	// Secrets. On update an empty string means "keep the stored value".
 	LoginSecret string `json:"login_secret,omitempty" maxLength:"512"`
 	Cookie      string `json:"cookie,omitempty" maxLength:"8192"`
 	APIKey      string `json:"site_api_token,omitempty" maxLength:"512"`
@@ -137,8 +123,6 @@ type trackerWriteBody struct {
 	LimitSeconds         *int `json:"limit_seconds,omitempty" minimum:"0" maximum:"86400"`
 }
 
-// credentialWriteBody replaces stored secrets. Empty fields keep the stored
-// value; force stores a secret that the site has not accepted yet.
 type credentialWriteBody struct {
 	LoginSecret string `json:"login_secret,omitempty" maxLength:"512"`
 	Cookie      string `json:"cookie,omitempty" maxLength:"8192"`
@@ -146,8 +130,6 @@ type credentialWriteBody struct {
 	Force       bool   `json:"force,omitempty"`
 }
 
-// credentialWriteView reports the verification verdict. The secret is stored
-// only when Verified is true, or when the caller asked for force.
 type credentialWriteView struct {
 	Stored      bool   `json:"stored"`
 	Verified    bool   `json:"verified"`
@@ -158,7 +140,6 @@ type credentialWriteView struct {
 }
 
 type signinBody struct {
-	// Force skips the once-per-day ledger check.
 	Force bool `json:"force,omitempty"`
 }
 
@@ -166,8 +147,6 @@ type detectBody struct {
 	URL string `json:"url" maxLength:"512" required:"true"`
 }
 
-// detectView is advice, not a decision: the stored schema is always the one the
-// user picks.
 type detectView struct {
 	SuggestedSchema string `json:"suggested_schema,omitempty"`
 	Reachable       bool   `json:"reachable"`

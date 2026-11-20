@@ -22,7 +22,6 @@ func BenchmarkEngineFlushBatch_Current(b *testing.B) {
 	db.Where("1 = 1").Delete(&Link{})
 	db.Where("1 = 1").Delete(&LinkEvent{})
 
-	// Create some links to click on
 	linkIDs := []uint{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 	prefix := rand.Intn(1000)
 	for _, id := range linkIDs {
@@ -38,7 +37,6 @@ func BenchmarkEngineFlushBatch_Current(b *testing.B) {
 		}
 	}
 
-	// Refresh the slice to have actual IDs
 	var links []Link
 	db.Find(&links)
 	for i, link := range links {
@@ -91,7 +89,6 @@ func BenchmarkEngineFlushBatch_Optimized(b *testing.B) {
 	db.Where("1 = 1").Delete(&Link{})
 	db.Where("1 = 1").Delete(&LinkEvent{})
 
-	// Create some links to click on
 	linkIDs := []uint{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 	prefix := rand.Intn(1000)
 	for _, id := range linkIDs {
@@ -107,7 +104,6 @@ func BenchmarkEngineFlushBatch_Optimized(b *testing.B) {
 		}
 	}
 
-	// Refresh the slice to have actual IDs
 	var links []Link
 	db.Find(&links)
 	for i, link := range links {

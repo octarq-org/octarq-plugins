@@ -14,7 +14,6 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// upsertContact maintains address interaction history for auto-completion and tracking.
 func (p *Plugin) upsertContact(orgID uint, rawAddr string) {
 	if orgID == 0 || rawAddr == "" {
 		return
@@ -114,7 +113,6 @@ func (p *Plugin) listContacts(ctx context.Context, input *ListContactsInput) (*L
 	return &ListContactsOutput{Body: contacts}, nil
 }
 
-// upsertContacts maintains address interaction history for auto-completion and tracking in batch.
 func (p *Plugin) upsertContacts(orgID uint, rawAddrs []string) {
 	if orgID == 0 || len(rawAddrs) == 0 {
 		return
@@ -123,7 +121,6 @@ func (p *Plugin) upsertContacts(orgID uint, rawAddrs []string) {
 	var contacts []MailContact
 	now := time.Now()
 
-	// Deduplicate incoming addresses
 	seen := make(map[string]bool)
 
 	for _, rawAddr := range rawAddrs {
@@ -167,7 +164,6 @@ func (p *Plugin) upsertContacts(orgID uint, rawAddrs []string) {
 	if tdb == nil {
 		return
 	}
-	// Batch upsert
 	tdb.Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "owner_id"}, {Name: "address"}},
 		DoUpdates: clause.Assignments(map[string]interface{}{

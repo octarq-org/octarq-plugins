@@ -38,7 +38,6 @@ func TestMailGet_BodyRetrievalAndFences(t *testing.T) {
 	ctx1 := plugin.WithOrgID(context.Background(), 1)
 	ctx2 := plugin.WithOrgID(context.Background(), 2)
 
-	// 1. Successful read as Org 1
 	out, err := p.handleReadEmailBody(ctx1, ReadEmailInput{ID: e1.ID})
 	if err != nil {
 		t.Fatalf("handleReadEmailBody failed: %v", err)
@@ -57,17 +56,14 @@ func TestMailGet_BodyRetrievalAndFences(t *testing.T) {
 		t.Errorf("expected subject 'Monthly Invoice #1024', got %q", out.Subject)
 	}
 
-	// Verify <untrusted> fence
 	if !strings.HasPrefix(out.TextBody, "<untrusted>\n") || !strings.HasSuffix(out.TextBody, "\n</untrusted>") {
 		t.Errorf("TextBody must be fenced with <untrusted>...</untrusted>, got: %q", out.TextBody)
 	}
 
-	// Verify token redaction inside fence
 	if strings.Contains(out.TextBody, "secret1234567890abcdef") {
 		t.Errorf("TextBody contains unredacted sensitive token: %q", out.TextBody)
 	}
 
-	// Verify attachment metadata
 	if len(out.Attachments) != 2 {
 		t.Fatalf("expected 2 attachments, got %d", len(out.Attachments))
 	}
@@ -75,7 +71,6 @@ func TestMailGet_BodyRetrievalAndFences(t *testing.T) {
 		t.Errorf("unexpected attachment 0: %+v", out.Attachments[0])
 	}
 
-	// 2. HTML-only body fallback with script tag stripping
 	eHTML := Email{
 		MailboxID:  mb1.ID,
 		FromAddr:   "marketing@vendor.com",
@@ -100,7 +95,6 @@ func TestMailGet_BodyRetrievalAndFences(t *testing.T) {
 		t.Errorf("HTML TextBody must also be fenced: %q", outHTML.TextBody)
 	}
 
-	// 3. Declarative handler invocation with camelCase
 	mcpRes, mcpErr := p.handleReadEmailBody(ctx1, ReadEmailInput{EmailIDCamel: e1.ID})
 	if mcpErr != nil {
 		t.Fatalf("handleReadEmailBody failed: %v", mcpErr)
@@ -109,7 +103,6 @@ func TestMailGet_BodyRetrievalAndFences(t *testing.T) {
 		t.Fatal("expected non-empty response content")
 	}
 
-	// 4. Cross-tenant isolation: Org 2 must NOT be able to read Org 1's email
 	if _, err := p.handleReadEmailBody(ctx2, ReadEmailInput{ID: e1.ID}); err == nil {
 		t.Fatal("security violation: Org 2 accessed Org 1's email!")
 	}
@@ -124,7 +117,6 @@ func TestMailDraftCreate(t *testing.T) {
 	ctx1 := plugin.WithOrgID(context.Background(), 1)
 	ctx2 := plugin.WithOrgID(context.Background(), 2)
 
-	// 1. Missing recipient should fail
 	_, err := p.handleCreateDraft(ctx1, CreateDraftInput{
 		Subject: "Draft without recipient",
 		Body:    "Testing draft creation",
@@ -133,7 +125,6 @@ func TestMailDraftCreate(t *testing.T) {
 		t.Fatal("expected error when recipient is empty")
 	}
 
-	// 2. Successful draft creation
 	out, err := p.handleCreateDraft(ctx1, CreateDraftInput{
 		MailboxID:   mb.ID,
 		To:          "partner@example.com",
@@ -159,7 +150,6 @@ func TestMailDraftCreate(t *testing.T) {
 		t.Errorf("expected subject 'Project Proposal Draft', got %q", out.Subject)
 	}
 
-	// Verify persistence in mail_drafts table
 	var savedDraft MailDraft
 	if err := db.Where("id = ?", out.ID).First(&savedDraft).Error; err != nil {
 		t.Fatalf("draft not persisted in mail_drafts: %v", err)
@@ -171,7 +161,6 @@ func TestMailDraftCreate(t *testing.T) {
 		t.Errorf("expected InReplyToID 42, got %d", savedDraft.InReplyToID)
 	}
 
-	// 3. Declarative handler invocation
 	_, err = p.handleCreateDraft(ctx1, CreateDraftInput{
 		To:      "mcp@test.com",
 		Subject: "MCP Draft",
@@ -181,12 +170,10 @@ func TestMailDraftCreate(t *testing.T) {
 		t.Fatalf("handleCreateDraft failed: %v", err)
 	}
 
-	// 4. Unauthorized (no org)
 	if _, err := p.handleCreateDraft(context.Background(), CreateDraftInput{To: "a@b.com"}); err == nil {
 		t.Fatal("expected unauthorized error when org is absent")
 	}
 
-	// 5. Cross-org mailbox rejection: Org 2 trying to use Org 1's mailbox
 	_, errOrg2 := p.handleCreateDraft(ctx2, CreateDraftInput{
 		MailboxID: mb.ID,
 		To:        "partner@example.com",
@@ -201,7 +188,6 @@ func TestMailDraftCreate(t *testing.T) {
 func TestMailSendReply_DeclarativeContractAndHITL(t *testing.T) {
 	db, p := setupMailboxTestDB(t)
 
-	// Verify endpoint specifications
 	var sendSpec plugin.Endpoint
 	var getSpec plugin.Endpoint
 	var draftSpec plugin.Endpoint
@@ -234,7 +220,6 @@ func TestMailSendReply_DeclarativeContractAndHITL(t *testing.T) {
 		t.Fatal("create_email_draft / mail_draft_create endpoint was not registered")
 	}
 
-	// 1. Verify Risk Levels and HITL Approval Gate
 	if getSpec.EndpointRisk() != plugin.RiskLevelRead {
 		t.Errorf("expected RiskLevelRead for read_email_body, got %q", getSpec.EndpointRisk())
 	}
@@ -250,7 +235,6 @@ func TestMailSendReply_DeclarativeContractAndHITL(t *testing.T) {
 
 	ctx1 := plugin.WithOrgID(context.Background(), 1)
 
-	// 2. Missing recipient fails closed
 	_, err := p.handleSendEmail(ctx1, SendEmailToolInput{
 		Subject: "Hello",
 		Body:    "Body",
@@ -259,7 +243,6 @@ func TestMailSendReply_DeclarativeContractAndHITL(t *testing.T) {
 		t.Fatal("expected error when recipients are missing")
 	}
 
-	// 3. Suppression check fails closed
 	db.Create(&MailSuppression{OrgID: 1, Address: "blocked@evil.test", Reason: "hard_bounce"})
 	_, errSuppressed := p.handleSendEmail(ctx1, SendEmailToolInput{
 		To:      []string{"blocked@evil.test"},
@@ -270,8 +253,6 @@ func TestMailSendReply_DeclarativeContractAndHITL(t *testing.T) {
 		t.Fatal("expected suppression error when sending to blocked address")
 	}
 
-	// 4. A sender ID without a source is refused: an ID alone cannot identify
-	// a row across the local table and the Integrations Hub.
 	_, errNoSource := p.handleSendEmail(ctx1, SendEmailToolInput{
 		To:           []string{"valid@example.com"},
 		Subject:      "Test",
@@ -282,7 +263,6 @@ func TestMailSendReply_DeclarativeContractAndHITL(t *testing.T) {
 		t.Fatal("expected error when the sender source is missing")
 	}
 
-	// 5. Unknown local sender fails closed
 	_, errNoSMTP := p.handleSendEmail(ctx1, SendEmailToolInput{
 		To:               []string{"valid@example.com"},
 		Subject:          "Test",
@@ -294,12 +274,10 @@ func TestMailSendReply_DeclarativeContractAndHITL(t *testing.T) {
 		t.Fatal("expected error when no SMTP sender is configured")
 	}
 
-	// 6. Unauthorized send (no org)
 	if _, err := p.handleSendEmail(context.Background(), SendEmailToolInput{To: []string{"test@example.com"}}); err == nil {
 		t.Fatal("expected unauthorized error")
 	}
 
-	// 7. ToAddr comma/semicolon parsing and vault failure cases
 	s, err := seedVaultSMTPSender(p, SMTPSender{OrgID: 1, Name: "tool-relay", Host: "127.0.0.1", Port: 2525, User: "sender", FromEmail: "sender@example.com"}, "plainpass")
 	if err != nil {
 		t.Fatal(err)
@@ -330,7 +308,6 @@ func TestMailSendReply_DeclarativeContractAndHITL(t *testing.T) {
 		t.Fatal("expected vault read failed error")
 	}
 
-	// 8. Send failed error from network dialer
 	mv.getErr = nil
 	_, errSendFail := p.handleSendEmail(ctx1, SendEmailToolInput{
 		To:               []string{"valid@example.com"},
@@ -348,12 +325,10 @@ func TestMailAITools_ReadEmailAndDraftEdgeCases(t *testing.T) {
 	db, p := setupMailboxTestDB(t)
 	ctx1 := plugin.WithOrgID(context.Background(), 1)
 
-	// Read email ID == 0
 	if _, err := p.handleReadEmailBody(ctx1, ReadEmailInput{}); err == nil {
 		t.Fatal("expected bad request for missing email id")
 	}
 
-	// Read email with HTML fallback and attachments
 	mb := Mailbox{OrgID: 1, Address: "inbox2@example.com"}
 	db.Create(&mb)
 	em := Email{
@@ -375,14 +350,11 @@ func TestMailAITools_ReadEmailAndDraftEdgeCases(t *testing.T) {
 		t.Fatalf("expected attachment dto, got %v", out.Attachments)
 	}
 
-	// Create draft with missing recipient
 	if _, err := p.handleCreateDraft(ctx1, CreateDraftInput{Subject: "No recipient"}); err == nil {
 		t.Fatal("expected error creating draft with no recipient")
 	}
 }
 
-// The agent tool must reach the Integrations Hub when the caller names that
-// registry, and must refuse an integration that cannot send mail.
 func TestMailAITools_SendResolvesThroughIntegrationSource(t *testing.T) {
 	_, p := setupMailboxTestDB(t)
 	ctx1 := plugin.WithOrgID(context.Background(), 1)
@@ -421,7 +393,6 @@ func TestMailAITools_SendResolvesThroughIntegrationSource(t *testing.T) {
 		t.Errorf("vault relay did not receive the message:\n%s", got())
 	}
 
-	// Vault failure is not "no such sender"; it must surface as an error.
 	mv.getErr = errors.New("vault unavailable")
 	_, err = p.handleSendEmail(ctx1, SendEmailToolInput{
 		To:               []string{"valid@example.com"},

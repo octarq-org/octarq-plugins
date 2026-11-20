@@ -8,8 +8,6 @@ import (
 )
 
 func TestFetchPageMetaBlocksInternal(t *testing.T) {
-	// End-to-end: the title-preview path must return nothing for an internal URL
-	// rather than fetching it.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("<title>internal</title>"))
 	}))

@@ -12,8 +12,6 @@ import (
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
-// TestChallenger_MailCrossTenantIsolation stress tests cross-tenant boundaries
-// in sendEmail (HTTP API) and sendMail (internal service).
 func TestChallenger_MailCrossTenantIsolation(t *testing.T) {
 	p, mkCtx := setupFullMailTestDB(t)
 	wipeMailTables(t, p)
@@ -50,7 +48,6 @@ func TestChallenger_MailCrossTenantIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Probe 1: Org 20 calls sendEmail referencing Org 10's SMTPSenderID
 	reqOrg20 := httptest.NewRequest(http.MethodPost, "/api/emails/send", nil)
 	reqOrg20.Header.Set("X-Org-ID", "20")
 	inputCross := &SendEmailInput{
@@ -78,13 +75,11 @@ func TestChallenger_MailCrossTenantIsolation(t *testing.T) {
 		t.Errorf("expected 400 'could not be found for this workspace', got: %v", err)
 	}
 
-	// Verify SMTP relay did NOT receive any message with Org 10 sender
 	captured := gotOrg10()
 	if strings.Contains(captured, "Cross Tenant Attack") {
 		t.Errorf("CRITICAL LEAKAGE: Captured message from unauthorized send: %s", captured)
 	}
 
-	// Probe 2: sendMail for Org 30 (which has no credentials configured)
 	err = p.sendMail(30, "unauthorized@example.com", "Subject", "Body", "Body")
 	if err == nil {
 		t.Fatalf("CRITICAL SECURITY VULNERABILITY: sendMail succeeded for Org 30 with no configured senders!")
@@ -94,7 +89,6 @@ func TestChallenger_MailCrossTenantIsolation(t *testing.T) {
 	}
 }
 
-// TestChallenger_MailVaultSources tests sending via Vault integration and local Vault-backed sender.
 func TestChallenger_MailVaultSources(t *testing.T) {
 	p, mkCtx := setupFullMailTestDB(t)
 	wipeMailTables(t, p)
@@ -138,7 +132,6 @@ func TestChallenger_MailVaultSources(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/emails/send", nil)
 	req.Header.Set("X-Org-ID", "10")
 
-	// 1. Send via Vault integration ID
 	inputSPI := &SendEmailInput{
 		Ctx: mkCtx(req),
 		Body: struct {
@@ -161,7 +154,6 @@ func TestChallenger_MailVaultSources(t *testing.T) {
 		t.Fatalf("sendEmail via Vault integration failed: %v", err)
 	}
 
-	// 2. Send via Local Table sender
 	inputLocal := &SendEmailInput{
 		Ctx: mkCtx(req),
 		Body: struct {
@@ -184,7 +176,6 @@ func TestChallenger_MailVaultSources(t *testing.T) {
 		t.Fatalf("sendEmail via local sender failed: %v", err)
 	}
 
-	// 3. Absent ID 9999 -> 400 Bad Request
 	inputAbsent := &SendEmailInput{
 		Ctx: mkCtx(req),
 		Body: struct {
@@ -217,8 +208,6 @@ func TestChallenger_MailVaultSources(t *testing.T) {
 	}
 }
 
-// TestChallenger_MailInvalidConfigurationFailClosed tests that an invalid Vault
-// integration fails closed and never falls through to a local sender.
 func TestChallenger_MailInvalidConfigurationFailClosed(t *testing.T) {
 	p, mkCtx := setupFullMailTestDB(t)
 	wipeMailTables(t, p)
@@ -263,19 +252,15 @@ func TestChallenger_MailInvalidConfigurationFailClosed(t *testing.T) {
 	}
 }
 
-// TestChallenger_MailReadyCheck tests mailReady against the explicitly configured
-// system sender.
 func TestChallenger_MailReadyCheck(t *testing.T) {
 	p, _ := setupFullMailTestDB(t)
 	wipeMailTables(t, p)
 	mv := p.vaultSvc.(*mockVaultService)
 
-	// 1. Initial state: no system sender -> mailReady = false
 	if p.mailReady() {
 		t.Errorf("expected mailReady = false with no senders")
 	}
 
-	// 2. Org-scoped integration does not make mailReady true.
 	if _, err := mv.PutSecret(context.Background(), plugin.PutSecretRequest{
 		OrgID:        1,
 		Scope:        plugin.VaultScopeOrg,
@@ -291,7 +276,6 @@ func TestChallenger_MailReadyCheck(t *testing.T) {
 		t.Errorf("expected mailReady = false when only an org-scoped integration exists")
 	}
 
-	// 3. Selecting a system sender makes system mail deliverable.
 	sender, err := seedVaultSMTPSender(p, SMTPSender{
 		OrgID:     1,
 		Name:      "Local",

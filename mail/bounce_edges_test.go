@@ -26,9 +26,9 @@ func TestIsAWSSNSURL(t *testing.T) {
 		}
 	}
 	invalid := []string{
-		"http://sns.us-east-1.amazonaws.com/x", // http, not https
-		"https://evil.com/x",                   // not AWS
-		"https://sns.example.com/x",            // wrong suffix
+		"http://sns.us-east-1.amazonaws.com/x",
+		"https://evil.com/x",
+		"https://sns.example.com/x",
 		"https://sns.us-east-1.aws-not.com/x",
 		"https://sns.example.com.amazonaws.com/x",
 		"https://sns.example.s3.amazonaws.com/x",
@@ -46,7 +46,6 @@ func TestIsAWSSNSURL(t *testing.T) {
 func TestExtractBounceEvents(t *testing.T) {
 	t.Parallel()
 
-	// SES Bounce with two recipients.
 	ses := `{"notificationType":"Bounce","bounce":{"bounceType":"Permanent","bounceSubType":"General",
 		"bouncedRecipients":[{"emailAddress":"a@example.com"},{"emailAddress":"b@example.com"}]}}`
 	got := extractBounceEvents([]byte(ses))
@@ -57,7 +56,6 @@ func TestExtractBounceEvents(t *testing.T) {
 		t.Errorf("SES bounce details: %q", got[0].Details)
 	}
 
-	// SES complaint.
 	sesComplaint := `{"notificationType":"Complaint","complaint":{"complaintFeedbackType":"abuse",
 		"complainedRecipients":[{"emailAddress":"c@example.com"}]}}`
 	got = extractBounceEvents([]byte(sesComplaint))
@@ -65,7 +63,6 @@ func TestExtractBounceEvents(t *testing.T) {
 		t.Errorf("SES complaint parse: %+v", got)
 	}
 
-	// Mailgun failure with permanent severity.
 	mailgun := `{"event-data":{"event":"failed","severity":"permanent","recipient":"d@example.com",
 		"delivery-status":{"description":"smtp; 550 5.1.1 doesn't exist"}}}`
 	got = extractBounceEvents([]byte(mailgun))
@@ -76,42 +73,36 @@ func TestExtractBounceEvents(t *testing.T) {
 		t.Errorf("Mailgun details: %q", got[0].Details)
 	}
 
-	// Mailgun transient severity maps to Transient.
 	mailgunTmp := `{"event-data":{"event":"failed","severity":"temporary","recipient":"e@example.com"}}`
 	got = extractBounceEvents([]byte(mailgunTmp))
 	if len(got) != 1 || got[0].BounceType != "Transient" {
 		t.Errorf("Mailgun transient parse: %+v", got)
 	}
 
-	// Mailgun complaint.
 	mailgunComplaint := `{"event-data":{"event":"complained","recipient":"f@example.com"}}`
 	got = extractBounceEvents([]byte(mailgunComplaint))
 	if len(got) != 1 || got[0].Event != "complaint" {
 		t.Errorf("Mailgun complaint parse: %+v", got)
 	}
 
-	// Generic/SendGrid shape with alternate keys.
 	generic := `{"email":"g@example.com","event":"bounce","type":"permanent","reason":"550 unknown"}`
 	got = extractBounceEvents([]byte(generic))
 	if len(got) != 1 || got[0].Event != "bounce" || got[0].BounceType != "Permanent" || got[0].Email != "g@example.com" {
 		t.Errorf("generic parse: %+v", got)
 	}
 
-	// SendGrid spamreport counts as a complaint.
 	spam := `{"rcpt":"h@example.com","eventType":"spamreport"}`
 	got = extractBounceEvents([]byte(spam))
 	if len(got) != 1 || got[0].Event != "complaint" || got[0].Email != "h@example.com" {
 		t.Errorf("spamreport parse: %+v", got)
 	}
 
-	// A list of events is handled element-wise.
 	list := `[{"email":"i@example.com","event":"bounce"},{"email":"j@example.com","event":"complaint"}]`
 	got = extractBounceEvents([]byte(list))
 	if len(got) != 2 {
 		t.Errorf("list parse: %+v", got)
 	}
 
-	// Unknown / malformed payloads yield nothing.
 	for _, bad := range []string{`{"unrelated":true}`, `<html>not json</html>`, `[]`} {
 		if got := extractBounceEvents([]byte(bad)); len(got) != 0 {
 			t.Errorf("payload %s parsed into %+v; want none", bad, got)
@@ -119,9 +110,6 @@ func TestExtractBounceEvents(t *testing.T) {
 	}
 }
 
-// newBouncePlugin builds a mail plugin over a fresh DB with a single org +
-// token, so webhook tests can drive the public bounce endpoint without tripping
-// over rows a previous rerun left behind.
 func newBouncePlugin(t *testing.T) (*Plugin, *gorm.DB) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
@@ -161,22 +149,17 @@ func TestEmailBounceWebhookEdges(t *testing.T) {
 
 	db.Create(&testOrg{ID: 1, Slug: "acme", InboundToken: "tok"})
 	db.Create(&Mailbox{OrgID: 1, Address: "user@acme.example", Enabled: true})
-	// Extra org to prove tenant scoping of suppression writes.
 	db.Create(&testOrg{ID: 2, Slug: "other", InboundToken: "tok2"})
 
-	// Unknown org -> 404.
 	if _, err := p.emailBounceWebhook(ctx, bounceInput("nope", "tok", `{}`)); err == nil {
 		t.Error("unknown org must 404")
 	}
-	// Wrong token -> 401.
 	if _, err := p.emailBounceWebhook(ctx, bounceInput("acme", "wrong", `{}`)); err == nil {
 		t.Error("bad token must 401")
 	}
-	// SubscriptionConfirmation with a non-AWS SubscribeURL is refused (SSRF).
 	if _, err := p.emailBounceWebhook(ctx, bounceInput("acme", "tok", `{"Type":"SubscriptionConfirmation","SubscribeURL":"http://internal.example/x"}`)); err == nil {
 		t.Error("non-AWS SubscribeURL must be refused")
 	}
-	// A bounce for a mailbox that does not exist is skipped, still ok.
 	out, err := p.emailBounceWebhook(ctx, bounceInput("acme", "tok", `{"recipient":"ghost@nope.example","event":"bounce"}`))
 	if err != nil {
 		t.Fatalf("webhook with unmatched mailbox: %v", err)
@@ -185,7 +168,6 @@ func TestEmailBounceWebhookEdges(t *testing.T) {
 		t.Errorf("processed = %v, want 0 for unmatched mailbox", out.Body["processed"])
 	}
 
-	// A suppression-relevant bounce lands on the RIGHT org's list only.
 	out2, err := p.emailBounceWebhook(ctx, bounceInput("acme", "tok", `{"notificationType":"Bounce","bounce":{"bounceType":"Permanent","bouncedRecipients":[{"emailAddress":"user@acme.example"}]}}`))
 	if err != nil {
 		t.Fatalf("hard bounce: %v", err)
@@ -260,10 +242,8 @@ func TestMailAddressDomainNotAnotherTenants(t *testing.T) {
 
 	_, db := newBouncePlugin(t)
 	p.db = db
-	// victim.example is another tenant's mail host.
 	db.Create(&testDomain{OrgID: 2, Name: "victim.example", ForMail: true,
 		MailHosts: hostlist.HostList{{Host: "victim.example", Enabled: true}}})
-	// own.example is this tenant's own.
 	db.Create(&testDomain{OrgID: 1, Name: "own.example", ForMail: true,
 		MailHosts: hostlist.HostList{{Host: "own.example", Enabled: true}}})
 	if p.mailAddressDomainNotAnotherTenants(1, "user@victim.example") {
@@ -287,13 +267,11 @@ func TestResolveMailboxCatchAllCreates(t *testing.T) {
 		}
 		return ""
 	}
-	// Org 1 owns mail host mail.hosted.example (explicit) and apex catchall.example (bare).
 	db.Create(&testDomain{OrgID: 1, Name: "catchall.example", ForMail: true})
 	db.Create(&testDomain{OrgID: 1, Name: "hosted.example", ForMail: true,
 		MailHosts: hostlist.HostList{{Host: "mail.hosted.example", Enabled: true}},
 	})
 
-	// Catch-all auto-creates on an owned mail host.
 	mb, ok := p.resolveMailbox(1, "team@catchall.example")
 	if !ok {
 		t.Fatal("catch-all should create a mailbox for an owned host")
@@ -305,17 +283,14 @@ func TestResolveMailboxCatchAllCreates(t *testing.T) {
 		t.Error("the auto-created mailbox must resolve on the second lookup")
 	}
 
-	// Reserved local-part is never auto-created.
 	if _, ok := p.resolveMailbox(1, "postmaster@catchall.example"); ok {
 		t.Error("reserved local-part must not be auto-created")
 	}
 
-	// A host the org does not own is not auto-created.
 	if _, ok := p.resolveMailbox(1, "x@notours.example"); ok {
 		t.Error("unowned host must not be auto-created")
 	}
 
-	// Empty address never resolves.
 	if _, ok := p.resolveMailbox(1, ""); ok {
 		t.Error("empty address must not resolve")
 	}
@@ -332,8 +307,6 @@ func pluginCtxForTest(db *gorm.DB) *plugin.Context {
 	}
 }
 
-// wipeMailTables clears rows a previous run of the same test (SQLite in-memory
-// DBs with cache=shared persist across -count=2 reruns) may have left behind.
 func wipeMailTables(t *testing.T, p *Plugin) {
 	t.Helper()
 	p.db.Where("1 = 1").Delete(&Mailbox{})

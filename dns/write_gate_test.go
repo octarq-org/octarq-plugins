@@ -16,7 +16,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// setupGateTestDB initialises a minimal in-memory plugin with role and orgID wired.
 func setupGateTestDB(t *testing.T) (*Plugin, func(role string) huma.Context) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
@@ -51,12 +50,10 @@ func setupGateTestDB(t *testing.T) (*Plugin, func(role string) huma.Context) {
 	return p, mkCtx
 }
 
-// TestCreateRecordRoleGate verifies that member is denied and admin passes through.
 func TestCreateRecordRoleGate(t *testing.T) {
 	t.Parallel()
 	p, mkCtx := setupGateTestDB(t)
 
-	// Seed domain
 	acc := ProviderAccount{OrgID: 1, Name: "CF", Type: "cloudflare"}
 	p.db.Create(&acc)
 	dom := Domain{OrgID: 1, Name: "gate-test.com", ProviderAccountID: acc.ID, ZoneID: "zone-abc"}
@@ -67,7 +64,6 @@ func TestCreateRecordRoleGate(t *testing.T) {
 		Body: provider.Record{Type: "A", Content: "1.2.3.4", Name: "gate-test.com"},
 	}
 
-	// member → must be refused before hitting the provider
 	in.Ctx = mkCtx("member")
 	_, err := p.createRecord(context.Background(), in)
 	if err == nil {
@@ -78,10 +74,8 @@ func TestCreateRecordRoleGate(t *testing.T) {
 		t.Fatalf("createRecord: expected 403, got %v", err)
 	}
 
-	// admin → provider will error (no real creds) but the gate must pass
 	in.Ctx = mkCtx("admin")
 	_, err = p.createRecord(context.Background(), in)
-	// We expect a provider-level error (e.g. no creds), NOT a 403
 	if err == nil {
 		t.Fatal("createRecord: expected provider error for admin with bad creds, got nil")
 		return
@@ -91,7 +85,6 @@ func TestCreateRecordRoleGate(t *testing.T) {
 	}
 }
 
-// TestUpdateRecordRoleGate verifies that member is denied and admin passes through.
 func TestUpdateRecordRoleGate(t *testing.T) {
 	t.Parallel()
 	p, mkCtx := setupGateTestDB(t)
@@ -107,7 +100,6 @@ func TestUpdateRecordRoleGate(t *testing.T) {
 		Body: provider.Record{Type: "A", Content: "5.6.7.8", Name: "gate-upd.com"},
 	}
 
-	// member → 403
 	in.Ctx = mkCtx("member")
 	_, err := p.updateRecord(context.Background(), in)
 	if err == nil {
@@ -118,7 +110,6 @@ func TestUpdateRecordRoleGate(t *testing.T) {
 		t.Fatalf("updateRecord: expected 403, got %v", err)
 	}
 
-	// admin → reaches provider (may error on creds, but not 403)
 	in.Ctx = mkCtx("admin")
 	_, err = p.updateRecord(context.Background(), in)
 	if err == nil {
@@ -130,9 +121,6 @@ func TestUpdateRecordRoleGate(t *testing.T) {
 	}
 }
 
-// TestProviderErrSanitization verifies that a recognisable marker in the
-// upstream error does NOT appear in the HTTP response body, but the log still
-// contains it (providerErr calls log.Printf before returning).
 func TestProviderErrSanitization(t *testing.T) {
 	t.Parallel()
 	p := &Plugin{}
@@ -145,11 +133,9 @@ func TestProviderErrSanitization(t *testing.T) {
 		t.Fatal("providerErr returned nil")
 	}
 
-	// The HTTP response body must NOT contain the marker.
 	if strings.Contains(returned.Error(), marker) {
 		t.Errorf("provider raw text leaked into response: %v", returned.Error())
 	}
-	// It must still contain the action name so the user knows what failed.
 	if !strings.Contains(returned.Error(), "create record") {
 		t.Errorf("response should contain the action name, got: %v", returned.Error())
 	}

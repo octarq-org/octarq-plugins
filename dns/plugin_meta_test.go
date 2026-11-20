@@ -50,14 +50,12 @@ func TestDNSPluginMetaPurgeExportAndMCP(t *testing.T) {
 		t.Errorf("mcpExportDomains failed: %v, %+v", err, domExp)
 	}
 
-	// MCP Tool Calls with context org 1
 	ctxOrg := plugin.WithOrgID(ctx, 1)
 	_, domsOut, err := p.mcpListDomains(ctxOrg, nil, listDomainsInput{})
 	if err != nil || domsOut == nil {
 		t.Errorf("mcpListDomains error=%v, out=%+v", err, domsOut)
 	}
 
-	// MCP Tool Calls without org context -> error
 	if _, _, err := p.mcpListDomains(ctx, nil, listDomainsInput{}); err == nil {
 		t.Error("expected error when calling mcpListDomains with no org")
 	}

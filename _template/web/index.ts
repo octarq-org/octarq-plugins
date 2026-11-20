@@ -1,22 +1,12 @@
-// The plugin's frontend entry — the JS half's UIPlugin, mirroring the Go half's
-// plugin.Plugin in ../plugin.go. A host composes it at build time by listing
-// this package in its plugin manifest (octarq's web/octarq.plugins.json), which
-// generates a `registerUIPlugin(myPlugin)` call. Besides routes/menu/i18n a
-// UIPlugin may also contribute dashboard `widgets` and new top-level sidebar
-// `areas` — see the UIPlugin type in @octarq/plugin-sdk.
 import { lazy } from "react";
 import type { UIPlugin } from "@octarq/plugin-sdk";
 
 export const myPlugin: UIPlugin = {
-  name: "myplugin", // MUST match Plugin.Name() in ../plugin.go
+  name: "myplugin",
   routes: [
     { path: "/myplugin", Component: lazy(() => import("./Page")) },
   ],
-  // No `menu` here: a sidebar entry comes from the Go half's Menus() (see
-  // ../plugin.go). `UIPlugin.menu` was removed from the plugin SDK in 0.8.0.
   i18n: {
-    // Keys merge under your `name` namespace, so `pageTitle` is read as
-    // t("myplugin.pageTitle") — no collisions with core or other plugins.
     en: {
       pageTitle: "My Plugin",
       pageDesc: "A starter full-stack Octarq plugin.",
@@ -34,6 +24,4 @@ export const myPlugin: UIPlugin = {
   },
 };
 
-// A plugin package default-exports its UIPlugin (or an array), so the host
-// manifest can compose it with `import myPlugin from "<this-package>"`.
 export default myPlugin;

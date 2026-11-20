@@ -4,10 +4,6 @@ import { NavLink } from "react-router-dom";
 import { mailApi, SMTPSender } from "../api";
 import { KeyRound, Send, Blocks } from "lucide-react";
 
-// Which registry owns the sender rows. An instance with Core Vault
-// mounted uses vault items; a standalone instance without vault uses
-// the local mail_smtp_senders table. The two registries number rows
-// independently, so a page must read exactly one of them.
 type SenderMode = "integration" | "local" | null;
 
 function formatIntegrationSenderSummary(s: any): string {
@@ -161,8 +157,6 @@ export function SMTPSenders() {
           </PageRows>
         </div>
       ) : senders.length === 0 ? (
-        // The heading carries the add/open control, so the empty state states
-        // the fact and adds no second button.
         <Empty reason={t("settings.noSmtpSenders")} className="mt-3">
           <Send />
         </Empty>

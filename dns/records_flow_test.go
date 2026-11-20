@@ -11,8 +11,6 @@ import (
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
-// fakeDNSProvider is a fully in-memory provider.Provider whose behavior
-// tests can shape per operation via the error fields.
 type fakeDNSProvider struct {
 	zones        []provider.Zone
 	records      []provider.Record
@@ -80,17 +78,12 @@ func (f *fakeDNSProvider) VerifyZone(context.Context, string) (string, error) {
 	return f.verifyName, nil
 }
 
-// registerFakeProvider registers the given instance under a per-test name and
-// returns the name. Registration is additive and idempotent, so repeated
-// calls (e.g. under -count=2) are harmless.
 func registerFakeProvider(t *testing.T, name string, f provider.Provider) string {
 	t.Helper()
 	provider.Register(name, func([]byte) (provider.Provider, error) { return f, nil })
 	return name
 }
 
-// seedDomainForProvider wires a provider account + domain in org 1 so the
-// plugin's providerFor() resolves to the fake provider.
 func seedDomainForProvider(t *testing.T, p *Plugin, name, zoneID string, provName string) (uint, uint) {
 	t.Helper()
 	acc, err := seedVaultProviderAccount(p, 1, name+"-acc", provName, map[string]any{"apiToken": "tok"})
@@ -114,7 +107,6 @@ func TestRecordsCRUDFlow(t *testing.T) {
 	ctx := context.Background()
 	admin := mkCtx("admin")
 
-	// List
 	listOut, err := p.listRecords(ctx, &ListRecordsInput{Ctx: admin, ID: domID})
 	if err != nil {
 		t.Fatalf("listRecords: %v", err)
@@ -123,7 +115,6 @@ func TestRecordsCRUDFlow(t *testing.T) {
 		t.Fatalf("listRecords = %+v", listOut.Body)
 	}
 
-	// Create
 	created, err := p.createRecord(ctx, &CreateRecordInput{Ctx: admin, ID: domID, Body: provider.Record{Type: "A", Name: "api.example.com", Content: "2.2.2.2"}})
 	if err != nil {
 		t.Fatalf("createRecord: %v", err)
@@ -132,7 +123,6 @@ func TestRecordsCRUDFlow(t *testing.T) {
 		t.Fatalf("createRecord out=%+v fake.created=%+v", created.Body, fake.created)
 	}
 
-	// Update
 	updated, err := p.updateRecord(ctx, &UpdateRecordInput{Ctx: admin, ID: domID, RID: "r1", Body: provider.Record{Type: "A", Name: "www.example.com", Content: "3.3.3.3"}})
 	if err != nil {
 		t.Fatalf("updateRecord: %v", err)
@@ -144,7 +134,6 @@ func TestRecordsCRUDFlow(t *testing.T) {
 		t.Fatalf("updateRecord fake.updated=%+v", fake.updated)
 	}
 
-	// Delete
 	del, err := p.deleteRecord(ctx, &DeleteRecordInput{Ctx: admin, ID: domID, RID: "r1"})
 	if err != nil || !del.Body["ok"].(bool) {
 		t.Fatalf("deleteRecord: %v", err)
@@ -166,8 +155,6 @@ func TestRecordsScopedToCallersOrg(t *testing.T) {
 	ctx := context.Background()
 	admin := mkCtx("admin")
 
-	// Org 1 reaching org 2's domain id: every record operation is refused with 404 Not Found and
-	// the fake provider is never touched.
 	for name, f := range map[string]func() error{
 		"list": func() error { _, err := p.listRecords(ctx, &ListRecordsInput{Ctx: admin, ID: other.ID}); return err },
 		"create": func() error {
@@ -195,7 +182,6 @@ func TestRecordsScopedToCallersOrg(t *testing.T) {
 	}
 	_ = myDom
 
-	// A domain with no zone id is refused before touching the provider.
 	noZoneAcc, err := seedVaultProviderAccount(p, 1, "nozone-acc", provName, map[string]any{"apiToken": "tok"})
 	if err != nil {
 		t.Fatal(err)
@@ -226,8 +212,6 @@ func TestRecordsValidationAndProviderErrors(t *testing.T) {
 	ctx := context.Background()
 	admin := mkCtx("admin")
 
-	// List has no role gate at all: a member's read reaches the provider (its
-	// error surfaces as the provider's sanitized 400, not a 403).
 	member := mkCtx("member")
 	if _, err := p.listRecords(ctx, &ListRecordsInput{Ctx: member, ID: domID}); statusOf(t, err) != http.StatusBadRequest {
 		t.Fatalf("member list: want 400 (provider error), got %v", err)
@@ -237,13 +221,11 @@ func TestRecordsValidationAndProviderErrors(t *testing.T) {
 		t.Fatalf("member create: want 403")
 	}
 
-	// Missing type/content -> 400, provider untouched.
 	_, err = p.createRecord(ctx, &CreateRecordInput{Ctx: admin, ID: domID, Body: provider.Record{Name: "x"}})
 	if statusOf(t, err) != http.StatusBadRequest {
 		t.Fatalf("missing type: want 400, got %v", err)
 	}
 
-	// Provider errors surface as 400 with the action name present.
 	_, err = p.listRecords(ctx, &ListRecordsInput{Ctx: admin, ID: domID})
 	if statusOf(t, err) != http.StatusBadRequest || !strings.Contains(err.Error(), "list records") {
 		t.Fatalf("list provider err: %v", err)
@@ -267,7 +249,7 @@ func TestSyncDomainsFlow(t *testing.T) {
 	fake := &fakeDNSProvider{zones: []provider.Zone{
 		{ID: "z-new", Name: "Fresh.COM"},
 		{ID: "z-old", Name: "existing.com"},
-		{ID: "z-base", Name: "tenant.app.example.com"}, // reserved, skipped
+		{ID: "z-base", Name: "tenant.app.example.com"},
 	}}
 	provName := registerFakeProvider(t, "sync-flow-prov", fake)
 	accID, _ := seedDomainForProvider(t, p, "existing.com", "z-stale", provName)
@@ -285,7 +267,6 @@ func TestSyncDomainsFlow(t *testing.T) {
 	if body["created"] != 1 || body["updated"] != 1 || body["total"] != 3 {
 		t.Fatalf("sync counts wrong: %+v", body)
 	}
-	// The reserved base-zone name was skipped entirely.
 	if body["created"].(int)+body["updated"].(int) != 2 {
 		t.Errorf("reserved zone must not be imported: %+v", body)
 	}
@@ -314,7 +295,6 @@ func TestSyncDomainsGates(t *testing.T) {
 		ProviderAccountID uint `json:"providerAccountId,omitempty"`
 	}{accID}
 
-	// Member -> 403.
 	memberReq := httptest.NewRequest(http.MethodPost, "/api/domains/sync", nil)
 	memberReq.Header.Set("X-Org-ID", "1")
 	memberReq.Header.Set("X-Role", "member")
@@ -322,24 +302,20 @@ func TestSyncDomainsGates(t *testing.T) {
 		t.Fatalf("member sync: want 403")
 	}
 
-	// Missing account id -> 400.
 	if _, err := p.syncDomains(ctx, &SyncDomainsInput{Ctx: mkCtx(req)}); statusOf(t, err) != http.StatusBadRequest {
 		t.Fatalf("missing account: want 400")
 	}
 
-	// Unknown provider account -> 404.
 	if _, err := p.syncDomains(ctx, &SyncDomainsInput{Ctx: mkCtx(req), Body: struct {
 		ProviderAccountID uint `json:"providerAccountId,omitempty"`
 	}{99999}}); statusOf(t, err) != http.StatusNotFound {
 		t.Fatalf("unknown account: want 404")
 	}
 
-	// Provider list-zones failure -> 400 sanitized.
 	if _, err := p.syncDomains(ctx, &SyncDomainsInput{Ctx: mkCtx(req), Body: body}); statusOf(t, err) != http.StatusBadRequest {
 		t.Fatalf("list-zones err: want 400")
 	}
 
-	// Unregistered provider type -> 400.
 	unknownAcc, err := seedVaultProviderAccount(p, 1, "ghost", "no-such-provider", map[string]any{"apiToken": "tok"})
 	if err != nil {
 		t.Fatal(err)
@@ -379,7 +355,6 @@ func TestDNSManagerEndToEnd(t *testing.T) {
 		t.Errorf("mgr.Delete never reached the provider: %+v", fake.deleted)
 	}
 
-	// Provider failure propagates, org mismatch is refused before the provider.
 	fake.listRecErr = errBoom
 	if _, err := mgr.List(ctx, 1, domID); err == nil {
 		t.Error("mgr.List must propagate provider error")

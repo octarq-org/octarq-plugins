@@ -23,9 +23,6 @@ export function MailSettings() {
 
   const adminView = s?.inboundTokenSet !== undefined;
 
-  // The raw token is never part of the settings dump — it is fetched explicitly
-  // from the admin-only /api/settings/inbound-token endpoint and masked until
-  // the admin asks to see it.
   const loadToken = useCallback(async () => {
     if (tokenLoaded) return;
     try {
@@ -33,7 +30,6 @@ export function MailSettings() {
       setInboundToken(r.inboundToken);
       setTokenLoaded(true);
     } catch {
-      // First-run org or a transient failure — keep the mask.
     }
   }, [tokenLoaded]);
 
@@ -52,8 +48,6 @@ export function MailSettings() {
       });
       toast.success(t("settings.saved"));
       if (tokenLoaded) {
-        // A save may have rotated the token (clearing it mints a fresh one);
-        // refresh so the displayed value and URL stay accurate.
         const r = await mailApi.inboundToken();
         setInboundToken(r.inboundToken);
       }

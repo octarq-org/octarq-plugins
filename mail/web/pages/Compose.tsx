@@ -20,8 +20,6 @@ export function Compose({
   const [subject, setSubject] = useState(draft?.subject ?? "");
   const [text, setText] = useState(draft?.text ?? "");
   const [smtpSenderId, setSmtpSenderId] = useState<number>(0);
-  // Which registry owns smtpSenderId. The two registries number their rows
-  // independently, so the ID alone cannot identify a sender.
   const [senderSource, setSenderSource] = useState<"local" | "integration" | null>(null);
   const [senders, setSenders] = useState<any[]>([]);
   const [loadingSenders, setLoadingSenders] = useState(true);
@@ -30,7 +28,6 @@ export function Compose({
   const [autoWrapLinksEnabled, setAutoWrapLinksEnabled] = useState(false);
   const [trackLinks, setTrackLinks] = useState(false);
 
-  // Contacts autocomplete
   const [contacts, setContacts] = useState<MailContact[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const toContainerRef = useRef<HTMLDivElement>(null);
@@ -52,8 +49,6 @@ export function Compose({
           credentials: "same-origin",
         });
         if (res.status === 404) {
-          // Core Vault is unavailable on this instance: the local SMTP sender
-          // registry is the only source, so offer it instead of an empty list.
           const list = await mailApi.smtpSenders();
           if (cancelled) return;
           setSenderSource("local");
@@ -74,8 +69,6 @@ export function Compose({
         setSmtpSenderId(preferred ? preferred.id : 0);
       } catch {
         if (cancelled) return;
-        // Do not guess at a sender when the lookup fails: sending through the
-        // wrong registry is worse than asking the user to retry.
         setSenderSource(null);
         setSenders([]);
         setSmtpSenderId(0);

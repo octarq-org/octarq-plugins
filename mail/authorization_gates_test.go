@@ -21,8 +21,6 @@ func seededMailbox(t *testing.T, p *Plugin) uint {
 	return mb.ID
 }
 
-// memberCtx builds a request whose role header makes the fail-closed role gate
-// refuse it.
 func memberCtx() huma.Context {
 	r := httptest.NewRequest(http.MethodPost, "/", nil)
 	r.Header.Set("X-Role", "member")
@@ -42,7 +40,6 @@ func TestMailboxAuthorizationGates(t *testing.T) {
 	ctx := context.Background()
 	id := seededMailbox(t, p)
 
-	// Non-admin create/update/delete are refused.
 	if _, err := p.createMailbox(ctx, &CreateMailboxInput{Ctx: memberCtx(), Body: mailboxDTO{Address: "x@example.com"}}); err == nil {
 		t.Error("member createMailbox must be forbidden")
 	}
@@ -53,7 +50,6 @@ func TestMailboxAuthorizationGates(t *testing.T) {
 		t.Error("member deleteMailbox must be forbidden")
 	}
 
-	// Org 0 (no tenant) is refused everywhere.
 	if _, err := p.listMailboxes(ctx, &ListMailboxesInput{Ctx: org0Ctx()}); err == nil {
 		t.Error("listMailboxes with org 0 must fail")
 	}
@@ -67,7 +63,6 @@ func TestMailboxAuthorizationGates(t *testing.T) {
 		t.Error("deleteMailbox with org 0 must fail")
 	}
 
-	// Cross-org mailbox is invisible to update/delete.
 	r2 := httptest.NewRequest(http.MethodPost, "/", nil)
 	r2.Header.Set("X-Org-ID", "2")
 	other := humago.NewContext(nil, r2, httptest.NewRecorder())
@@ -87,7 +82,6 @@ func TestEmailAndSenderAuthorizationGates(t *testing.T) {
 	id := seededMailbox(t, p)
 	p.db.Create(&Email{MailboxID: id, Read: false, ReceivedAt: time.Now()})
 
-	// Org-0 emails refused.
 	if _, err := p.listEmails(ctx, &ListEmailsInput{Ctx: org0Ctx()}); err == nil {
 		t.Error("listEmails with org 0 must fail")
 	}
@@ -110,7 +104,6 @@ func TestEmailAndSenderAuthorizationGates(t *testing.T) {
 		t.Error("sendEmail with org 0 must fail")
 	}
 
-	// Sender gates.
 	if _, err := p.listSMTPSenders(ctx, &ListSMTPSendersInput{Ctx: org0Ctx()}); err == nil {
 		t.Error("listSMTPSenders with org 0 must fail")
 	}

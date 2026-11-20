@@ -40,9 +40,6 @@ func (p *Plugin) syncDomains(ctx context.Context, input *SyncDomainsInput) (*Syn
 	if input.Body.ProviderAccountID == 0 {
 		return nil, huma.Error400BadRequest("Provider account ID is required")
 	}
-	// Sync reads the same registry the rest of the page does: the Integrations
-	// Hub when mounted, the local table on standalone Core. Reading the local
-	// table directly made every hub-backed account 404 on sync.
 	prov, err := p.providerForContext(r.Context(), Domain{
 		OrgID:             p.orgID(r),
 		ProviderAccountID: input.Body.ProviderAccountID,

@@ -13,7 +13,6 @@ import (
 
 var errBoom = errors.New("boom")
 
-// setupProviderDB is setupFreshTestDB with VaultService wired.
 func setupProviderDB(t *testing.T) (*Plugin, func(req *http.Request) huma.Context) {
 	t.Helper()
 	return setupFreshTestDB(t)
@@ -40,7 +39,6 @@ func TestProviderAccountCRUDFlow(t *testing.T) {
 	ctx := context.Background()
 	collectAudit(p)
 
-	// Create with credentials.
 	created, err := p.createProviderAccount(ctx, &CreateProviderAccountInput{
 		Ctx:  mkAdmin(t, mkCtx),
 		Body: providerAccountDTO{Name: "  Personal CF  ", Type: "cloudflare", Config: map[string]any{"apiToken": "tok"}},
@@ -63,7 +61,6 @@ func TestProviderAccountCRUDFlow(t *testing.T) {
 		t.Errorf("vault secret = %+v, err=%v", sec, err)
 	}
 
-	// List, including a second account without credentials.
 	p.db.Create(&ProviderAccount{OrgID: 1, Name: "No Creds", Type: "dnspod"})
 	out, err := p.listProviderAccounts(ctx, &ListProviderAccountsInput{Ctx: mkAdmin(t, mkCtx)})
 	if err != nil {
@@ -80,7 +77,6 @@ func TestProviderAccountCRUDFlow(t *testing.T) {
 		t.Errorf("HasCredentials flags wrong: %v", creds)
 	}
 
-	// Update name and config.
 	updated, err := p.updateProviderAccount(ctx, &UpdateProviderAccountInput{
 		Ctx:  mkAdmin(t, mkCtx),
 		ID:   created.Body.ID,
@@ -100,7 +96,6 @@ func TestProviderAccountCRUDFlow(t *testing.T) {
 		t.Errorf("expected provider.update audit, got %v", auditCalls)
 	}
 
-	// Delete (shreds Vault secret too).
 	del, err := p.deleteProviderAccount(ctx, &DeleteProviderAccountInput{Ctx: mkAdmin(t, mkCtx), ID: created.Body.ID})
 	if err != nil || !del.Body["ok"] {
 		t.Fatalf("deleteProviderAccount: %v", err)
@@ -130,7 +125,6 @@ func TestProviderAccountValidationAndGates(t *testing.T) {
 	member.Header.Set("X-Org-ID", "1")
 	member.Header.Set("X-Role", "member")
 
-	// No name/type → 400.
 	_, err := p.createProviderAccount(ctx, &CreateProviderAccountInput{
 		Ctx:  mkAdmin(t, mkCtx),
 		Body: providerAccountDTO{Name: "  ", Type: "cloudflare"},
@@ -139,7 +133,6 @@ func TestProviderAccountValidationAndGates(t *testing.T) {
 		t.Fatalf("blank name: want 400, got %d", got)
 	}
 
-	// Member → 403.
 	_, err = p.createProviderAccount(ctx, &CreateProviderAccountInput{
 		Ctx: mkCtx(member), Body: providerAccountDTO{Name: "n", Type: "t"},
 	})
@@ -147,7 +140,6 @@ func TestProviderAccountValidationAndGates(t *testing.T) {
 		t.Fatalf("member create: want 403, got %d", got)
 	}
 
-	// org 0 → 401.
 	noOrg := httptest.NewRequest(http.MethodPost, "/", nil)
 	noOrg.Header.Set("X-Org-ID", "0")
 	noOrg.Header.Set("X-Role", "admin")
@@ -158,14 +150,11 @@ func TestProviderAccountValidationAndGates(t *testing.T) {
 		t.Fatalf("org0 create: want 401, got %d", got)
 	}
 
-	// Nil context → 500.
 	_, err = p.createProviderAccount(ctx, &CreateProviderAccountInput{Body: providerAccountDTO{Name: "n", Type: "t"}})
 	if got := statusOf(t, err); got != http.StatusInternalServerError {
 		t.Fatalf("nil ctx: want 500, got %d", got)
 	}
 
-	// Another org's account is invisible to this org's admin: update and
-	// delete both 404, and nothing may be modified.
 	other := ProviderAccount{OrgID: 2, Name: "Victim", Type: "cloudflare"}
 	if err := p.db.Create(&other).Error; err != nil {
 		t.Fatal(err)
@@ -201,7 +190,6 @@ func TestDeleteProviderAccountInUseByDomain(t *testing.T) {
 	if got := statusOf(t, err); got != http.StatusConflict {
 		t.Fatalf("delete in-use account: want 409, got %d", got)
 	}
-	// The row must still exist.
 	var n int64
 	p.db.Model(&ProviderAccount{}).Where("id = ?", acc.ID).Count(&n)
 	if n != 1 {
@@ -222,7 +210,6 @@ func TestProviderAccountVaultFailure(t *testing.T) {
 		t.Fatalf("vault failure: want 500, got %d", got)
 	}
 
-	// Empty config maps to no stored credentials at all.
 	mv.putErr = nil
 	created, err := p.createProviderAccount(ctx, &CreateProviderAccountInput{
 		Ctx: mkAdmin(t, mkCtx), Body: providerAccountDTO{Name: "n", Type: "t"},
@@ -240,7 +227,6 @@ func TestVaultService_DNSCredentialResolution(t *testing.T) {
 	p.orgID = func(r *http.Request) uint { return 10 }
 	mv := p.vaultSvc.(*mockVaultService)
 
-	// Direct Vault integration item (no ProviderAccount row).
 	meta, err := mv.PutSecret(context.Background(), plugin.PutSecretRequest{
 		OrgID:          10,
 		Scope:          plugin.VaultScopeOrg,
@@ -257,17 +243,14 @@ func TestVaultService_DNSCredentialResolution(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 
-	// 1. ownsProviderAccount: Vault item ID exists for org 10 -> returns true
 	if owned, err := p.ownsProviderAccount(req, meta.ID); !owned || err != nil {
 		t.Errorf("expected ownsProviderAccount(%d) = true via Vault, got %v, %v", meta.ID, owned, err)
 	}
 
-	// 2. ownsProviderAccount: ID 999 does not exist anywhere -> returns false
 	if owned, err := p.ownsProviderAccount(req, 999); owned || err != nil {
 		t.Errorf("expected ownsProviderAccount(999) = false, got %v, %v", owned, err)
 	}
 
-	// 3. providerFor: resolves cloudflare provider via Vault
 	prov, err := p.providerFor(Domain{
 		OrgID:             10,
 		ProviderAccountID: meta.ID,
@@ -279,7 +262,6 @@ func TestVaultService_DNSCredentialResolution(t *testing.T) {
 		t.Fatal("expected non-nil provider from Vault")
 	}
 
-	// 4. Missing VaultService fails closed with errProviderCredentials (zero fallback).
 	p.vaultSvc = nil
 	if owned, err := p.ownsProviderAccount(req, meta.ID); owned || !errors.Is(err, errProviderCredentials) {
 		t.Errorf("expected missing Vault to surface as errProviderCredentials, got %v, %v", owned, err)
@@ -288,7 +270,6 @@ func TestVaultService_DNSCredentialResolution(t *testing.T) {
 		t.Errorf("expected missing Vault to surface as errProviderCredentials, got %v", err)
 	}
 
-	// 5. Vault read error fails closed with errProviderCredentials.
 	mv.getErr = errors.New("database is locked")
 	mv.metaErr = errors.New("database is locked")
 	p.vaultSvc = mv
@@ -301,7 +282,6 @@ func TestVaultService_DNSCredentialResolution(t *testing.T) {
 	mv.getErr = nil
 	mv.metaErr = nil
 
-	// 6. An integration with no payload is unusable and says so.
 	emptyMeta, err := mv.PutSecret(context.Background(), plugin.PutSecretRequest{
 		OrgID:        10,
 		Scope:        plugin.VaultScopeOrg,

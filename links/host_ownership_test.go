@@ -43,7 +43,6 @@ func setupOwnershipTestDB(t *testing.T) (*gorm.DB, *Plugin, *Engine) {
 func TestHostOwnershipEnforcement(t *testing.T) {
 	db, p, engine := setupOwnershipTestDB(t)
 
-	// Org B (orgID = 2) owns victim.com with linkHost "links.victim.com"
 	db.Create(&testDomain{
 		OrgID:   2,
 		Name:    "victim.com",
@@ -53,7 +52,6 @@ func TestHostOwnershipEnforcement(t *testing.T) {
 		},
 	})
 
-	// Org A (orgID = 1) owns mybrand.com with linkHost "go.mybrand.com"
 	db.Create(&testDomain{
 		OrgID:   1,
 		Name:    "mybrand.com",
@@ -63,7 +61,6 @@ func TestHostOwnershipEnforcement(t *testing.T) {
 		},
 	})
 
-	// Org A (orgID = 1) owns apexonly.com with empty LinkHosts (apex fallback)
 	db.Create(&testDomain{
 		OrgID:     1,
 		Name:      "apexonly.com",
@@ -73,7 +70,6 @@ func TestHostOwnershipEnforcement(t *testing.T) {
 
 	ctx := context.Background()
 
-	// 1. Org A cannot create host = Org B's linkHost -> 403
 	{
 		req := httptest.NewRequest(http.MethodPost, "/api/links", nil)
 		req.Header.Set("X-Org-ID", "1")
@@ -92,7 +88,6 @@ func TestHostOwnershipEnforcement(t *testing.T) {
 		}
 	}
 
-	// 2. Org A cannot update its existing link host to Org B's linkHost -> 403
 	var linkA Link
 	{
 		req := httptest.NewRequest(http.MethodPost, "/api/links", nil)
@@ -111,7 +106,6 @@ func TestHostOwnershipEnforcement(t *testing.T) {
 		}
 		linkA = out.Body.Link
 
-		// Now attempt to update linkA's host to links.victim.com
 		reqUp := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/links/%d", linkA.ID), nil)
 		reqUp.Header.Set("X-Org-ID", "1")
 		inputUp := &UpdateLinkInput{
@@ -130,7 +124,6 @@ func TestHostOwnershipEnforcement(t *testing.T) {
 		}
 	}
 
-	// 3. Org A CAN create host = its own linkHost -> 201 (success)
 	{
 		req := httptest.NewRequest(http.MethodPost, "/api/links", nil)
 		req.Header.Set("X-Org-ID", "1")
@@ -151,7 +144,6 @@ func TestHostOwnershipEnforcement(t *testing.T) {
 		}
 	}
 
-	// 4. Org A CAN create host: "" -> 201 (success)
 	{
 		req := httptest.NewRequest(http.MethodPost, "/api/links", nil)
 		req.Header.Set("X-Org-ID", "1")
@@ -172,7 +164,6 @@ func TestHostOwnershipEnforcement(t *testing.T) {
 		}
 	}
 
-	// 5. EffectiveLinkHosts() is empty: Org A uses apex as host -> 201 (fallback semantics success)
 	{
 		req := httptest.NewRequest(http.MethodPost, "/api/links", nil)
 		req.Header.Set("X-Org-ID", "1")
@@ -193,11 +184,10 @@ func TestHostOwnershipEnforcement(t *testing.T) {
 		}
 	}
 
-	// 6. Read side defense-in-depth: Dirty row directly inserted into DB (owner=1, host=links.victim.com)
 	{
 		dirty := Link{
-			OrgID:   1,                  // Org A
-			Host:    "links.victim.com", // Org B's host
+			OrgID:   1,
+			Host:    "links.victim.com",
 			Slug:    "dirty-slug",
 			Target:  "https://phish.example/dirty",
 			Enabled: true,
@@ -206,7 +196,6 @@ func TestHostOwnershipEnforcement(t *testing.T) {
 			t.Fatalf("failed to insert dirty link: %v", err)
 		}
 
-		// Attempt Lookup on links.victim.com with slug dirty-slug
 		_, ok := engine.Lookup("links.victim.com", "dirty-slug")
 		if ok {
 			t.Fatal("expected Lookup to fail (404) for dirty row on Org B's host owned by Org A, but it succeeded")

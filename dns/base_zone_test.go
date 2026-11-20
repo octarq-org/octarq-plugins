@@ -11,8 +11,6 @@ import (
 	"github.com/octarq-org/octarq/server/pkg/hostlist"
 )
 
-// seedBase writes the base_domain setting the reservation reads. Models are
-// migrated by setupFullDNSTestDB, which includes the settings table.
 func seedBase(t *testing.T, p *Plugin, base string) {
 	t.Helper()
 	if err := p.db.Table("settings").Create(&testSetting{Key: "base_domain", Value: base}).Error; err != nil {
@@ -20,10 +18,6 @@ func seedBase(t *testing.T, p *Plugin, base string) {
 	}
 }
 
-// Guard 4: when a base domain is configured, the base itself and every label
-// under it are reserved — no org may register any of them by hand. This covers
-// the base, an unprovisioned future tenant, and a retired slug, none of which
-// has a Domain row for the unique index to defend.
 func TestCreateDomainRejectsReservedBaseZone(t *testing.T) {
 	p, mkCtx := setupFullDNSTestDB(t)
 	seedBase(t, p, "app.octarq.org")
@@ -31,16 +25,15 @@ func TestCreateDomainRejectsReservedBaseZone(t *testing.T) {
 	if err := p.db.Create(&acc).Error; err != nil {
 		t.Fatalf("seed provider account: %v", err)
 	}
-	// A retired slug, parked in OrgSlugHistory like the rename path leaves it.
 	if err := p.db.Table("org_slug_histories").Create(&testOrgSlugHistory{Slug: "oldslug", OrgID: 1, RetiredAt: time.Now()}).Error; err != nil {
 		t.Fatalf("seed slug history: %v", err)
 	}
 
 	ctx := context.Background()
 	rejected := []string{
-		"app.octarq.org",         // the base itself
-		"nobody.app.octarq.org",  // a label that may become a tenant's address
-		"oldslug.app.octarq.org", // a retired slug's address — still reserved
+		"app.octarq.org",
+		"nobody.app.octarq.org",
+		"oldslug.app.octarq.org",
 	}
 	for _, name := range rejected {
 		req := httptest.NewRequest(http.MethodPost, "/api/dns/domains", nil)
@@ -58,7 +51,6 @@ func TestCreateDomainRejectsReservedBaseZone(t *testing.T) {
 		}
 	}
 
-	// An unrelated custom domain is untouched by the reservation.
 	req := httptest.NewRequest(http.MethodPost, "/api/dns/domains", nil)
 	if _, err := p.createDomain(ctx, &CreateDomainInput{
 		Ctx:  mkCtx(req),
@@ -68,8 +60,6 @@ func TestCreateDomainRejectsReservedBaseZone(t *testing.T) {
 	}
 }
 
-// Guard 1: with no base domain configured nothing is reserved and today's
-// behaviour is preserved exactly.
 func TestCreateDomainAllowsBaseZoneWhenUnconfigured(t *testing.T) {
 	p, mkCtx := setupFullDNSTestDB(t)
 	acc := ProviderAccount{OrgID: 1, Name: "P", Type: "cloudflare"}
@@ -85,10 +75,6 @@ func TestCreateDomainAllowsBaseZoneWhenUnconfigured(t *testing.T) {
 	}
 }
 
-// underBaseZone is the decision function both createDomain and syncDomains rely
-// on. syncDomains reaches a live provider for its zone list, which tests cannot
-// stub, so this pins the predicate directly on top of the end-to-end create
-// rejection above.
 func TestUnderBaseZonePredicate(t *testing.T) {
 	p, _ := setupFullDNSTestDB(t)
 	seedBase(t, p, "app.octarq.org")
@@ -102,7 +88,6 @@ func TestUnderBaseZonePredicate(t *testing.T) {
 	if !underBaseZone(p.db, "deep.sub.app.octarq.org") {
 		t.Error("any depth under the base must be reserved")
 	}
-	// Scheme/port/case must not smuggle a label past the reservation.
 	if !underBaseZone(p.db, "HTTPS://Acme7x.App.Octarq.Org:8443") {
 		t.Error("a normalized subdomain of the base must be reserved")
 	}
@@ -116,9 +101,6 @@ func TestUnderBaseZonePredicate(t *testing.T) {
 		t.Error("an unrelated domain must not be reserved")
 	}
 
-	// No base configured → nothing is reserved. The subtest opens its own DB:
-	// setupFullDNSTestDB keys the in-memory DSN on t.Name(), so a fresh name
-	// means fresh storage, and the base seeded above does not leak in.
 	t.Run("unconfigured", func(t *testing.T) {
 		p2, _ := setupFullDNSTestDB(t)
 		if underBaseZone(p2.db, "app.octarq.org") {
@@ -127,9 +109,6 @@ func TestUnderBaseZonePredicate(t *testing.T) {
 	})
 }
 
-// Guard: the reserved base zone holds in the host lists too, not just in
-// Domain.Name. A tenant must not be able to claim a label under the base by
-// listing it as a link or mail host — the same takeover trap, via a list.
 func TestCreateDomainRejectsReservedHostLists(t *testing.T) {
 	p, mkCtx := setupFullDNSTestDB(t)
 	seedBase(t, p, "app.octarq.org")
@@ -144,7 +123,6 @@ func TestCreateDomainRejectsReservedHostLists(t *testing.T) {
 		{Name: "evil.com", ProviderAccountID: acc.ID, LinkHosts: &[]hostEntry{{Host: "victim7x.app.octarq.org", Enabled: &enabled}}},
 		{Name: "evil.com", ProviderAccountID: acc.ID, MailHosts: &[]hostEntry{{Host: "victim8y.app.octarq.org", Enabled: &enabled}}},
 		{Name: "evil.com", ProviderAccountID: acc.ID, LinkHosts: &[]hostEntry{{Host: "app.octarq.org", Enabled: &enabled}}},
-		// Normalization must not smuggle a reserved label past the check.
 		{Name: "evil.com", ProviderAccountID: acc.ID, MailHosts: &[]hostEntry{{Host: "HTTPS://Victim9x.App.Octarq.Org:8443", Enabled: &enabled}}},
 	}
 	for _, dto := range rejected {
@@ -159,7 +137,6 @@ func TestCreateDomainRejectsReservedHostLists(t *testing.T) {
 		}
 	}
 
-	// Unrelated hosts in the lists are untouched by the reservation.
 	req := httptest.NewRequest(http.MethodPost, "/api/dns/domains", nil)
 	if _, err := p.createDomain(ctx, &CreateDomainInput{
 		Ctx:  mkCtx(req),
@@ -169,7 +146,6 @@ func TestCreateDomainRejectsReservedHostLists(t *testing.T) {
 	}
 }
 
-// The same rejection must hold when an existing domain's host lists are edited.
 func TestUpdateDomainRejectsReservedHostLists(t *testing.T) {
 	p, mkCtx := setupFullDNSTestDB(t)
 	seedBase(t, p, "app.octarq.org")
@@ -200,7 +176,6 @@ func TestUpdateDomainRejectsReservedHostLists(t *testing.T) {
 		t.Errorf("a rejected update still wrote the host list: %+v", after.LinkHosts)
 	}
 
-	// An unrelated host-list edit still works.
 	req2 := httptest.NewRequest(http.MethodPut, "/api/dns/domains/1", nil)
 	if _, err := p.updateDomain(ctx, &UpdateDomainInput{
 		Ctx:  mkCtx(req2),
@@ -211,9 +186,6 @@ func TestUpdateDomainRejectsReservedHostLists(t *testing.T) {
 	}
 }
 
-// Guard 6 (trap 5): purging a workspace removes its provisioned tenant
-// subdomain rows, so the hostname stops resolving to the deleted org while the
-// bystander org's address is untouched.
 func TestPurgeRemovesProvisionedSubdomain(t *testing.T) {
 	p, _ := setupFullDNSTestDB(t)
 	seedBase(t, p, "app.example.com")

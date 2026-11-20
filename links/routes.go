@@ -10,16 +10,12 @@ import (
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
-// Menus announces this plugin's sidebar entry so /api/menus only offers it
-// when the plugin is mounted and enabled for the workspace.
 func (p *Plugin) Menus() []plugin.MenuItem {
 	return []plugin.MenuItem{
 		{ID: "links", Label: "Links", Path: "/links", Icon: "link-2", Category: "Marketing", Area: "operations", Order: 10},
 	}
 }
 
-// Actions announces this plugin's global create affordances so /api/actions
-// only offers them when the plugin is mounted and enabled for the workspace.
 func (p *Plugin) Actions() []plugin.Action {
 	return []plugin.Action{
 		{ID: "create-link", Label: "New Link", Path: "/links?create=1", Icon: "link-2", Category: "Marketing", Order: 10},

@@ -80,7 +80,6 @@ export function DomainDetailWorkspace({
     }
   }
 
-  // Automatically trigger DNS health verification when entering the verification sub-tab
   useEffect(() => {
     if (activeSubTab === "verification" && dnsStatus === null && !verifying) {
       verifyDns(domain);
@@ -151,14 +150,12 @@ export function DomainDetailWorkspace({
         ]}
       />
 
-      {/* Sub-tab 1: DNS Records */}
       {activeSubTab === "records" && (
         <Panel title={t("domains.dnsRecords")} description={t("domains.pageDescription")}>
           <RecordsView domain={domain} />
         </Panel>
       )}
 
-      {/* Sub-tab 2: Subdomain Routing */}
       {activeSubTab === "routing" && (
         <Panel title={t("domains.managedHosts")} description={t("domains.syncToggleHint")}>
           <DomainHostManager
@@ -173,7 +170,6 @@ export function DomainDetailWorkspace({
                   const updated = res.find((d) => d.id === domain.id);
                   if (updated) onUpdated(updated);
                 } catch {
-                  /* ignore reload error */
                 }
               }
             }}
@@ -181,7 +177,6 @@ export function DomainDetailWorkspace({
         </Panel>
       )}
 
-      {/* Sub-tab 3: Health & Verification */}
       {activeSubTab === "verification" && (() => {
         const repScore = dnsStatus ? calculateReputationScore(dnsStatus, domain.name) : null;
         return (
@@ -243,10 +238,8 @@ export function DomainDetailWorkspace({
               </div>
             ) : (
               <div className="space-y-6 pt-2">
-                {/* 1. Deliverability & Reputation Score Card */}
                 {repScore && <DnsReputationScoreCard repScore={repScore} />}
 
-                {/* 2. Visual Guidance & One-Click Auto-Fix Action Banner */}
                 {repScore && (
                   <DnsFixAlertBanner
                     repScore={repScore}
@@ -257,7 +250,6 @@ export function DomainDetailWorkspace({
                   />
                 )}
 
-                {/* 3. Mail hosts posture list */}
                 <div className="space-y-3">
                   <span className="text-xs uppercase font-bold text-muted-foreground tracking-wider">{t("domains.mailHosts")}</span>
                   {(dnsStatus.hosts?.length
@@ -268,12 +260,10 @@ export function DomainDetailWorkspace({
                   ))}
                 </div>
 
-                {/* 4. Actionable diagnostic troubleshooting suggestions */}
                 {repScore && repScore.issues.length > 0 && (
                   <DnsTroubleshootingGuide issues={repScore.issues} />
                 )}
 
-                {/* 5. Short link hosts */}
                 {!!dnsStatus.links?.length && (
                   <div className="space-y-3">
                     <span className="text-xs uppercase font-bold text-muted-foreground tracking-wider">{t("domains.shortLinkHosts")}</span>
@@ -289,7 +279,6 @@ export function DomainDetailWorkspace({
         );
       })()}
 
-      {/* Sub-tab 4: Domain Settings */}
       {activeSubTab === "settings" && (
         <Panel title={t("domains.domainSettings")}>
           <DomainEditorForm

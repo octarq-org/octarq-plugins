@@ -1,7 +1,5 @@
 export const ptI18n = {
   en: {
-    // Shared-namespace contributions: the sidebar label, the plugin manager
-    // description. The group heading comes from core (Integrations).
     _shared: {
       nav: { pt: "PT Accounts" },
       groups: { Accounts: "Accounts" },

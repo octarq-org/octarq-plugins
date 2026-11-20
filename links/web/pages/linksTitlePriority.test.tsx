@@ -102,21 +102,17 @@ describe("LinksPage title priority and tag badges", () => {
       </MemoryRouter>
     );
 
-    // Wait for links to load
     await waitFor(() => {
       expect(screen.getByText("Summer Sale 2026")).toBeDefined();
     });
 
-    // Primary title has font-medium and text-foreground
     const title = screen.getByText("Summer Sale 2026");
     expect(title.className).toContain("font-medium");
     expect(title.className).toContain("text-foreground");
 
-    // Secondary short slug
     expect(screen.getByText("link.acme.com/")).toBeDefined();
     expect(screen.getByText("summer-sale")).toBeDefined();
 
-    // Tags are rendered as separate badges, not one single concatenated string
     const tagEcommerce = screen.getByTitle("ecommerce");
     const tagPromo = screen.getByTitle("promo");
     const tagVip = screen.getByTitle("vip");
@@ -127,7 +123,6 @@ describe("LinksPage title priority and tag badges", () => {
     expect(tagPromo.textContent).toContain("promo");
     expect(tagVip.textContent).toContain("vip");
 
-    // Link without title falls back to slug in primary title and secondary slug
     const untitledMatches = screen.getAllByText("random-slug-without-title");
     expect(untitledMatches.length).toBe(2);
   });
@@ -145,7 +140,6 @@ describe("LinksPage title priority and tag badges", () => {
       expect(screen.getByText("Summer Sale 2026")).toBeDefined();
     });
 
-    // Test Analytics modal title for link with title
     const analyticsButtons = screen.getAllByTitle("Analytics");
     fireEvent.click(analyticsButtons[0]);
 
@@ -153,10 +147,8 @@ describe("LinksPage title priority and tag badges", () => {
       expect(screen.getByText("Click performance analytics — Summer Sale 2026")).toBeDefined();
     });
 
-    // Close Analytics modal
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
-    // Test QR modal title for link with title
     const qrButtons = screen.getAllByTitle("QR code");
     fireEvent.click(qrButtons[0]);
 
@@ -164,10 +156,8 @@ describe("LinksPage title priority and tag badges", () => {
       expect(screen.getByText("Link QR code — Summer Sale 2026")).toBeDefined();
     });
 
-    // Close QR modal
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
-    // Test Edit modal title for link with title
     const editButtons = screen.getAllByTitle("Edit link");
     fireEvent.click(editButtons[0]);
 
@@ -175,10 +165,8 @@ describe("LinksPage title priority and tag badges", () => {
       expect(screen.getByText("Edit link — Summer Sale 2026")).toBeDefined();
     });
 
-    // Close Edit modal
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
-    // Test Edit modal title for link without title (fallback to /slug)
     fireEvent.click(editButtons[1]);
 
     await waitFor(() => {

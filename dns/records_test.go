@@ -43,8 +43,6 @@ func TestNormalizeHost(t *testing.T) {
 	}
 }
 
-// TestDNSRecordMappingRoundTrip ensures the plugin↔dnsprovider record conversion
-// preserves every field (so an AI-driven DNS change isn't silently lossy).
 func TestDNSRecordMappingRoundTrip(t *testing.T) {
 	prio := 10
 	in := provider.Record{
@@ -61,7 +59,6 @@ func TestDNSRecordMappingRoundTrip(t *testing.T) {
 	if back != in {
 		t.Errorf("round-trip mismatch:\n got %+v\nwant %+v", back, in)
 	}
-	// Empty-ID record (create) stays empty.
 	if fromPluginRecord(plugin.DNSRecord{Type: "A"}).ID != "" {
 		t.Error("empty ID should round-trip to empty (create)")
 	}

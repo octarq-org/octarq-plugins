@@ -9,9 +9,6 @@ import (
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
-// perOrgQuotaChecker is a QuotaChecker that refuses only the orgs listed in
-// over, letting every other org through — the shape needed to prove that one
-// over-quota org in a batch cannot drag its batch-mates down.
 type perOrgQuotaChecker struct {
 	over map[uint]bool
 }
@@ -23,8 +20,6 @@ func (c perOrgQuotaChecker) Check(_ context.Context, orgID uint, _ string, _ int
 	return nil
 }
 
-// usageRecorder captures RecordUsage calls so tests can assert both the metric
-// name and that suppressed orgs are never metered.
 type usageRecorder struct {
 	calls []struct {
 		orgID  uint
@@ -41,10 +36,6 @@ func (r *usageRecorder) record(orgID uint, metric string, n int64) {
 	}{orgID, metric, n})
 }
 
-// newFlushEngine builds an Engine on an isolated DB whose ctx registers checker
-// under plugin.ServiceQuotaChecker (pass nil for the no-checker / self-hosted
-// shape) and captures RecordUsage. flushBatch is invoked directly, not over
-// HTTP, so a test controls exactly which orgs and links a batch contains.
 func newFlushEngine(t *testing.T, checker plugin.QuotaChecker) (*Engine, *usageRecorder) {
 	t.Helper()
 	p, _ := setupFullLinksTestDB(t)
@@ -60,8 +51,6 @@ func newFlushEngine(t *testing.T, checker plugin.QuotaChecker) (*Engine, *usageR
 	return &Engine{db: p.db, ctx: ctx}, rec
 }
 
-// Self-hosted installs register no checker, so CheckQuota answers nil for every
-// org. This must behave exactly as before the seam existed: everything counts.
 func TestFlushBatchNoCheckerCountsEverything(t *testing.T) {
 	eng, _ := newFlushEngine(t, nil)
 	link := &Link{OrgID: 7, Slug: "selfhosted", Target: "https://example.com", Enabled: true}
@@ -87,8 +76,6 @@ func TestFlushBatchNoCheckerCountsEverything(t *testing.T) {
 	}
 }
 
-// An org whose checker says ErrQuotaExceeded must write nothing: no LinkEvent
-// rows and no Link.clicks bump.
 func TestFlushBatchQuotaExceededWritesNothing(t *testing.T) {
 	eng, _ := newFlushEngine(t, fakeQuotaChecker{err: plugin.ErrQuotaExceeded})
 	link := &Link{OrgID: 7, Slug: "capped", Target: "https://example.com", Enabled: true}
@@ -113,9 +100,6 @@ func TestFlushBatchQuotaExceededWritesNothing(t *testing.T) {
 	}
 }
 
-// The one case most worth getting right: two orgs share a batch and only one is
-// over quota. The over-quota org must write nothing; the fine org's events,
-// clicks, and metering must be completely unaffected.
 func TestFlushBatchMixedOrgsIsolateSuppression(t *testing.T) {
 	eng, rec := newFlushEngine(t, perOrgQuotaChecker{over: map[uint]bool{1: true}})
 	overLink := &Link{OrgID: 1, Slug: "over", Target: "https://a", Enabled: true}
@@ -165,9 +149,6 @@ func TestFlushBatchMixedOrgsIsolateSuppression(t *testing.T) {
 	}
 }
 
-// A checker that fails for an unrelated reason (billing backend down, unknown
-// error) must read as "allowed": a metering outage can not become silent data
-// loss. Only the explicit ErrQuotaExceeded suppresses.
 func TestFlushBatchCheckerOtherErrorCountsEverything(t *testing.T) {
 	eng, _ := newFlushEngine(t, fakeQuotaChecker{err: errors.New("billing backend down")})
 	link := &Link{OrgID: 7, Slug: "still-counted", Target: "https://example.com", Enabled: true}
@@ -191,8 +172,6 @@ func TestFlushBatchCheckerOtherErrorCountsEverything(t *testing.T) {
 	}
 }
 
-// Click counting is metered as "clicks" — not "links", which is the stock-quota
-// key for how many short links an org may hold.
 func TestFlushBatchRecordsUsageAsClicks(t *testing.T) {
 	eng, rec := newFlushEngine(t, nil)
 	link := &Link{OrgID: 42, Slug: "usage", Target: "https://example.com", Enabled: true}

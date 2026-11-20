@@ -72,8 +72,8 @@ func TestTagBoundaryFilter(t *testing.T) {
 	mustMatch("promo", "case")
 	mustMatch("te_t", "wildcard_like")
 	mustMatch("100%", "percent")
-	mustMatch("_") // LIKE '_' must not match te_t
-	mustMatch("%") // LIKE '%' must not match 100%
+	mustMatch("_")
+	mustMatch("%")
 }
 
 func keys(m map[string]bool) []string {
@@ -108,8 +108,6 @@ func TestSortStatKVOrdersByCountThenKey(t *testing.T) {
 		}
 	}
 }
-
-// --- links.go helpers ---
 
 func TestClassifyRefererExtraCases(t *testing.T) {
 	cases := []struct{ in, want string }{
@@ -179,8 +177,6 @@ func TestTopChannels(t *testing.T) {
 	}
 }
 
-// --- shortlink.go ---
-
 func TestLookupCachePaths(t *testing.T) {
 	db := newTestEngine(t).db
 
@@ -203,7 +199,7 @@ func TestLookupCachePaths(t *testing.T) {
 	}
 
 	ctx.CacheGet = func(_ context.Context, key string, val any) bool {
-		return true // leave val zero: the cached answer is "no such link"
+		return true
 	}
 	if _, ok := eng.Lookup("h", "missing"); ok {
 		t.Error("cached negative result must resolve to not-found")
@@ -374,8 +370,6 @@ func TestResolveMethodsSetContext(t *testing.T) {
 	}
 }
 
-// wipeLinksTables clears rows a previous run of the same test (SQLite in-memory
-// DBs with cache=shared persist across -count=2 reruns) may have left behind.
 func wipeLinksTables(t *testing.T, p *Plugin) {
 	t.Helper()
 	p.db.Where("1 = 1").Delete(&Link{})

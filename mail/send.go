@@ -19,11 +19,7 @@ type SendEmailInput struct {
 	Ctx  huma.Context `hidden:"true"`
 	Body struct {
 		mail.Message
-		SMTPSenderID uint `json:"smtpSenderId"`
-		// SMTPSenderSource names the registry that owns SMTPSenderID:
-		// "integration" (Integrations Hub credential) or "local"
-		// (mail_smtp_senders). A bare ID cannot identify a sender on its own,
-		// because both registries number their rows independently.
+		SMTPSenderID     uint   `json:"smtpSenderId"`
 		SMTPSenderSource string `json:"smtpSenderSource"`
 		TrackLinks       bool   `json:"trackLinks"`
 	}
@@ -58,8 +54,6 @@ func (p *Plugin) sendEmail(ctx context.Context, input *SendEmailInput) (*SendEma
 		return nil, huma.Error400BadRequest(fmt.Sprintf("Recipient address %s is on the suppression list. Remove it from suppressions before sending.", suppressedAddr))
 	}
 
-	// Rate-limit outbound mail per org so a leaked API token or a runaway client
-	// can't burn the sending domain's / relay IP's reputation into an RBL.
 	orgKey := fmt.Sprintf("org:%d", p.orgID(r))
 	withinLimit, limitErr := p.sendLimiter.allow(orgKey)
 	if limitErr != nil {
@@ -81,19 +75,9 @@ func (p *Plugin) sendEmail(ctx context.Context, input *SendEmailInput) (*SendEma
 		return nil, huma.Error400BadRequest(resolveErr.Error())
 	}
 
-	// Force the From header to the sender's verified address — never trust a
-	// client-supplied From, which would let a caller spoof arbitrary senders
-	// through the relay.
 	msg := input.Body.Message
 	msg.From = senderFrom
 
-	// Metered consumption: outbound mail is the anti-abuse-critical metric on
-	// the hosted build (a Free org sending mail would burn the sending domain
-	// onto a blocklist that would take down paying tenants too), so ask the
-	// (hosted-only) quota checker whether this org may send n more. Self-hosted
-	// has no checker and this always passes there. The check runs before the
-	// first real side effect — actually handing the message to the SMTP relay —
-	// so a refusal sends nothing.
 	if err := plugin.CheckQuota(p.ctx, ctx, orgID, "mailOutPerMonth", int64(len(input.Body.To))); err != nil {
 		if errors.Is(err, plugin.ErrQuotaUnavailable) {
 			return nil, huma.Error402PaymentRequired("Outbound mail is not included in this plan. Upgrade your plan to unlock email sending.")
@@ -116,7 +100,7 @@ func (p *Plugin) sendEmail(ctx context.Context, input *SendEmailInput) (*SendEma
 	}
 	p.upsertContacts(orgID, input.Body.To)
 	p.recordSentEmail(orgID, senderFrom, strings.Join(input.Body.To, ", "), msg.Subject, msg.Text, msg.HTML)
-	p.sendLimiter.recordFailure(orgKey) // count this send against the per-org cap
+	p.sendLimiter.recordFailure(orgKey)
 	return &SendEmailOutput{Body: map[string]bool{"ok": true}}, nil
 }
 
@@ -162,7 +146,6 @@ func (p *Plugin) wrapLinksInEmail(r *http.Request, msg *mail.Message) {
 
 	processBody := func(body string) string {
 		return reLink.ReplaceAllStringFunc(body, func(rawURL string) string {
-			// Clean trailing punctuation that might be captured by regex in plain text
 			cleanURL := rawURL
 			var suffix string
 			for len(cleanURL) > 0 {
@@ -180,7 +163,6 @@ func (p *Plugin) wrapLinksInEmail(r *http.Request, msg *mail.Message) {
 				return rawURL
 			}
 
-			// Skip if it is already our short link host or is localhost/internal
 			uHost := u.Host
 			if idx := strings.IndexByte(uHost, ':'); idx >= 0 {
 				uHost = uHost[:idx]

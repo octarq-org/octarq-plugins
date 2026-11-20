@@ -140,7 +140,6 @@ func TestExtractOTP_Patterns(t *testing.T) {
 }
 
 func TestSanitizeEmailContent_And_Summary(t *testing.T) {
-	// 1. Test inline base64 image stripping
 	rawWithBase64 := `Welcome! Here is your avatar: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg== Enjoy!`
 	sanitized, truncated := SanitizeEmailContent(rawWithBase64)
 	if strings.Contains(sanitized, "iVBORw0KGgoAAAANSUhEUg") {
@@ -153,7 +152,6 @@ func TestSanitizeEmailContent_And_Summary(t *testing.T) {
 		t.Errorf("short content should not be truncated")
 	}
 
-	// 2. Test sensitive query token redaction
 	urlQuery := `Please reset your password at https://auth.example.com/reset-password?token=abcdef1234567890xyz&uid=42`
 	sanitizedURL, _ := SanitizeEmailContent(urlQuery)
 	if strings.Contains(sanitizedURL, "abcdef1234567890xyz") {
@@ -163,7 +161,6 @@ func TestSanitizeEmailContent_And_Summary(t *testing.T) {
 		t.Errorf("expected token=[REDACTED_TOKEN], got: %s", sanitizedURL)
 	}
 
-	// 3. Test sensitive path token redaction
 	urlPath := `Click https://auth.example.com/password_reset/abcdef1234567890xyz123 to proceed.`
 	sanitizedPath, _ := SanitizeEmailContent(urlPath)
 	if strings.Contains(sanitizedPath, "abcdef1234567890xyz123") {
@@ -173,14 +170,12 @@ func TestSanitizeEmailContent_And_Summary(t *testing.T) {
 		t.Errorf("expected /password_reset/[REDACTED_TOKEN], got: %s", sanitizedPath)
 	}
 
-	// 4. Test raw base64 data block truncation
 	rawBase64Block := strings.Repeat("QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVphYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ejAxMjM0NTY3ODk=", 3)
 	sanitizedB64, _ := SanitizeEmailContent("Data: " + rawBase64Block)
 	if !strings.Contains(sanitizedB64, "[base64 data truncated]") {
 		t.Errorf("expected [base64 data truncated], got: %s", sanitizedB64)
 	}
 
-	// 5. Test 4KB truncation with natural text
 	hugeText := strings.Repeat("This is a long test sentence designed to verify context truncation limits safely. ", 100)
 	sanitizedHuge, isTruncated := SanitizeEmailContent(hugeText)
 	if !isTruncated {
@@ -193,13 +188,11 @@ func TestSanitizeEmailContent_And_Summary(t *testing.T) {
 		t.Errorf("content too large after truncation: %d", len(sanitizedHuge))
 	}
 
-	// 5. Test empty
 	emptySan, emptyTrunc := SanitizeEmailContent("")
 	if emptySan != "" || emptyTrunc {
 		t.Errorf("empty input should return empty, not truncated")
 	}
 
-	// 6. Test stripHTML
 	htmlInput := `<html><head><style>.a{color:red;}</style><script>alert(1);</script></head><body><h1>Hello</h1><p>World&nbsp;&amp;&nbsp;Friends</p></body></html>`
 	plain := stripHTML(htmlInput)
 	if strings.Contains(plain, "color:red") || strings.Contains(plain, "alert(1)") {
@@ -212,7 +205,6 @@ func TestSanitizeEmailContent_And_Summary(t *testing.T) {
 		t.Errorf("stripHTML empty should return empty")
 	}
 
-	// 7. Test GenerateEmailSummary categories
 	testsCat := []struct {
 		subject string
 		body    string
@@ -235,7 +227,6 @@ func TestSanitizeEmailContent_And_Summary(t *testing.T) {
 		}
 	}
 
-	// Test long body summary truncation
 	longBody := strings.Repeat("Long sentence describing the event. ", 30)
 	sumLong, _ := GenerateEmailSummary("Long email", longBody, "")
 	if !strings.HasSuffix(sumLong, "...") {

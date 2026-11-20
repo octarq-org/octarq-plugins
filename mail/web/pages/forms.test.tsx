@@ -253,18 +253,15 @@ describe("Mail Forms", () => {
 
       renderWithProviders(<Compose onClose={onClose} />);
 
-      // Verify fields
       expect(screen.getByText("Compose mail")).toBeDefined();
       expect((screen.getByRole("button", { name: "Send mail" }) as HTMLButtonElement).disabled).toBe(true);
 
-      // Wait for settings & senders to load and checkbox to appear
       await waitFor(() => {
         expect(screen.getByRole("checkbox")).toBeDefined();
         expect(screen.getAllByText("Corporate Mailgun (noreply@acme.com)").length).toBeGreaterThan(0);
       });
       expect(document.body.textContent).not.toContain("undefined");
 
-      // Fill in recipients, subject, body
       const toInput = screen.getByPlaceholderText("hello@world.com");
       fireEvent.change(toInput, {
         target: { value: "alice@example.com, bob@example.com" },
@@ -280,7 +277,6 @@ describe("Mail Forms", () => {
         target: { value: "team@acme.com" },
       });
 
-      // Submit email
       const sendBtn = screen.getByRole("button", { name: "Send mail" });
       expect((sendBtn as HTMLButtonElement).disabled).toBe(false);
       fireEvent.click(sendBtn);
@@ -289,7 +285,6 @@ describe("Mail Forms", () => {
         expect(screen.getByText("Message sent.")).toBeDefined();
       });
 
-      // Verify the POST payload sent to /api/emails/send
       const sendCall = fetchMock.mock.calls.find(c => {
         const url = typeof c[0] === "string" ? c[0] : (c[0] as Request).url;
         return url.includes("/api/emails/send");
@@ -306,7 +301,6 @@ describe("Mail Forms", () => {
         trackLinks: true,
       });
 
-      // Click Done
       fireEvent.click(screen.getByRole("button", { name: "Done" }));
       expect(onClose).toHaveBeenCalledTimes(1);
     });
@@ -386,7 +380,6 @@ describe("Mail Forms", () => {
       });
     });
 
-    // Standalone instances without Core Vault still serve the local sender registry.
     it("falls back to local SMTP senders when Core Vault is absent", async () => {
       fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
         const method = (init?.method ?? "GET").toUpperCase();
@@ -497,7 +490,6 @@ describe("Mail Forms", () => {
         expect(onSaved).toHaveBeenCalledTimes(1);
       });
 
-      // Delete mailbox with confirmation
       const delBtn = screen.getByRole("button", { name: "Delete mailbox completely" });
       fireEvent.click(delBtn);
 
@@ -530,7 +522,6 @@ describe("Mail Forms", () => {
 
       expect(document.body.textContent).not.toContain("undefined");
 
-      // Test connection goes through Core Vault, not the local table.
       fireEvent.click(screen.getAllByRole("button", { name: "Test" })[0]);
 
       await waitFor(() => {
@@ -541,7 +532,6 @@ describe("Mail Forms", () => {
         expect(tested).toBe(true);
       });
 
-      // The local CRUD surfaces stay absent while Core Vault is authoritative.
       expect(screen.queryByRole("button", { name: "Add SMTP" })).toBeNull();
       expect(screen.queryByRole("button", { name: "Edit SMTP" })).toBeNull();
       expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
@@ -583,7 +573,6 @@ describe("Mail Forms", () => {
       });
     });
 
-    // Standalone instances without Core Vault serve the local registry and keep its CRUD controls.
     it("serves the local sender registry when Core Vault is absent", async () => {
       fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
         const method = (init?.method ?? "GET").toUpperCase();
@@ -619,8 +608,6 @@ describe("Mail Forms", () => {
         expect(tested).toBe(true);
       });
 
-      // The local form is reachable and posts the password under the wire
-      // field the server reads.
       fireEvent.click(screen.getByRole("button", { name: "Add SMTP" }));
       await waitFor(() => {
         expect(screen.getByText("Add SMTP Sender")).toBeDefined();
@@ -659,7 +646,6 @@ describe("Mail Forms", () => {
         expect(screen.getByText("Manual")).toBeDefined();
       });
 
-      // Add address
       const addBtn = screen.getByRole("button", { name: "Add address" });
       fireEvent.click(addBtn);
 
@@ -675,7 +661,6 @@ describe("Mail Forms", () => {
         expect(screen.queryByText("Add to suppression list")).toBeNull();
       });
 
-      // Remove suppression item with confirmation
       const delButtons = screen.getAllByTitle("Remove");
       fireEvent.click(delButtons[0]);
 

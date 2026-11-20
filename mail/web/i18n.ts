@@ -34,7 +34,6 @@ export const mailI18n = {
     guideStep4: "To send replies, configure an SMTP relay via Settings.",
     allMailboxes: "All mailboxes",
     searchPlaceholder: "Search emails…",
-    // Empty inbox states: the address / query render beside these in mono.
     emptyFilteredReason: "No messages match",
     clearSearch: "Clear search",
     emptyNoBoxesReason: "No mailbox configured yet.",

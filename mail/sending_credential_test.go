@@ -7,10 +7,6 @@ import (
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
-// TestSenderFromVaultSecretRejectsIncompleteConfig pins the fail-closed rules of
-// the Vault path. A sender without a From address or without a relay would either
-// be rejected by the relay or send under a domain the operator does not control,
-// so every gap is an error here.
 func TestSenderFromVaultSecretRejectsIncompleteConfig(t *testing.T) {
 	p := New()
 
@@ -42,11 +38,9 @@ func TestSenderFromVaultSecretRejectsIncompleteConfig(t *testing.T) {
 	}
 }
 
-// TestSenderFromVaultSecretAcceptsAliases pins the accepted key spellings.
 func TestSenderFromVaultSecretAcceptsAliases(t *testing.T) {
 	p := New()
 
-	// Resend accepts apiKey or secretKey.
 	for _, key := range []string{"apiKey", "secretKey"} {
 		sec := &plugin.VaultSecret{
 			Meta:    plugin.VaultItemMeta{ID: 1, Provider: "resend"},
@@ -58,8 +52,6 @@ func TestSenderFromVaultSecretAcceptsAliases(t *testing.T) {
 		}
 	}
 
-	// SMTP accepts host or smtpHost, user or apiKey, pass or secretKey, and
-	// defaults the port.
 	sec := &plugin.VaultSecret{
 		Meta:    plugin.VaultItemMeta{ID: 1, Provider: "smtp"},
 		Payload: map[string]any{"smtpHost": "smtp.example.com", "apiKey": "u", "secretKey": "p", "fromEmail": "a@example.com"},

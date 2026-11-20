@@ -17,10 +17,6 @@ func isRestrictedSMTPHostIP(ip net.IP) bool {
 	return safehttp.DisallowedIP(ip)
 }
 
-// validateSMTPTarget provides an early, write-time error check for host and port when configuring an SMTP sender
-// (returning 422 Unprocessable Entity immediately to the admin UI for obvious misconfigurations).
-//
-// This is NOT the security boundary against SSRF/TOCTOU/DNS rebinding; the actual security boundary is enforced at dial time in internal/mail.
 func validateSMTPTarget(host string, port int) error {
 	allowedPorts := map[int]bool{25: true, 465: true, 587: true, 2525: true}
 	if !allowedPorts[port] {
@@ -182,7 +178,7 @@ type UpdateSMTPSenderInput struct {
 		Host      *string `json:"host,omitempty"`
 		Port      *int    `json:"port,omitempty"`
 		User      *string `json:"user,omitempty"`
-		Pass      *string `json:"pass,omitempty"` // optional on update
+		Pass      *string `json:"pass,omitempty"`
 		FromEmail *string `json:"fromEmail,omitempty"`
 	}
 }
@@ -367,10 +363,6 @@ type TestSMTPSenderOutput struct {
 	Body map[string]bool
 }
 
-// testSMTPSender sends a real message from the sender to its own From address.
-// A dial-only probe would miss the failure modes operators actually hit — bad
-// password, relay refused, STARTTLS downgrade — so the test costs one real
-// delivery, addressed to the configured From so no third party is involved.
 func (p *Plugin) testSMTPSender(ctx context.Context, input *TestSMTPSenderInput) (*TestSMTPSenderOutput, error) {
 	if input.Ctx == nil {
 		return nil, huma.Error500InternalServerError("An unexpected error occurred while processing the request context.")

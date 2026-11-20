@@ -19,7 +19,6 @@ func TestGetEmailForSummarize(t *testing.T) {
 	mb := Mailbox{OrgID: 1, Address: "sum@example.com", Enabled: true}
 	db.Create(&mb)
 
-	// Text-only email.
 	textEmail := Email{MailboxID: mb.ID, FromAddr: "a@x.com", Subject: "s1", Text: "plain body", HTML: "<p>ht</p>", ReceivedAt: time.Now()}
 	db.Create(&textEmail)
 	from, subject, body, ok := p.getEmailForSummarize(1, textEmail.ID)
@@ -27,7 +26,6 @@ func TestGetEmailForSummarize(t *testing.T) {
 		t.Errorf("text email: ok=%v from=%q subject=%q body=%q", ok, from, subject, body)
 	}
 
-	// HTML-only email strips tags.
 	htmlEmail := Email{MailboxID: mb.ID, FromAddr: "b@x.com", Subject: "s2", Text: "", HTML: "<p>Hello <b>World</b></p>", ReceivedAt: time.Now()}
 	db.Create(&htmlEmail)
 	_, _, body2, ok2 := p.getEmailForSummarize(1, htmlEmail.ID)
@@ -35,11 +33,9 @@ func TestGetEmailForSummarize(t *testing.T) {
 		t.Errorf("html email: ok=%v body=%q", ok2, body2)
 	}
 
-	// Missing id -> not ok.
 	if _, _, _, ok := p.getEmailForSummarize(1, 999); ok {
 		t.Error("missing email must not resolve")
 	}
-	// Another org's email is invisible.
 	mb2 := Mailbox{OrgID: 2, Address: "other@example.com", Enabled: true}
 	db.Create(&mb2)
 	otherEmail := Email{MailboxID: mb2.ID, FromAddr: "c@x.com", Subject: "s3", Text: "x", ReceivedAt: time.Now()}
@@ -82,8 +78,6 @@ func TestMailReadyReflectsSenderPresence(t *testing.T) {
 	}
 	sender := SMTPSender{OrgID: 1, Name: "relay", Host: "smtp.example.com", Port: 587, FromEmail: "noreply@example.com"}
 	p.db.Create(&sender)
-	// A row alone is not readiness: system mail sends only through the
-	// explicitly selected sender, so the setting must exist too.
 	if p.mailReady() {
 		t.Fatal("mailReady must be false while mail_system_sender_id is unset")
 	}
@@ -111,7 +105,6 @@ func TestPurgeRemovesOrgData(t *testing.T) {
 	if err := prov.Put(context.Background(), key, []byte("raw")); err != nil {
 		t.Fatalf("seed blob: %v", err)
 	}
-	// A second org's data must survive the purge.
 	db.Create(&Mailbox{OrgID: 2, Address: "keep@example.com", Enabled: true})
 
 	if err := p.purge(1); err != nil {
@@ -157,7 +150,6 @@ func TestExportDataShape(t *testing.T) {
 func TestGetStorageProviderBackends(t *testing.T) {
 	p, _ := newBouncePlugin(t)
 
-	// Default (no global setting) -> database provider.
 	prov, err := p.getStorageProvider()
 	if err != nil {
 		t.Fatalf("default backend: %v", err)
@@ -166,7 +158,6 @@ func TestGetStorageProviderBackends(t *testing.T) {
 		t.Errorf("default backend type = %T, want *DBStorageProvider", prov)
 	}
 
-	// Explicit "database" / "db" backends stay on the database provider.
 	p.getGlobalSetting = func(key string) string {
 		if key == "mail_storage_backend" {
 			return "db"
@@ -177,7 +168,6 @@ func TestGetStorageProviderBackends(t *testing.T) {
 		t.Errorf("explicit db backend: %v", err)
 	}
 
-	// A configured non-database backend with no registered provider -> Pro error.
 	p.getGlobalSetting = func(key string) string {
 		if key == "mail_storage_backend" {
 			return "s3"
@@ -188,7 +178,6 @@ func TestGetStorageProviderBackends(t *testing.T) {
 		t.Error("s3 backend with no provider must error with the Pro message")
 	}
 
-	// A registered non-DB provider is returned as-is under the s3 backend.
 	custom := &fakeStorageProvider{}
 	p.ctx = &plugin.Context{Lookup: func(name string) (any, bool) {
 		if name == plugin.ServiceMailStorageProvider {
@@ -201,14 +190,12 @@ func TestGetStorageProviderBackends(t *testing.T) {
 		t.Errorf("s3 backend with custom provider: got %T err=%v", got, err)
 	}
 
-	// A registered provider still applies on the default backend.
 	p.getGlobalSetting = nil
 	got2, err := p.getStorageProvider()
 	if err != nil || got2 != custom {
 		t.Errorf("default backend with provider: got %T err=%v", got2, err)
 	}
 
-	// A registered DB provider under the s3 backend is treated as absent.
 	dbP := NewDBStorageProvider(p.db)
 	p.ctx = &plugin.Context{Lookup: func(name string) (any, bool) {
 		if name == plugin.ServiceMailStorageProvider {
@@ -256,18 +243,15 @@ func TestSendMailErrorPaths(t *testing.T) {
 	db := p.db
 	mv := p.vaultSvc.(*mockVaultService)
 
-	// Suppressed recipient refused before any sender lookup.
 	db.Create(&MailSuppression{OrgID: 1, Address: "blocked@example.com", Reason: "manual"})
 	if err := p.sendMail(1, "blocked@example.com", "s", "b", "b"); err == nil {
 		t.Error("sendMail to a suppressed address must fail")
 	}
 
-	// No sender configured for the org.
 	if err := p.sendMail(1, "ok@example.com", "s", "b", "b"); err == nil {
 		t.Error("sendMail with no sender for org must fail")
 	}
 
-	// Vault read failure is surfaced.
 	if _, err := seedVaultSMTPSender(p, SMTPSender{OrgID: 1, Name: "relay", Host: "smtp.example.com", Port: 587, User: "u", FromEmail: "noreply@example.com"}, "enc"); err != nil {
 		t.Fatal(err)
 	}
@@ -289,7 +273,6 @@ func TestSendSystemMailFailurePublishesEvent(t *testing.T) {
 		}
 	}
 
-	// A sender pointing at an unreachable port: the send fails and the event fires.
 	deadSender, err := seedVaultSMTPSender(p, SMTPSender{OrgID: 1, Name: "dead", Host: "127.0.0.1", Port: 1, User: "u", FromEmail: "noreply@example.com"}, "p")
 	if err != nil {
 		t.Fatal(err)

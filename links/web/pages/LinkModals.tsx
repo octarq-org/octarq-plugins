@@ -39,7 +39,6 @@ export function LinkModals({
 
   return (
     <>
-      {/* Create New Link Modal */}
       {createOpen && (
         <Modal title={t("links.createNewLink")} onClose={onCloseCreate}>
           <div className="p-1">
@@ -56,7 +55,6 @@ export function LinkModals({
         </Modal>
       )}
 
-      {/* Edit Link Modal */}
       {editingLink && (
         <Modal
           title={`${t("links.editLink")} — ${editingLink.title || `/${editingLink.slug}`}`}
@@ -77,7 +75,6 @@ export function LinkModals({
         </Modal>
       )}
 
-      {/* Analytics Modal */}
       {analyticsLink && (
         <Modal
           title={`${t("links.clickPerformanceAnalytics")} — ${analyticsLink.title || `/${analyticsLink.slug}`}`}
@@ -89,7 +86,6 @@ export function LinkModals({
         </Modal>
       )}
 
-      {/* QR Code Modal */}
       {qrLink && (
         <Modal
           title={`${t("links.linkQrCode")} — ${qrLink.title || `/${qrLink.slug}`}`}

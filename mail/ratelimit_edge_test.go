@@ -35,8 +35,6 @@ func TestRateLimiterAllowsUntilExhausted(t *testing.T) {
 	}
 }
 
-// failStore peeks with an error, standing in for a configured Redis that is
-// unreachable.
 type failStore struct{}
 
 func (failStore) Get(_ context.Context, _ string, _ limiter.Rate) (limiter.Context, error) {
@@ -52,9 +50,6 @@ func (failStore) Increment(_ context.Context, _ string, _ int64, _ limiter.Rate)
 	return limiter.Context{}, errBoom
 }
 
-// An unreadable counter is not permission to send. Allowing here would turn a
-// counter outage into an unlimited window against the sending domain's
-// reputation, so the send is refused and the caller reports the check failure.
 func TestRateLimiterFailsClosedOnStoreError(t *testing.T) {
 	rl := &rateLimiter{store: failStore{}, rate: limiter.Rate{Limit: 100, Period: time.Hour}}
 	ok, err := rl.allow("ip")
@@ -64,5 +59,5 @@ func TestRateLimiterFailsClosedOnStoreError(t *testing.T) {
 	if err == nil {
 		t.Fatal("the store error must reach the caller so it can report the check failure")
 	}
-	rl.recordFailure("ip") // must not panic
+	rl.recordFailure("ip")
 }

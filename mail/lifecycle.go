@@ -12,7 +12,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// Plugin implements the octarq plugin contract for mail CRUD.
 type Plugin struct {
 	db                  *gorm.DB
 	orgID               func(*http.Request) uint
@@ -23,26 +22,21 @@ type Plugin struct {
 	testLimiter         *rateLimiter
 	emailMu             sync.RWMutex
 	emailHandlers       []func(plugin.EmailEvent)
-	// notify takes the stored config JSON directly. Configs are encrypted at rest
-	// and decrypted inside core dispatch (internal/notify.Send), so do not pre-parse.
-	notify       func(ctx context.Context, kind, cfgJSON, message string) error
-	emit         func(ctx context.Context, payload plugin.NotificationPayload) error
-	emitTo       func(ctx context.Context, recipient plugin.NotificationRecipient, payload plugin.NotificationPayload) error
-	publishEvent func(orgID uint, event string, data any)
-	recordUsage  func(orgID uint, metric string, n int64)
-	requireRole  func(r *http.Request, min string) bool
-	ctx          *plugin.Context
-	host         plugin.Host
-	vaultSvc     plugin.VaultService
+	notify              func(ctx context.Context, kind, cfgJSON, message string) error
+	emit                func(ctx context.Context, payload plugin.NotificationPayload) error
+	emitTo              func(ctx context.Context, recipient plugin.NotificationRecipient, payload plugin.NotificationPayload) error
+	publishEvent        func(orgID uint, event string, data any)
+	recordUsage         func(orgID uint, metric string, n int64)
+	requireRole         func(r *http.Request, min string) bool
+	ctx                 *plugin.Context
+	host                plugin.Host
+	vaultSvc            plugin.VaultService
 }
 
-// Host returns the host runtime interface.
 func (p *Plugin) Host() plugin.Host { return p.host }
 
-// SetHost sets the host runtime interface.
 func (p *Plugin) SetHost(h plugin.Host) { p.host = h }
 
-// Compile-time capability checks.
 var (
 	_ plugin.Plugin       = (*Plugin)(nil)
 	_ plugin.Describer    = (*Plugin)(nil)
@@ -50,9 +44,6 @@ var (
 	_ plugin.HelpDocsFS   = (*Plugin)(nil)
 )
 
-// Compile-time service contract assertions: these methods are provided to the
-// registry under the named contract types in Mount. A signature drift here
-// fails the build instead of silently breaking consumers' LookupServiceAs.
 var (
 	_ plugin.MailSender       = (*Plugin)(nil).sendMail
 	_ plugin.EmailDispatcher  = (*Plugin)(nil).OnEmail
@@ -66,7 +57,6 @@ var (
 	_ plugin.MCPExporter      = (*Plugin)(nil).mcpExportMailboxes
 )
 
-// New constructs the mail plugin.
 func New() *Plugin {
 	return &Plugin{
 		sendLimiter: newRateLimiter("", "send", 100, time.Hour),
@@ -91,32 +81,23 @@ func (p *Plugin) Models() []any {
 	return []any{&Mailbox{}, &Email{}, &SMTPSender{}, &MailRawBlob{}, &MailSuppression{}, &MailContact{}, &MailDraft{}}
 }
 
-// Menus announces this plugin's sidebar entry so /api/menus only offers it
-// when the plugin is mounted and enabled for the workspace.
 func (p *Plugin) Menus() []plugin.MenuItem {
 	return []plugin.MenuItem{
 		{ID: "mail", Label: "Mail", Path: "/mail", Icon: "mail", Category: "Messaging", Area: "operations", Order: 20},
 	}
 }
 
-// Actions announces this plugin's global create affordances so /api/actions
-// only offers them when the plugin is mounted and enabled for the workspace.
 func (p *Plugin) Actions() []plugin.Action {
 	return []plugin.Action{
 		{ID: "create-mailbox", Label: "New Mailbox", Path: "/mail?create=1", Icon: "mail", Category: "Messaging", Order: 10},
 	}
 }
 
-// docs is this plugin's documentation directory. Adding a page means adding
-// "docs/<slug>.mdx" (plus its "<slug>.zh.mdx" translation) — the file name is
-// the slug and the frontmatter carries the rest; see plugin.HelpDocsFS.
-//
 //go:embed docs
 var docs embed.FS
 
 func (p *Plugin) HelpDocsFS() fs.FS { return docs }
 
-// tenantDB returns a restricted *plugin.TenantDB scoped to orgID.
 func (p *Plugin) tenantDB(orgID uint) *plugin.TenantDB {
 	if p.ctx != nil && p.ctx.TenantDB != nil {
 		if tdb := p.ctx.TenantDB(orgID); tdb != nil {
@@ -130,7 +111,6 @@ func (p *Plugin) tenantDB(orgID uint) *plugin.TenantDB {
 	return nil
 }
 
-// orgDB scopes a query to the caller's org.
 func (p *Plugin) orgDB(r *http.Request) *plugin.TenantDB {
 	return p.tenantDB(p.orgID(r))
 }

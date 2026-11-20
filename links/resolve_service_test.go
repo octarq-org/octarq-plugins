@@ -6,11 +6,6 @@ import (
 	"github.com/octarq-org/octarq/server/pkg/hostlist"
 )
 
-// The abuse-report handler consumes links.resolve through a bare type
-// assertion on an `any` (internal/api/abuse.go). Nothing links the two halves
-// at compile time: change this signature and the assertion simply stops
-// matching, so reports silently file with no target and no workspace and no
-// build ever breaks. This pins the exact shape that consumer asserts.
 func TestResolveServiceSignatureMatchesConsumer(t *testing.T) {
 	_, p, _ := setupOwnershipTestDB(t)
 
@@ -21,8 +16,6 @@ func TestResolveServiceSignatureMatchesConsumer(t *testing.T) {
 	}
 }
 
-// A slug held by two workspaces on different hostnames must attribute to the
-// one that actually owns the reported hostname.
 func TestResolveSlugAttributesByHost(t *testing.T) {
 	db, p, engine := setupOwnershipTestDB(t)
 	p.engine = engine
@@ -43,7 +36,6 @@ func TestResolveSlugAttributesByHost(t *testing.T) {
 	}
 }
 
-// A contested hostname attributes to nobody rather than to a guess.
 func TestResolveSlugRefusesContestedHost(t *testing.T) {
 	db, p, engine := setupOwnershipTestDB(t)
 	p.engine = engine
@@ -60,8 +52,6 @@ func TestResolveSlugRefusesContestedHost(t *testing.T) {
 	}
 }
 
-// A disabled link still attributes: a report about a link that was just turned
-// off is exactly the report a moderator needs to see.
 func TestResolveSlugAttributesDisabledLink(t *testing.T) {
 	db, p, engine := setupOwnershipTestDB(t)
 	p.engine = engine

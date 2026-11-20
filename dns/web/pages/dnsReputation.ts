@@ -46,7 +46,6 @@ export function calculateReputationScore(
     let hostScore = 0;
     const isApex = !h.host || h.host === apexDomain;
 
-    // SPF check (weight: 35)
     if (h.spf.healthy) {
       hostScore += 35;
       passedCount++;
@@ -78,7 +77,6 @@ export function calculateReputationScore(
       });
     }
 
-    // DKIM check (weight: 35)
     if (h.dkim.healthy) {
       hostScore += 35;
       passedCount++;
@@ -112,7 +110,6 @@ export function calculateReputationScore(
       });
     }
 
-    // DMARC check (weight: 30)
     if (h.dmarc.healthy) {
       hostScore += 30;
       passedCount++;

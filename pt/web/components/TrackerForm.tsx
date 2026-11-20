@@ -20,9 +20,6 @@ import type {
 } from "../types";
 import { clockToMinutes, minutesToClock } from "../format";
 
-// TrackerForm creates and edits a site. The visible secret fields follow the
-// selected site type's capabilities: an API-key site shows an API key, a
-// NexusPHP site shows account name, account secret, and a cookie box.
 export interface TrackerFormProps {
   schemas: SchemaInfo[];
   tracker?: Tracker;

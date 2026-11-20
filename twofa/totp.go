@@ -23,11 +23,8 @@ var (
 	ErrInvalidPeriod   = errors.New("period must be greater than 0")
 )
 
-// NormalizeSecret cleans user input secret by removing whitespace and hyphens,
-// converting to uppercase, and ensuring proper Base32 padding.
 func NormalizeSecret(s string) string {
 	clean := strings.ToUpper(strings.ReplaceAll(strings.ReplaceAll(s, " ", ""), "-", ""))
-	// RFC 4648 Base32 chunks of 8 characters
 	rem := len(clean) % 8
 	if rem != 0 {
 		clean += strings.Repeat("=", 8-rem)
@@ -35,12 +32,10 @@ func NormalizeSecret(s string) string {
 	return clean
 }
 
-// DecodeBase32 decodes a secret string formatted as standard Base32.
 func DecodeBase32(secret string) ([]byte, error) {
 	norm := NormalizeSecret(secret)
 	data, err := base32.StdEncoding.DecodeString(norm)
 	if err != nil {
-		// Try unpadded decoding
 		data, err = base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(strings.TrimRight(norm, "="))
 		if err != nil {
 			return nil, ErrInvalidSecret
@@ -52,7 +47,6 @@ func DecodeBase32(secret string) ([]byte, error) {
 	return data, nil
 }
 
-// GenerateCode computes the RFC 6238 TOTP code for a given secret at timestamp t.
 func GenerateCode(secret string, t time.Time, period int, digits int, algorithm string) (string, error) {
 	if period <= 0 {
 		period = 30
@@ -89,7 +83,6 @@ func GenerateCode(secret string, t time.Time, period int, digits int, algorithm 
 	mac.Write(buf)
 	sum := mac.Sum(nil)
 
-	// RFC 4226 Dynamic Truncation
 	offset := sum[len(sum)-1] & 0x0f
 	binCode := (int(sum[offset]&0x7f) << 24) |
 		(int(sum[offset+1]&0xff) << 16) |
@@ -103,8 +96,6 @@ func GenerateCode(secret string, t time.Time, period int, digits int, algorithm 
 	return fmt.Sprintf(format, otp), nil
 }
 
-// VerifyCode verifies whether the given code matches the TOTP code at time t,
-// allowing for a clock drift window (drift steps before and after).
 func VerifyCode(secret string, code string, t time.Time, period int, digits int, algorithm string, drift int) bool {
 	if period <= 0 {
 		period = 30
@@ -132,7 +123,6 @@ func VerifyCode(secret string, code string, t time.Time, period int, digits int,
 	return false
 }
 
-// SecondsRemaining calculates how many seconds remain before the current TOTP step expires.
 func SecondsRemaining(t time.Time, period int) int {
 	if period <= 0 {
 		period = 30

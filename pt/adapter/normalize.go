@@ -8,8 +8,6 @@ import (
 	"unicode"
 )
 
-// unknownValues are the tokens sites use for "no data". They must parse as
-// unknown, not as zero.
 var unknownValues = map[string]bool{
 	"":        true,
 	"-":       true,
@@ -30,11 +28,6 @@ var unknownValues = map[string]bool{
 	"无限":      true,
 }
 
-// ParseSize parses a human size into bytes using 1024-based units. It accepts
-// both the KB and KiB spellings, because sites use them interchangeably.
-//
-// ok is false when raw is not a size (empty, a dash, "N/A", "未知"). A valid
-// zero returns a pointer to 0 and ok true: "0 download" is real data.
 func ParseSize(raw string) (*int64, bool) {
 	s := cleanNumeric(raw)
 	if unknownValues[strings.ToLower(s)] {
@@ -95,8 +88,6 @@ func sizeMultiplier(unit string) (int64, bool) {
 	return 0, false
 }
 
-// ParseRatio parses a share ratio. infinite is true for the site's "∞" marker;
-// value is nil in that case because there is no finite number to store.
 func ParseRatio(raw string) (value *float64, infinite bool, ok bool) {
 	s := cleanNumeric(raw)
 	lower := strings.ToLower(s)
@@ -114,8 +105,6 @@ func ParseRatio(raw string) (value *float64, infinite bool, ok bool) {
 	return &num, false, true
 }
 
-// ParseCount parses a non-negative integer, ignoring thousands separators and
-// a trailing unit word.
 func ParseCount(raw string) (*int, bool) {
 	s := cleanNumeric(raw)
 	if unknownValues[strings.ToLower(s)] {
@@ -130,8 +119,6 @@ func ParseCount(raw string) (*int, bool) {
 			digits.WriteRune(r)
 			started = true
 		case started:
-			// Stop at the first non-digit after the number started; the rest
-			// is a unit or annotation.
 			goto parsed
 		}
 	}
@@ -146,8 +133,6 @@ parsed:
 	return &n, true
 }
 
-// dateLayouts are tried in order. Sites mix separators and sometimes drop the
-// time part.
 var dateLayouts = []string{
 	"2006-01-02 15:04:05",
 	"2006-01-02 15:04",
@@ -165,14 +150,11 @@ var dateLayouts = []string{
 	time.RFC3339,
 }
 
-// ParseDate parses a site date in the site's timezone. An empty or unknown
-// value returns ok false rather than the zero time.
 func ParseDate(raw string, loc *time.Location) (*time.Time, bool) {
 	s := strings.TrimSpace(raw)
 	if s == "" || unknownValues[strings.ToLower(s)] {
 		return nil, false
 	}
-	// Trailing annotations such as "(3 years ago)" are noise.
 	if i := strings.Index(s, "("); i > 0 {
 		s = strings.TrimSpace(s[:i])
 	}
@@ -189,7 +171,6 @@ func ParseDate(raw string, loc *time.Location) (*time.Time, bool) {
 	return nil, false
 }
 
-// cleanNumeric normalizes spacing and thousands separators.
 func cleanNumeric(raw string) string {
 	s := strings.TrimSpace(raw)
 	s = strings.ReplaceAll(s, " ", "")
@@ -198,9 +179,6 @@ func cleanNumeric(raw string) string {
 	return s
 }
 
-// TruncateEvidence keeps a short, single-line excerpt for the sign-in ledger.
-// It never carries secrets because callers pass visible page text, not
-// requests or cookies.
 func TruncateEvidence(s string, max int) string {
 	s = strings.Join(strings.Fields(s), " ")
 	runes := []rune(s)

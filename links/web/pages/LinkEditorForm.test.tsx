@@ -92,23 +92,19 @@ describe("LinkEditorForm", () => {
       </I18nProvider>
     );
 
-    // Verify fields are rendered
     const targetInput = screen.getByPlaceholderText("https://example.com/blog-post-xyz");
     expect(targetInput).toBeDefined();
 
     const slugInput = screen.getByPlaceholderText("e.g. promo2026");
     expect(slugInput).toBeDefined();
 
-    // Save button should be disabled when target is empty
     const saveBtn = screen.getByRole("button", { name: "Save link" });
     expect((saveBtn as HTMLButtonElement).disabled).toBe(true);
 
-    // Cancel button works
     const cancelBtn = screen.getByRole("button", { name: "Cancel" });
     fireEvent.click(cancelBtn);
     expect(onCancel).toHaveBeenCalledTimes(1);
 
-    // Typing target enables save button
     fireEvent.change(targetInput, { target: { value: "https://acme.com/new-product" } });
     expect((saveBtn as HTMLButtonElement).disabled).toBe(false);
   });
@@ -120,7 +116,6 @@ describe("LinkEditorForm", () => {
       </I18nProvider>
     );
 
-    // Wait for AI assist status to load
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "AI suggest" })).toBeDefined();
     });
@@ -136,7 +131,6 @@ describe("LinkEditorForm", () => {
       expect(screen.getByText("ai-suggest-2")).toBeDefined();
     });
 
-    // Clicking a suggestion chip sets the slug
     fireEvent.click(screen.getByText("ai-suggest-1"));
     const slugInput = screen.getByPlaceholderText("e.g. promo2026") as HTMLInputElement;
     expect(slugInput.value).toBe("ai-suggest-1");
@@ -205,7 +199,6 @@ describe("LinkEditorForm", () => {
     const targetInput = screen.getByPlaceholderText("https://example.com/blog-post-xyz") as HTMLTextAreaElement;
     fireEvent.change(targetInput, { target: { value: "https://acme.com/landing" } });
 
-    // Open UTM builder
     const utmBtn = screen.getByRole("button", { name: "UTM" });
     fireEvent.click(utmBtn);
 
@@ -219,7 +212,6 @@ describe("LinkEditorForm", () => {
     fireEvent.change(screen.getByPlaceholderText("utm_term"), { target: { value: "discount" } });
     fireEvent.change(screen.getByPlaceholderText("utm_content"), { target: { value: "header-link" } });
 
-    // Apply UTM
     const applyBtn = screen.getByRole("button", { name: "Apply UTM parameters" });
     fireEvent.click(applyBtn);
 
@@ -235,28 +227,23 @@ describe("LinkEditorForm", () => {
       </I18nProvider>
     );
 
-    // Add rule
     const addRuleBtn = screen.getByRole("button", { name: "Add rule" });
     fireEvent.click(addRuleBtn);
 
-    // Initial added rule is split with weight 50
     expect(screen.getByPlaceholderText("Target URL")).toBeDefined();
     expect(screen.getByText(/Remaining to control: 50%/)).toBeDefined();
 
     const ruleTarget = screen.getByPlaceholderText("Target URL");
     fireEvent.change(ruleTarget, { target: { value: "https://acme.com/split-target" } });
 
-    // Add a second rule
     fireEvent.click(addRuleBtn);
     const ruleTargets = screen.getAllByPlaceholderText("Target URL");
     expect(ruleTargets.length).toBe(2);
 
-    // Delete first rule
     const deleteButtons = screen.getAllByRole("button").filter(b => b.querySelector("svg.lucide-trash-2"));
     expect(deleteButtons.length).toBe(2);
     fireEvent.click(deleteButtons[0]);
 
-    // Only one rule remains
     expect(screen.getAllByPlaceholderText("Target URL").length).toBe(1);
   });
 
@@ -285,42 +272,34 @@ describe("LinkEditorForm", () => {
       </I18nProvider>
     );
 
-    // Fill target
     fireEvent.change(screen.getByPlaceholderText("https://example.com/blog-post-xyz"), {
       target: { value: "https://acme.com/special-promo" },
     });
 
-    // Fill slug
     fireEvent.change(screen.getByPlaceholderText("e.g. promo2026"), {
       target: { value: "special-slug" },
     });
 
-    // Fill title
     fireEvent.change(screen.getByPlaceholderText("Auto-populated title for page previews"), {
       target: { value: "Special Title" },
     });
 
-    // Fill tags
     fireEvent.change(screen.getByPlaceholderText("e.g. q3-ads, product-hunt"), {
       target: { value: "vip, promo" },
     });
 
-    // Fill note
     fireEvent.change(screen.getByPlaceholderText("Notes visible only to team members"), {
       target: { value: "Campaign Q4" },
     });
 
-    // Fill password
     fireEvent.change(screen.getByPlaceholderText("e.g. 123456"), {
       target: { value: "supersecret" },
     });
 
-    // Fill redirectUrl after expiry
     fireEvent.change(screen.getByPlaceholderText("e.g. https://my-site.com/expired"), {
       target: { value: "https://acme.com/expired" },
     });
 
-    // Submit
     const saveBtn = screen.getByRole("button", { name: "Save link" });
     fireEvent.click(saveBtn);
 
@@ -371,7 +350,6 @@ describe("LinkEditorForm", () => {
       </I18nProvider>
     );
 
-    // Verify existing fields are filled
     const targetInput = screen.getByPlaceholderText("https://example.com/blog-post-xyz") as HTMLTextAreaElement;
     expect(targetInput.value).toBe("https://acme.com/spring-sale");
 
@@ -387,7 +365,6 @@ describe("LinkEditorForm", () => {
     expect(screen.getByPlaceholderText("e.g. 123456")).toBeDefined();
     expect(screen.getByText("Key set. Fill to overwrite, blank to keep")).toBeDefined();
 
-    // Modify title and submit
     fireEvent.change(titleInput, { target: { value: "Updated Spring Promo 2026" } });
     const saveBtn = screen.getByRole("button", { name: "Save link" });
     fireEvent.click(saveBtn);
@@ -642,14 +619,12 @@ describe("LinkEditorForm", () => {
     expect(dtInput).not.toBeNull();
     expect(dtInput.value).toBe(toLocalDatetimeInput(existingMockLink.expiresAt));
 
-    // Save without touching expiresAt -> must preserve exact UTC ISO
     fireEvent.click(screen.getByRole("button", { name: "Save link" }));
     await waitFor(() => {
       expect(putPayloads.length).toBe(1);
     });
     expect(putPayloads[0].expiresAt).toBe("2026-12-31T23:59:00.000Z");
 
-    // Clear expiresAt -> must send null
     fireEvent.change(dtInput, { target: { value: "" } });
     fireEvent.click(screen.getByRole("button", { name: "Save link" }));
     await waitFor(() => {

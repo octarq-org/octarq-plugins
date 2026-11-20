@@ -9,8 +9,6 @@ import (
 	"github.com/octarq-org/octarq/server/plugin/safehttp"
 )
 
-// fakeSMTPServer speaks just enough ESMTP to complete the greeting and EHLO,
-// advertising only the extensions in caps. It records how far the client got.
 func fakeSMTPServer(t *testing.T, caps []string) (port string, reached func() []string) {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -67,16 +65,11 @@ func fakeSMTPServer(t *testing.T, caps []string) (port string, reached func() []
 	return port, func() []string { <-done; return seen }
 }
 
-// TestSendFailsClosedWhenServerDropsAUTH pins the fail-closed half of the send
-// path. net/smtp.SendMail errors when credentials are configured but the server
-// advertises no AUTH; delivering anyway would mean that a relay which stops
-// offering AUTH — or anything on the path that strips the capability — silently
-// receives the mail unauthenticated.
 func TestSendFailsClosedWhenServerDropsAUTH(t *testing.T) {
 	safehttp.SetAllowPrivateSMTP(true)
 	defer safehttp.SetAllowPrivateSMTP(false)
 
-	port, reached := fakeSMTPServer(t, nil) // no AUTH advertised
+	port, reached := fakeSMTPServer(t, nil)
 	msg := Message{From: "a@example.com", To: []string{"b@example.com"}, Subject: "s", Text: "t"}
 
 	err := NewCustomSender("127.0.0.1", port, "user", "pass", "a@example.com").Send(msg)

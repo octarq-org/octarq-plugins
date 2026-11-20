@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ptI18n } from "./i18n";
 
-// Core's i18n:audit does not scan octarq-plugins, so this file is the only guard
-// that keeps the five languages in step. A missing key falls back to English at
-// runtime and nobody notices; a missing placeholder breaks a sentence.
 
 const LANGS = ["en", "zh", "es", "pt", "ja"] as const;
 
@@ -64,8 +61,6 @@ describe("pt plugin i18n", () => {
     }
   });
 
-  // The SDK files a composed plugin dictionary under the plugin name, so a bare
-  // key never resolves. Only the scoped hook may reach for a translation.
   const SOURCES = import.meta.glob("./**/*.tsx", {
     query: "?raw",
     import: "default",

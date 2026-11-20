@@ -81,7 +81,6 @@ export function DnsReputationScoreCard({ repScore }: { repScore: DnsReputationSc
         </div>
       </div>
 
-      {/* Visual score progress bar */}
       <div className="w-full bg-card border border-border/50 h-2 rounded-full overflow-hidden">
         <div
           className={`h-full rounded-full transition-all duration-500 ${
@@ -273,8 +272,6 @@ export function DnsHostRow({ host }: { host: HostDNSStatus }) {
   );
 }
 
-// Short-link host: CNAME confirmed into zone (success), resolves but target
-// unverified — e.g. proxied/A-record (warning), or not resolving (error).
 export function LinkHostRow({ link }: { link: LinkHostStatus }) {
   const { t } = useTranslation();
   const badgeStatus = link.healthy ? "success" : link.set ? "warning" : "error";
@@ -296,7 +293,6 @@ export function LinkHostRow({ link }: { link: LinkHostStatus }) {
   );
 }
 
-// LinkHostGuide explains how to point a short-link subdomain at this app.
 export function LinkHostGuide({ apex }: { apex: string }) {
   const { t } = useTranslation();
   return (

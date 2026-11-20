@@ -9,12 +9,8 @@ import (
 	"github.com/octarq-org/octarq-plugins/pt/adapter"
 )
 
-// maxSleep is the longest a request may wait inside the scheduler. A longer
-// wait is returned as a deferral instead of pinning a worker, which is how a
-// slow site used to starve every other tracker in MoviePilot.
 const maxSleep = 60 * time.Second
 
-// rateConfig is one tracker's request budget.
 type rateConfig struct {
 	Interval time.Duration
 	Window   time.Duration
@@ -37,8 +33,6 @@ func rateConfigFor(t *PTTracker, def adapter.Defaults) rateConfig {
 	return rateConfig{Interval: interval, Window: window, Count: count}
 }
 
-// deferredError means the site cannot be contacted yet. It is not a failure:
-// the caller reschedules without incrementing the failure counter.
 type deferredError struct {
 	RetryAfter time.Duration
 }
@@ -47,11 +41,6 @@ func (e *deferredError) Error() string {
 	return fmt.Sprintf("pt: deferred for %s", e.RetryAfter.Round(time.Second))
 }
 
-// limiter enforces a minimum gap and an optional count window per domain.
-//
-// The count window is per process. A multi-instance deployment therefore still
-// has one DB-backed minimum-gap claim per tracker (see claimRequestSlot); the
-// window is best effort and documented as such.
 type limiter struct {
 	mu      sync.Mutex
 	domains map[string]*domainLimit
@@ -77,8 +66,6 @@ func (l *limiter) domain(name string) *domainLimit {
 	return d
 }
 
-// acquire blocks until the domain may be contacted, or returns deferredError
-// when the wait exceeds maxSleep.
 func (l *limiter) acquire(ctx context.Context, domain string, cfg rateConfig, now time.Time) error {
 	d := l.domain(domain)
 	d.mu.Lock()

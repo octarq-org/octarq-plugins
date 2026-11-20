@@ -11,8 +11,6 @@ import (
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
-// --- link_crawl.go / service.go ---
-
 func TestParsePageMeta(t *testing.T) {
 	t.Parallel()
 
@@ -54,8 +52,6 @@ func TestHandleLinkCrawl(t *testing.T) {
 		t.Fatalf("seed link: %v", err)
 	}
 
-	// A loopback target is refused by the SSRF-guarded client, so the crawl
-	// yields no title and must leave the row untouched — without erroring.
 	payload, _ := json.Marshal(map[string]any{"id": 1, "target": "http://127.0.0.1/x"})
 	if err := p.handleLinkCrawl(context.Background(), payload); err != nil {
 		t.Fatalf("handleLinkCrawl with unresolvable target: %v", err)
@@ -116,8 +112,6 @@ func TestCreateLinkService(t *testing.T) {
 		t.Error("CreateLink with a dangerous target must fail")
 	}
 }
-
-// --- plugin.go ---
 
 func TestStartClosesEngineOnContextDone(t *testing.T) {
 	eng := newTestEngine(t)
@@ -216,7 +210,6 @@ func TestCleanupEventsRemovesOldRows(t *testing.T) {
 		t.Errorf("expected 1 event to survive cleanup, got %d", remaining)
 	}
 
-	// Non-positive retention is a no-op that must not touch anything.
 	p.cleanupEvents(context.Background(), 0)
 	var still int64
 	p.db.Model(&LinkEvent{}).Count(&still)
@@ -224,8 +217,6 @@ func TestCleanupEventsRemovesOldRows(t *testing.T) {
 		t.Errorf("cleanup with retention 0 deleted rows: %d remain", still)
 	}
 }
-
-// --- mcp.go ---
 
 func TestRegisterMCPRegistersListLinksTool(t *testing.T) {
 	ctx := context.Background()
@@ -282,7 +273,6 @@ func TestMCPListLinks(t *testing.T) {
 
 	ctx := plugin.WithOrgID(context.Background(), 1)
 
-	// No org in context is refused.
 	if _, _, err := p.mcpListLinks(context.Background(), nil, listLinksInput{}); err == nil {
 		t.Fatal("expected errNoOrgInContext without a workspace in context")
 		return

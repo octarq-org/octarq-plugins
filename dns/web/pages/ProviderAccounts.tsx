@@ -4,10 +4,6 @@ import { NavLink } from "react-router-dom";
 import { dnsApi, ProviderAccount } from "../api";
 import { Cloud, KeyRound, Blocks } from "lucide-react";
 
-// Which registry owns provider accounts. An instance with Core Vault
-// mounted uses vault items; standalone instances without vault use the local
-// provider_accounts table. Read exactly one, never both: the registries number
-// their rows independently.
 type AccountMode = "integration" | "local" | null;
 
 export function ProviderAccounts({ embed }: { embed?: boolean }) {

@@ -10,10 +10,6 @@ import (
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
-// errNoOrgInContext refuses a tool call that arrives without a tenant scope.
-// Every transport supplies one — the networked ones from the caller's API token,
-// the stdio CLI from its entry point — so an absent org means something is wrong,
-// and defaulting it to a tenant would hand that tenant's data to whoever asked.
 var errNoOrgInContext = plugin.NewAgentError(
 	401,
 	"UNAUTHORIZED_NO_WORKSPACE",
@@ -41,7 +37,6 @@ type linkOut struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
-// MCPTier reports the license tier these tools require. Core tools are free.
 func (*Plugin) MCPTier() string { return "" }
 
 func (p *Plugin) RegisterMCP(srv *mcp.Server) {

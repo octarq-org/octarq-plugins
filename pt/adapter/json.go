@@ -7,11 +7,6 @@ import (
 	"time"
 )
 
-// The API dialects disagree about JSON types: the same field arrives as a
-// number on one site and as a string on another. These helpers accept both and
-// never invent a value.
-
-// JSONNumber reads a number that may be encoded as a JSON number or a string.
 func JSONNumber(v any) (*float64, bool) {
 	switch value := v.(type) {
 	case float64:
@@ -37,7 +32,6 @@ func JSONNumber(v any) (*float64, bool) {
 	}
 }
 
-// JSONInt reads an integer field.
 func JSONInt(v any) (*int, bool) {
 	f, ok := JSONNumber(v)
 	if !ok {
@@ -47,8 +41,6 @@ func JSONInt(v any) (*int, bool) {
 	return &n, true
 }
 
-// JSONInt64 reads a 64-bit integer field, used for traffic counters that
-// exceed float precision on large accounts.
 func JSONInt64(v any) (*int64, bool) {
 	switch value := v.(type) {
 	case json.Number:
@@ -79,7 +71,6 @@ func JSONInt64(v any) (*int64, bool) {
 	}
 }
 
-// JSONString reads a string field.
 func JSONString(v any) string {
 	if s, ok := v.(string); ok {
 		return strings.TrimSpace(s)
@@ -87,7 +78,6 @@ func JSONString(v any) string {
 	return ""
 }
 
-// JSONBool reads a boolean field.
 func JSONBool(v any) (*bool, bool) {
 	switch value := v.(type) {
 	case bool:
@@ -105,7 +95,6 @@ func JSONBool(v any) (*bool, bool) {
 	return nil, false
 }
 
-// JSONTime reads a timestamp from a string, accepting Unix seconds too.
 func JSONTime(v any, loc *time.Location) *time.Time {
 	if loc == nil {
 		loc = time.UTC
@@ -137,14 +126,12 @@ func JSONTime(v any, loc *time.Location) *time.Time {
 	return nil
 }
 
-// DecodeJSON decodes a body with numbers preserved exactly.
 func DecodeJSON(body []byte, into any) error {
 	decoder := json.NewDecoder(strings.NewReader(string(body)))
 	decoder.UseNumber()
 	return decoder.Decode(into)
 }
 
-// Map walks a decoded JSON object.
 func Map(m map[string]any, keys ...string) (any, bool) {
 	var current any = m
 	for _, key := range keys {
@@ -161,8 +148,6 @@ func Map(m map[string]any, keys ...string) (any, bool) {
 	return current, true
 }
 
-// FirstMap returns the first element of an array field as an object. Several
-// APIs wrap a single record in a one-element list.
 func FirstMap(v any) (map[string]any, bool) {
 	arr, ok := v.([]any)
 	if !ok || len(arr) == 0 {
