@@ -129,7 +129,7 @@ export function MailSettings() {
               <Input
                 readOnly
                 className="font-mono text-xs"
-                value={`${location.origin}/api/v1/webhook/${s?.orgSlug || ""}/email/inbound/${displayed}`}
+                value={`${location.origin}/api/webhook/${s?.orgSlug || ""}/email/inbound/${displayed}`}
                 onFocus={(e) => e.currentTarget.select()}
               />
             </Field>

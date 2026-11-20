@@ -150,7 +150,7 @@ func (p *Plugin) resolveMailbox(orgID uint, addr string) (*Mailbox, bool) {
 	if err := p.db.Where("address = ? AND enabled = ? AND owner_id = ?", addr, true, orgID).First(&mb).Error; err == nil {
 		return &mb, true
 	}
-	if p.getWorkspaceSetting(orgID, "mail.catch_all") != "true" {
+	if p.getWorkspaceSetting(orgID, "catch_all") != "true" {
 		return nil, false
 	}
 	// Reserved local-parts are never auto-created by catch-all.

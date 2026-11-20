@@ -2,6 +2,7 @@ package links
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -272,5 +273,65 @@ func TestLinkPasswordPreservationAndPlaintext(t *testing.T) {
 	}
 	if outUpdate3.Body.HasPassword {
 		t.Errorf("expected HasPassword false after clear, got true")
+	}
+}
+
+func TestLinkJSONSerializationOmitsPassword(t *testing.T) {
+	t.Parallel()
+
+	p, mkCtx := setupFullLinksTestDB(t)
+	ctx := context.Background()
+
+	pw := "top-secret-passcode"
+	reqCreate := httptest.NewRequest(http.MethodPost, "/api/links", nil)
+	outCreate, err := p.createLink(ctx, &CreateLinkInput{
+		Ctx: mkCtx(reqCreate),
+		Body: linkDTO{
+			Slug:     "json-pw-test",
+			Target:   "https://example.com/private",
+			Password: &pw,
+		},
+	})
+	if err != nil {
+		t.Fatalf("createLink: %v", err)
+	}
+
+	rawCreated, err := json.Marshal(outCreate.Body)
+	if err != nil {
+		t.Fatalf("marshal linkView: %v", err)
+	}
+	var createdMap map[string]any
+	if err := json.Unmarshal(rawCreated, &createdMap); err != nil {
+		t.Fatalf("unmarshal linkView JSON: %v", err)
+	}
+	if _, exists := createdMap["password"]; exists {
+		t.Fatalf("serialized Link JSON must omit \"password\" field, got: %s", rawCreated)
+	}
+	if hasPW, ok := createdMap["hasPassword"].(bool); !ok || !hasPW {
+		t.Fatalf("expected \"hasPassword\": true in JSON, got %v (%s)", createdMap["hasPassword"], rawCreated)
+	}
+
+	// Verify listLinks output as well.
+	reqList := httptest.NewRequest(http.MethodGet, "/api/links", nil)
+	outList, err := p.listLinks(ctx, &ListLinksInput{Ctx: mkCtx(reqList)})
+	if err != nil {
+		t.Fatalf("listLinks: %v", err)
+	}
+	rawList, err := json.Marshal(outList.Body)
+	if err != nil {
+		t.Fatalf("marshal list: %v", err)
+	}
+	var listMaps []map[string]any
+	if err := json.Unmarshal(rawList, &listMaps); err != nil {
+		t.Fatalf("unmarshal list JSON: %v", err)
+	}
+	if len(listMaps) != 1 {
+		t.Fatalf("expected 1 link in list, got %d", len(listMaps))
+	}
+	if _, exists := listMaps[0]["password"]; exists {
+		t.Fatalf("listLinks JSON must omit \"password\" field, got: %s", rawList)
+	}
+	if hasPW, ok := listMaps[0]["hasPassword"].(bool); !ok || !hasPW {
+		t.Fatalf("expected \"hasPassword\": true in list JSON, got %v", listMaps[0]["hasPassword"])
 	}
 }

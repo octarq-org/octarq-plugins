@@ -52,8 +52,15 @@ func metaBool(meta map[string]any, key string) bool {
 }
 
 func metaToAccount(item plugin.VaultItemMeta) TwoFAAccount {
-	tags := metaString(item.Metadata, "tags")
-	if tags == "" && len(item.Tags) > 0 {
+	var tags string
+	var hasTagsKey bool
+	if item.Metadata != nil {
+		if raw, ok := item.Metadata["tags"]; ok {
+			hasTagsKey = true
+			tags, _ = raw.(string)
+		}
+	}
+	if !hasTagsKey && len(item.Tags) > 0 {
 		tags = strings.Join(item.Tags, ", ")
 	}
 	algo := metaString(item.Metadata, "algorithm")
@@ -333,7 +340,7 @@ func (p *Plugin) getAccount(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		resp["secret"] = extractSecretFromPayload(sec.Payload)
-		p.logAudit(r.Context(), scope.OrgID, acc.ID, acc.Name, "view_secret", p.actor(r), r.RemoteAddr)
+		p.logAudit(r, scope.OrgID, acc.ID, acc.Name, "view_secret", p.actor(r), r.RemoteAddr)
 	}
 
 	writeJSON(w, resp)
@@ -464,7 +471,7 @@ func (p *Plugin) createAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p.logAudit(r.Context(), scope.OrgID, meta.ID, meta.Name, "create_account", p.actor(r), r.RemoteAddr)
+	p.logAudit(r, scope.OrgID, meta.ID, meta.Name, "create_account", p.actor(r), r.RemoteAddr)
 
 	currentCode, rem, _ := vs.ComputeTOTP(r.Context(), scope.OrgID, meta.ID)
 
@@ -473,16 +480,16 @@ func (p *Plugin) createAccount(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateAccountIn struct {
-	Name      string `json:"name"`
-	Issuer    string `json:"issuer"`
-	Account   string `json:"account"`
-	Secret    string `json:"secret,omitempty"`
-	Algorithm string `json:"algorithm"`
-	Digits    int    `json:"digits"`
-	Period    int    `json:"period"`
-	Tags      string `json:"tags"`
-	Notes     string `json:"notes"`
-	Pinned    *bool  `json:"pinned,omitempty"`
+	Name      *string `json:"name,omitempty"`
+	Issuer    *string `json:"issuer,omitempty"`
+	Account   *string `json:"account,omitempty"`
+	Secret    string  `json:"secret,omitempty"`
+	Algorithm *string `json:"algorithm,omitempty"`
+	Digits    int     `json:"digits"`
+	Period    int     `json:"period"`
+	Tags      *string `json:"tags,omitempty"`
+	Notes     *string `json:"notes,omitempty"`
+	Pinned    *bool   `json:"pinned,omitempty"`
 }
 
 func (p *Plugin) updateAccount(w http.ResponseWriter, r *http.Request) {
@@ -526,17 +533,17 @@ func (p *Plugin) updateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if in.Name != "" {
-		acc.Name = in.Name
+	if in.Name != nil && strings.TrimSpace(*in.Name) != "" {
+		acc.Name = *in.Name
 	}
-	if in.Issuer != "" {
-		acc.Issuer = in.Issuer
+	if in.Issuer != nil {
+		acc.Issuer = *in.Issuer
 	}
-	if in.Account != "" {
-		acc.Account = in.Account
+	if in.Account != nil {
+		acc.Account = *in.Account
 	}
-	if in.Algorithm != "" {
-		acc.Algorithm = in.Algorithm
+	if in.Algorithm != nil && strings.TrimSpace(*in.Algorithm) != "" {
+		acc.Algorithm = *in.Algorithm
 	}
 	if in.Digits >= 6 && in.Digits <= 8 {
 		acc.Digits = in.Digits
@@ -544,11 +551,11 @@ func (p *Plugin) updateAccount(w http.ResponseWriter, r *http.Request) {
 	if in.Period > 0 {
 		acc.Period = in.Period
 	}
-	if in.Tags != "" {
-		acc.Tags = in.Tags
+	if in.Tags != nil {
+		acc.Tags = *in.Tags
 	}
-	if in.Notes != "" {
-		acc.Notes = in.Notes
+	if in.Notes != nil {
+		acc.Notes = *in.Notes
 	}
 	if in.Pinned != nil {
 		acc.Pinned = *in.Pinned
@@ -592,7 +599,7 @@ func (p *Plugin) updateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p.logAudit(r.Context(), scope.OrgID, updated.ID, updated.Name, "update_account", p.actor(r), r.RemoteAddr)
+	p.logAudit(r, scope.OrgID, updated.ID, updated.Name, "update_account", p.actor(r), r.RemoteAddr)
 
 	currentCode, rem, _ := vs.ComputeTOTP(r.Context(), scope.OrgID, updated.ID)
 	writeJSON(w, metaToSummary(*updated, currentCode, rem))
@@ -639,7 +646,7 @@ func (p *Plugin) deleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p.logAudit(r.Context(), scope.OrgID, meta.ID, meta.Name, "delete_account", p.actor(r), r.RemoteAddr)
+	p.logAudit(r, scope.OrgID, meta.ID, meta.Name, "delete_account", p.actor(r), r.RemoteAddr)
 	writeJSON(w, map[string]bool{"deleted": true})
 }
 
@@ -717,7 +724,7 @@ func (p *Plugin) getCode(w http.ResponseWriter, r *http.Request) {
 	}
 	validUntil := time.Now().Add(time.Duration(rem) * time.Second)
 
-	p.logAudit(r.Context(), scope.OrgID, meta.ID, meta.Name, "generate_code", p.actor(r), r.RemoteAddr)
+	p.logAudit(r, scope.OrgID, meta.ID, meta.Name, "generate_code", p.actor(r), r.RemoteAddr)
 
 	writeJSON(w, map[string]any{
 		"id":                meta.ID,
@@ -776,7 +783,7 @@ func (p *Plugin) verifyCode(w http.ResponseWriter, r *http.Request) {
 	acc := metaToAccount(sec.Meta)
 	secret := extractSecretFromPayload(sec.Payload)
 	valid := VerifyCode(secret, in.Code, time.Now(), acc.Period, acc.Digits, acc.Algorithm, 1)
-	p.logAudit(r.Context(), scope.OrgID, acc.ID, acc.Name, "verify_code", p.actor(r), r.RemoteAddr)
+	p.logAudit(r, scope.OrgID, acc.ID, acc.Name, "verify_code", p.actor(r), r.RemoteAddr)
 
 	writeJSON(w, map[string]bool{"valid": valid})
 }
@@ -825,7 +832,7 @@ func (p *Plugin) getQRCode(w http.ResponseWriter, r *http.Request) {
 	acc := metaToAccount(sec.Meta)
 	secret := extractSecretFromPayload(sec.Payload)
 	uri := BuildOTPAuthURI(&acc, secret)
-	p.logAudit(r.Context(), scope.OrgID, acc.ID, acc.Name, "view_qr", p.actor(r), r.RemoteAddr)
+	p.logAudit(r, scope.OrgID, acc.ID, acc.Name, "view_qr", p.actor(r), r.RemoteAddr)
 
 	if r.URL.Query().Get("format") == "image" {
 		png, err := GenerateQRCodePNG(uri, 256)
@@ -919,7 +926,7 @@ func (p *Plugin) importAccounts(w http.ResponseWriter, r *http.Request) {
 		imported++
 	}
 
-	p.logAudit(r.Context(), scope.OrgID, 0, fmt.Sprintf("imported %d accounts", imported), "import_accounts", p.actor(r), r.RemoteAddr)
+	p.logAudit(r, scope.OrgID, 0, fmt.Sprintf("imported %d accounts", imported), "import_accounts", p.actor(r), r.RemoteAddr)
 
 	writeJSON(w, map[string]any{
 		"imported": imported,
@@ -988,53 +995,22 @@ func (p *Plugin) exportAccounts(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	p.logAudit(r.Context(), scope.OrgID, 0, fmt.Sprintf("exported %d accounts", len(out)), "export_accounts", p.actor(r), r.RemoteAddr)
+	p.logAudit(r, scope.OrgID, 0, fmt.Sprintf("exported %d accounts", len(out)), "export_accounts", p.actor(r), r.RemoteAddr)
 	writeJSON(w, out)
 }
 
-func (p *Plugin) listAuditLogs(w http.ResponseWriter, r *http.Request) {
-	scope, ok := p.requireScope(w, r)
-	if !ok {
-		return
-	}
-
-	tdb := p.tenantDB(r.Context(), scope.OrgID)
-	if tdb == nil {
-		http.Error(w, "database unavailable", http.StatusInternalServerError)
-		return
-	}
-
-	var logs []TwoFAAuditLog
-	_ = tdb.Scoped(&TwoFAAuditLog{}).Order("created_at DESC").Limit(50).Find(&logs).Error
-
-	writeJSON(w, logs)
-}
-
-func (p *Plugin) logAudit(ctx context.Context, orgID uint, accountID uint, accountName string, action string, actor string, ip string) {
-	if orgID == 0 {
+func (p *Plugin) logAudit(r *http.Request, orgID uint, accountID uint, accountName string, action string, actor string, ip string) {
+	if orgID == 0 || r == nil {
 		return
 	}
 	if p.ctx != nil && p.ctx.Audit != nil {
-		p.ctx.Audit(nil, "twofa."+action, "twofa_account", accountID, map[string]any{
+		p.ctx.Audit(r, "twofa."+action, "twofa_account", accountID, map[string]any{
 			"account_name": accountName,
 			"actor":        actor,
 			"ip":           ip,
 			"org_id":       orgID,
 		})
 	}
-	tdb := p.tenantDB(ctx, orgID)
-	if tdb == nil {
-		return
-	}
-	entry := TwoFAAuditLog{
-		OrgID:       orgID,
-		AccountID:   accountID,
-		AccountName: accountName,
-		Action:      action,
-		Actor:       actor,
-		IP:          ip,
-	}
-	_ = tdb.Create(&entry).Error
 }
 
 func (p *Plugin) requireRole(r *http.Request, min string) bool {

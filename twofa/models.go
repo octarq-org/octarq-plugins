@@ -23,19 +23,6 @@ type TwoFAAccount struct {
 	Pinned    bool      `json:"pinned"`
 }
 
-// TwoFAAuditLog records every security-sensitive interaction with the 2FA vault,
-// such as code generations, secret reveals, exports, and MCP agent queries.
-type TwoFAAuditLog struct {
-	ID          uint      `gorm:"primarykey" json:"id"`
-	CreatedAt   time.Time `gorm:"index" json:"created_at"`
-	OrgID       uint      `gorm:"index;not null" json:"org_id"`
-	AccountID   uint      `gorm:"index" json:"account_id"`
-	AccountName string    `gorm:"size:255" json:"account_name"`
-	Action      string    `gorm:"size:64;not null;index" json:"action"`
-	Actor       string    `gorm:"size:255" json:"actor"`
-	IP          string    `gorm:"size:64" json:"ip"`
-}
-
 // AccountSummary is a safe projection of TwoFAAccount containing live TOTP codes
 // for frontend dashboard rendering, omitting secret data.
 type AccountSummary struct {

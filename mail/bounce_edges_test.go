@@ -282,7 +282,10 @@ func TestResolveMailboxCatchAllCreates(t *testing.T) {
 	p, db := newBouncePlugin(t)
 
 	p.getWorkspaceSetting = func(orgID uint, key string) string {
-		return "true"
+		if key == "catch_all" {
+			return "true"
+		}
+		return ""
 	}
 	// Org 1 owns mail host mail.hosted.example (explicit) and apex catchall.example (bare).
 	db.Create(&testDomain{OrgID: 1, Name: "catchall.example", ForMail: true})

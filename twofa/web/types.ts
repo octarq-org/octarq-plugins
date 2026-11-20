@@ -20,17 +20,6 @@ export interface AccountDetail extends AccountSummary {
   secret?: string;
 }
 
-export interface AuditLog {
-  id: number;
-  created_at: string;
-  org_id: number;
-  account_id: number;
-  account_name: string;
-  action: string;
-  actor: string;
-  ip: string;
-}
-
 export interface CreateAccountInput {
   name: string;
   issuer?: string;

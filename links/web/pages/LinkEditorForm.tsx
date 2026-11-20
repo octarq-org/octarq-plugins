@@ -43,6 +43,26 @@ function RouterDomainConfigNavButton({ onClick, label }: { onClick: () => void; 
   );
 }
 
+export function toLocalDatetimeInput(iso?: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+export function localDatetimeInputToISO(value?: string | null): string | null {
+  if (!value) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value.trim());
+  if (m) {
+    const [, y, mo, da, hh, mm, ss] = m;
+    const d = new Date(Number(y), Number(mo) - 1, Number(da), Number(hh), Number(mm), Number(ss ?? 0));
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  }
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
 export function LinkEditorForm({
   link,
   hosts: rawHosts = [],
@@ -65,8 +85,8 @@ export function LinkEditorForm({
   const [title, setTitle] = useState(link?.title ?? "");
   const [note, setNote] = useState(link?.note ?? "");
   const [tags, setTags] = useState(link?.tags ?? "");
-  const [password, setPassword] = useState(link?.password ?? "");
-  const [expiresAt, setExpiresAt] = useState(link?.expiresAt?.slice(0, 16) ?? "");
+  const [password, setPassword] = useState("");
+  const [expiresAt, setExpiresAt] = useState(() => toLocalDatetimeInput(link?.expiresAt));
   const [expiredUrl, setExpiredUrl] = useState(link?.expiredUrl ?? "");
   const [clickLimit, setClickLimit] = useState(link?.clickLimit ?? 0);
   const [enabled, setEnabled] = useState(link?.enabled ?? true);
@@ -120,13 +140,15 @@ export function LinkEditorForm({
       title,
       note,
       tags,
-      password,
       enabled,
       expiredUrl,
       routingRules,
       clickLimit: Number(clickLimit) || 0,
-      expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+      expiresAt: localDatetimeInputToISO(expiresAt),
     };
+    if (password !== "") {
+      payload.password = password;
+    }
     try {
       let res;
       if (link) res = await linksApi.updateLink(link.id, payload);
@@ -238,8 +260,8 @@ export function LinkEditorForm({
       </Field>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 min-w-0">
-        <Field label={t("links.accessProtectionPassword")} hint={t("links.passwordOptionalHint")}>
-          <Input className="w-full font-mono text-sm min-w-0" type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="e.g. 123456" />
+        <Field label={t("links.accessProtectionPassword")} hint={link?.hasPassword ? t("links.passwordSetHint") : t("links.passwordOptionalHint")}>
+          <Input className="w-full font-mono text-sm min-w-0" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="e.g. 123456" />
         </Field>
         <Field label={t("links.totalClickLimitation")} hint={t("links.clickLimitHint")}>
           <Input

@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { cleanup, render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { registerUIPlugin, resetRegistry, I18nProvider } from "@octarq/plugin-sdk";
 import linksPlugin from "../index";
-import { LinkEditorForm } from "./LinkEditorForm";
+import { LinkEditorForm, localDatetimeInputToISO, toLocalDatetimeInput } from "./LinkEditorForm";
 import { Link } from "../api";
 
 function jsonResponse(body: unknown, status = 200) {
@@ -385,7 +385,7 @@ describe("LinkEditorForm", () => {
     expect(tagsInput.value).toBe("promo, spring, sale");
 
     expect(screen.getByPlaceholderText("e.g. 123456")).toBeDefined();
-    expect(screen.getByText("Optional password check")).toBeDefined();
+    expect(screen.getByText("Key set. Fill to overwrite, blank to keep")).toBeDefined();
 
     // Modify title and submit
     fireEvent.change(titleInput, { target: { value: "Updated Spring Promo 2026" } });
@@ -588,5 +588,73 @@ describe("LinkEditorForm", () => {
         configurable: true,
       });
     }
+  });
+
+  it("converts UTC ISO and local datetime-local values without timezone drift", () => {
+    const iso = "2026-12-31T23:59:00.000Z";
+    const localStr = toLocalDatetimeInput(iso);
+    const expected = (() => {
+      const d = new Date(iso);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    })();
+    expect(localStr).toBe(expected);
+    expect(localDatetimeInputToISO(localStr)).toBe(iso);
+
+    expect(toLocalDatetimeInput(null)).toBe("");
+    expect(toLocalDatetimeInput("not-a-date")).toBe("");
+    expect(localDatetimeInputToISO("")).toBeNull();
+    expect(localDatetimeInputToISO(null)).toBeNull();
+  });
+
+  it("preserves expiresAt UTC timestamp on edit round-trip and supports clearing", async () => {
+    let putPayloads: any[] = [];
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const method = (init?.method ?? "GET").toUpperCase();
+      const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
+      const urlObj = new URL(rawUrl, "http://localhost");
+      if (method === "GET" && urlObj.pathname === "/api/ai/assist/status") {
+        return jsonResponse({ configured: false, provider: "" });
+      }
+      if (method === "GET" && urlObj.pathname === "/api/links/capabilities") {
+        return jsonResponse({ geoReady: false, mode: "unavailable" });
+      }
+      if (method === "PUT" && urlObj.pathname === "/api/links/101") {
+        const body = JSON.parse(init?.body as string);
+        putPayloads.push(body);
+        return jsonResponse({ ...existingMockLink, ...body });
+      }
+      throw new Error(`Unexpected request: ${method} ${rawUrl}`);
+    });
+
+    const { container } = render(
+      <I18nProvider>
+        <LinkEditorForm
+          link={existingMockLink}
+          hosts={["link.acme.com"]}
+          onCancel={vi.fn()}
+          onSaved={vi.fn()}
+        />
+      </I18nProvider>
+    );
+
+    const dtInput = container.querySelector('input[type="datetime-local"]') as HTMLInputElement;
+    expect(dtInput).not.toBeNull();
+    expect(dtInput.value).toBe(toLocalDatetimeInput(existingMockLink.expiresAt));
+
+    // Save without touching expiresAt -> must preserve exact UTC ISO
+    fireEvent.click(screen.getByRole("button", { name: "Save link" }));
+    await waitFor(() => {
+      expect(putPayloads.length).toBe(1);
+    });
+    expect(putPayloads[0].expiresAt).toBe("2026-12-31T23:59:00.000Z");
+
+    // Clear expiresAt -> must send null
+    fireEvent.change(dtInput, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save link" }));
+    await waitFor(() => {
+      expect(putPayloads.length).toBe(2);
+    });
+    expect(putPayloads[1].expiresAt).toBeNull();
   });
 });

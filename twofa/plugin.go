@@ -36,9 +36,7 @@ func (*Plugin) Describe() plugin.Info {
 }
 
 func (*Plugin) Models() []any {
-	return []any{
-		&TwoFAAuditLog{},
-	}
+	return nil
 }
 
 func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
@@ -78,7 +76,6 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 		mux.Handle("GET "+base+"/accounts/{id}/qr", guard(http.HandlerFunc(p.getQRCode)))
 		mux.Handle("POST "+base+"/import", guard(http.HandlerFunc(p.importAccounts)))
 		mux.Handle("GET "+base+"/export", guard(http.HandlerFunc(p.exportAccounts)))
-		mux.Handle("GET "+base+"/logs", guard(http.HandlerFunc(p.listAuditLogs)))
 	}
 }
 
@@ -122,19 +119,22 @@ func (p *Plugin) Check(ctx context.Context) plugin.HealthResult {
 			Message: "database connection is uninitialized",
 		}
 	}
-	var count int64
-	if err := p.ctx.DB.WithContext(ctx).Model(&TwoFAAuditLog{}).Count(&count).Error; err != nil {
+	sqlDB, err := p.ctx.DB.DB()
+	if err != nil {
 		return plugin.HealthResult{
 			Status:  plugin.HealthError,
-			Message: fmt.Sprintf("failed to query audit logs: %v", err),
+			Message: fmt.Sprintf("database handle error: %v", err),
+		}
+	}
+	if err := sqlDB.PingContext(ctx); err != nil {
+		return plugin.HealthResult{
+			Status:  plugin.HealthError,
+			Message: fmt.Sprintf("database ping failed: %v", err),
 		}
 	}
 	return plugin.HealthResult{
 		Status:  plugin.HealthOK,
 		Message: "2FA vault operational",
-		Metrics: map[string]any{
-			"audit_logs": count,
-		},
 	}
 }
 
@@ -151,16 +151,6 @@ func (p *Plugin) Validate(ctx context.Context, host plugin.Host) error {
 	}
 	if _, err := p.vault(); err != nil {
 		return errors.New("twofa: VaultService unavailable (ServiceVault not provided)")
-	}
-	return nil
-}
-
-func (p *Plugin) tenantDB(ctx context.Context, orgID uint) *plugin.TenantDB {
-	if p.host != nil && orgID > 0 {
-		tdb := p.host.TenantDB(orgID)
-		if tdb != nil {
-			return tdb.WithColumn("org_id").WithContext(ctx)
-		}
 	}
 	return nil
 }

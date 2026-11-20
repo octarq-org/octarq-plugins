@@ -228,7 +228,6 @@ func TestPlugin_PersonalVaultFailsClosedWithoutPersonalOrg(t *testing.T) {
 		{"GET /api/personal/twofa/accounts/{id}", "GET", "/api/personal/twofa/accounts/1", nil},
 		{"POST /api/personal/twofa/import", "POST", "/api/personal/twofa/import", map[string]any{"uris": []string{"otpauth://totp/x?secret=JBSWY3DPEHPK3PXP"}}},
 		{"GET /api/personal/twofa/export", "GET", "/api/personal/twofa/export", nil},
-		{"GET /api/personal/twofa/logs", "GET", "/api/personal/twofa/logs", nil},
 	}
 	for _, tc := range cases {
 		w := serveRequest(mux, tc.pattern, tc.method, tc.target, tc.body, headers, 1)
@@ -311,10 +310,19 @@ func TestPlugin_ScopesDoNotLeak(t *testing.T) {
 	}
 }
 
-func TestPlugin_PersonalAuditStaysInPersonalOrg(t *testing.T) {
-	_, mux, _ := setupTestEnv(t)
+func TestPlugin_PersonalAuditForwardsRequestAndPersonalOrg(t *testing.T) {
+	p, mux, _ := setupTestEnv(t)
 
-	admin := map[string]string{"X-Role": "admin"}
+	type auditEvent struct {
+		req    *http.Request
+		action string
+		meta   map[string]any
+	}
+	var events []auditEvent
+	p.ctx.Audit = func(r *http.Request, action, _ string, _ uint, meta map[string]any) {
+		events = append(events, auditEvent{req: r, action: action, meta: meta})
+	}
+
 	member42 := map[string]string{"X-Role": "member", "X-Test-User": "42"}
 
 	w := createVia(mux, "POST /api/personal/twofa/accounts", "/api/personal/twofa/accounts", member42, "Audited Personal")
@@ -329,32 +337,19 @@ func TestPlugin_PersonalAuditStaysInPersonalOrg(t *testing.T) {
 		t.Fatalf("personal reveal: expected 200, got %d (%s)", w.Code, w.Body.String())
 	}
 
-	w = serveRequest(mux, "GET /api/personal/twofa/logs", "GET", "/api/personal/twofa/logs", nil, member42, 0)
-	if w.Code != http.StatusOK {
-		t.Fatalf("personal logs: expected 200, got %d (%s)", w.Code, w.Body.String())
-	}
-	var personalLogs []TwoFAAuditLog
-	_ = json.Unmarshal(w.Body.Bytes(), &personalLogs)
 	var sawReveal bool
-	for _, entry := range personalLogs {
-		if entry.Action == "view_secret" && entry.AccountName == "Audited Personal" {
+	for _, ev := range events {
+		if ev.action == "twofa.view_secret" && ev.meta["account_name"] == "Audited Personal" {
 			sawReveal = true
-			if entry.OrgID != 100 {
-				t.Fatalf("personal audit row: expected org 100, got %d", entry.OrgID)
+			if ev.req == nil {
+				t.Fatalf("personal audit: expected non-nil *http.Request")
+			}
+			if ev.meta["org_id"] != uint(100) {
+				t.Fatalf("personal audit: expected org_id 100, got %v", ev.meta["org_id"])
 			}
 		}
 	}
 	if !sawReveal {
-		t.Fatalf("personal audit: expected a view_secret row, got %+v", personalLogs)
-	}
-
-	w = serveRequest(mux, "GET /api/twofa/logs", "GET", "/api/twofa/logs", nil, admin, 0)
-	if w.Code != http.StatusOK {
-		t.Fatalf("team logs: expected 200, got %d (%s)", w.Code, w.Body.String())
-	}
-	var teamLogs []TwoFAAuditLog
-	_ = json.Unmarshal(w.Body.Bytes(), &teamLogs)
-	if len(teamLogs) != 0 {
-		t.Fatalf("team audit: expected no personal rows, got %+v", teamLogs)
+		t.Fatalf("personal audit: expected a twofa.view_secret event, got %+v", events)
 	}
 }

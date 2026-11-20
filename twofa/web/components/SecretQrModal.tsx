@@ -109,7 +109,7 @@ export function SecretQrModal({ apiBase, onClose, account, t }: Props) {
                   className={/* ui-color-ok */ "h-48 w-48 rounded-md border border-border bg-white p-2"}
                 />
                 <p className="mt-2 text-xs text-muted-foreground">
-                  {t("twofa.scanHelp", "Scan with Google Authenticator, 1Password, or any authenticator app.")}
+                  {t("twofa.scanHelp", "Scan this QR code with an authenticator app.")}
                 </p>
               </div>
             )}

@@ -102,7 +102,7 @@ func TestGenericInboundOwnership(t *testing.T) {
 	db, p := setupMailboxTestDB(t)
 
 	p.getWorkspaceSetting = func(orgID uint, key string) string {
-		if key == "mail.catch_all" {
+		if key == "catch_all" {
 			return "true"
 		}
 		return ""

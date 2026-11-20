@@ -91,24 +91,7 @@ CREATE INDEX idx_two_fa_accounts_pinned ON two_fa_accounts(pinned);
 CREATE INDEX idx_two_fa_accounts_deleted_at ON two_fa_accounts(deleted_at);
 ```
 
-### 4.2 `two_fa_audit_logs` Table
-
-```sql
-CREATE TABLE two_fa_audit_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    created_at DATETIME,
-    org_id INTEGER NOT NULL,
-    account_id INTEGER,
-    account_name VARCHAR(255),
-    action VARCHAR(64) NOT NULL,
-    actor VARCHAR(255),
-    ip VARCHAR(64)
-);
-
-CREATE INDEX idx_two_fa_audit_logs_org_id ON two_fa_audit_logs(org_id);
-CREATE INDEX idx_two_fa_audit_logs_created_at ON two_fa_audit_logs(created_at);
-CREATE INDEX idx_two_fa_audit_logs_action ON two_fa_audit_logs(action);
-```
+Security-sensitive 2FA actions are emitted directly to the core workspace audit trail via `p.ctx.Audit(r, ...)`.
 
 ---
 
@@ -129,7 +112,6 @@ All endpoints are mounted under `/api/twofa/` and guarded with `ctx.Guard`:
 | `GET` | `/api/twofa/accounts/{id}/qr` | Return QR code (image PNG or JSON Data URL). | `view_qr` |
 | `POST` | `/api/twofa/import` | Batch import array of `otpauth://totp/...` URIs. | `import_accounts` |
 | `GET` | `/api/twofa/export` | Export accounts with URIs for migration/backup. | `export_accounts` |
-| `GET` | `/api/twofa/logs` | Fetch last 50 audit log events for active workspace. | — |
 
 ---
 

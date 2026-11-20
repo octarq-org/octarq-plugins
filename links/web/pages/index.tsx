@@ -28,7 +28,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams, NavLink } from "react-router-dom";
 import { api, linksApi, Link, Domain, effectiveLinkHosts } from "../api";
-import { AlertCircle, Link2, Search, Settings, Plus, Activity, ShieldCheck, AlertTriangle, Blocks } from "lucide-react";
+import { AlertCircle, Download, Link2, Search, Settings, Plus, Activity, ShieldCheck, AlertTriangle, Blocks } from "lucide-react";
 import { parseLinksFilter, buildLinksFilterQuery } from "../filters";
 import { LinkTableRow } from "./LinkTableRow";
 import { LinkModals } from "./LinkModals";
@@ -90,6 +90,7 @@ export default function LinksPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<{ detail?: string } | null>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [exporting, setExporting] = useState(false);
   const { t } = useTranslation();
   const pluginGate = usePluginGate();
 
@@ -184,6 +185,26 @@ export default function LinksPage() {
     }
   };
 
+  const handleExportCsv = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const blob = await linksApi.exportCsv();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "links.csv";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error(t("links.actionFailed"));
+    } finally {
+      setExporting(false);
+    }
+  };
+
   // The empty state below carries the same action. Two primary buttons that do
   // the same thing on one screen split attention, so the header keeps it only
   // when the empty state cannot show it: another tab, a load failure, a search
@@ -238,6 +259,10 @@ export default function LinksPage() {
             </div>
 
             <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={exporting}>
+                <Download className="h-3.5 w-3.5" />
+                {t("links.exportCsv")}
+              </Button>
               <TabBar
                 size="sm"
                 value={archived ? "archived" : "active"}

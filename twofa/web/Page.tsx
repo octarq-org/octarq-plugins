@@ -12,12 +12,11 @@ import {
   req,
   ApiError,
 } from "@octarq/plugin-sdk";
-import { Plus, RefreshCw, ScrollText, ShieldCheck } from "lucide-react";
+import { Plus, RefreshCw, ShieldCheck } from "lucide-react";
 import type { AccountSummary } from "./types";
 import { AccountCard } from "./components/AccountCard";
 import { AddEditModal } from "./components/AddEditModal";
 import { SecretQrModal } from "./components/SecretQrModal";
-import { AuditLogsModal } from "./components/AuditLogsModal";
 import { ImportExportModal } from "./components/ImportExportModal";
 
 export type TwoFAScope = "team" | "personal";
@@ -52,7 +51,6 @@ export default function TwoFAPage({ scope }: { scope: TwoFAScope }) {
   const [editingAccount, setEditingAccount] = useState<AccountSummary | null>(null);
   const [secretQrOpen, setSecretQrOpen] = useState(false);
   const [secretQrAccount, setSecretQrAccount] = useState<AccountSummary | null>(null);
-  const [auditLogsOpen, setAuditLogsOpen] = useState(false);
   const [importExportOpen, setImportExportOpen] = useState(false);
 
   const fetchAccounts = useCallback(async () => {
@@ -191,14 +189,9 @@ export default function TwoFAPage({ scope }: { scope: TwoFAScope }) {
       action={
         <div className="flex items-center gap-2">
           {scope === "team" && (
-            <>
-              <Button variant="ghost" size="sm" onClick={() => setAuditLogsOpen(true)} title={t("twofa.auditLogs", "Audit Logs")}>
-                <ScrollText className="h-3.5 w-3.5" /> {t("twofa.auditLogs", "Audit Logs")}
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => setImportExportOpen(true)} title={t("twofa.importExport", "Import / Export")}>
-                <RefreshCw className="h-3.5 w-3.5" /> {t("twofa.importExport", "Import / Export")}
-              </Button>
-            </>
+            <Button variant="ghost" size="sm" onClick={() => setImportExportOpen(true)} title={t("twofa.importExport", "Import / Export")}>
+              <RefreshCw className="h-3.5 w-3.5" /> {t("twofa.importExport", "Import / Export")}
+            </Button>
           )}
           <Button
             size="sm"
@@ -359,8 +352,6 @@ export default function TwoFAPage({ scope }: { scope: TwoFAScope }) {
           t={t}
         />
       )}
-
-      {auditLogsOpen && <AuditLogsModal apiBase={apiBase} onClose={() => setAuditLogsOpen(false)} t={t} />}
 
       {importExportOpen && (
         <ImportExportModal

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 
@@ -62,7 +63,10 @@ func (p *Plugin) mcpGetCode(ctx context.Context, _ *mcp.CallToolRequest, in getC
 		return nil, nil, err
 	}
 
-	p.logAudit(ctx, orgID, 0, in.AccountName, "mcp_get_code", "mcp_agent", "mcp")
+	if req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, "/mcp", nil); reqErr == nil {
+		req.RemoteAddr = "mcp"
+		p.logAudit(req, orgID, 0, in.AccountName, "mcp_get_code", "mcp_agent", "mcp")
+	}
 
 	res := map[string]any{
 		"account":           in.AccountName,
@@ -156,7 +160,10 @@ func (p *Plugin) mcpVerifyCode(ctx context.Context, _ *mcp.CallToolRequest, in v
 		return nil, nil, err
 	}
 
-	p.logAudit(ctx, orgID, 0, in.AccountName, "mcp_verify_code", "mcp_agent", "mcp")
+	if req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, "/mcp", nil); reqErr == nil {
+		req.RemoteAddr = "mcp"
+		p.logAudit(req, orgID, 0, in.AccountName, "mcp_verify_code", "mcp_agent", "mcp")
+	}
 
 	msg := fmt.Sprintf("Code %s is INVALID for account %q", in.Code, in.AccountName)
 	if valid {

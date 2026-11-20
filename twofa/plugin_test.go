@@ -254,20 +254,7 @@ func TestPlugin_FullLifecycle(t *testing.T) {
 		t.Fatalf("Toggle pin returned %d: %s", w.Code, w.Body.String())
 	}
 
-	// 6. Check Audit Logs
-	req = httptest.NewRequest("GET", "/api/twofa/logs", nil)
-	w = httptest.NewRecorder()
-	mux.Serve("GET /api/twofa/logs", w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("Get logs returned %d: %s", w.Code, w.Body.String())
-	}
-	var logs []TwoFAAuditLog
-	_ = json.Unmarshal(w.Body.Bytes(), &logs)
-	if len(logs) < 2 {
-		t.Fatalf("Expected multiple audit logs, got %d", len(logs))
-	}
-
-	// 7. Provider contract
+	// 6. Provider contract
 	code, rem, err := p.GetCode(context.Background(), 1, "AWS Production")
 	if err != nil || len(code) != 6 || rem <= 0 {
 		t.Fatalf("Provider.GetCode failed: code=%q, rem=%d, err=%v", code, rem, err)
@@ -777,5 +764,204 @@ func TestPlugin_UpdateTOTPParamsSyncsOTPAuthURI(t *testing.T) {
 	}
 	if len(code) != 8 {
 		t.Fatalf("expected 8-digit ComputeTOTP code, got %q", code)
+	}
+}
+
+func TestPlugin_AuditReceivesNonNilRequestHTTPAndMCP(t *testing.T) {
+	p, mux, _ := setupTestEnv(t)
+
+	type auditCall struct {
+		req        *http.Request
+		action     string
+		targetType string
+		targetID   uint
+		meta       map[string]any
+	}
+	var calls []auditCall
+	p.ctx.Audit = func(r *http.Request, action, targetType string, targetID uint, meta map[string]any) {
+		if r == nil {
+			t.Fatalf("p.ctx.Audit called with nil *http.Request for action %q", action)
+		}
+		calls = append(calls, auditCall{
+			req:        r,
+			action:     action,
+			targetType: targetType,
+			targetID:   targetID,
+			meta:       meta,
+		})
+	}
+
+	// Guard: nil request passed directly to logAudit must be a safe no-op.
+	p.logAudit(nil, 1, 0, "ignored", "noop", "actor", "127.0.0.1")
+	if len(calls) != 0 {
+		t.Fatalf("expected nil request logAudit to be a no-op, got %d calls", len(calls))
+	}
+
+	// 1. HTTP create_account
+	createBody, _ := json.Marshal(map[string]any{
+		"name":   "Audit HTTP Test",
+		"secret": "JBSWY3DPEHPK3PXP",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/twofa/accounts", bytes.NewReader(createBody))
+	req.RemoteAddr = "198.51.100.10:1234"
+	w := httptest.NewRecorder()
+	mux.Serve("POST /api/twofa/accounts", w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create failed: %d %s", w.Code, w.Body.String())
+	}
+	var created AccountSummary
+	_ = json.Unmarshal(w.Body.Bytes(), &created)
+
+	// 2. HTTP view_secret (reveal=true)
+	reqReveal := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/twofa/accounts/%d?reveal=true", created.ID), nil)
+	reqReveal.RemoteAddr = "198.51.100.11:5678"
+	reqReveal.SetPathValue("id", fmt.Sprintf("%d", created.ID))
+	w = httptest.NewRecorder()
+	mux.Serve("GET /api/twofa/accounts/{id}", w, reqReveal)
+	if w.Code != http.StatusOK {
+		t.Fatalf("reveal failed: %d %s", w.Code, w.Body.String())
+	}
+
+	// 3. HTTP generate_code
+	reqCode := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/twofa/accounts/%d/code", created.ID), nil)
+	reqCode.RemoteAddr = "198.51.100.12:9999"
+	reqCode.SetPathValue("id", fmt.Sprintf("%d", created.ID))
+	w = httptest.NewRecorder()
+	mux.Serve("POST /api/twofa/accounts/{id}/code", w, reqCode)
+	if w.Code != http.StatusOK {
+		t.Fatalf("code failed: %d %s", w.Code, w.Body.String())
+	}
+
+	// 4. MCP get_2fa_code and verify_2fa_code
+	mcpCtx := plugin.WithOrgID(context.Background(), 1)
+	if _, _, err := p.mcpGetCode(mcpCtx, nil, getCodeInput{AccountName: "Audit HTTP Test"}); err != nil {
+		t.Fatalf("mcpGetCode failed: %v", err)
+	}
+	if _, _, err := p.mcpVerifyCode(mcpCtx, nil, verifyCodeInput{AccountName: "Audit HTTP Test", Code: created.CurrentCode}); err != nil {
+		t.Fatalf("mcpVerifyCode failed: %v", err)
+	}
+
+	if len(calls) != 5 {
+		t.Fatalf("expected 5 audit calls, got %d: %+v", len(calls), calls)
+	}
+	if calls[0].action != "twofa.create_account" || calls[0].req != req {
+		t.Fatalf("expected call 0 to forward original HTTP request, got action=%s req=%p", calls[0].action, calls[0].req)
+	}
+	if calls[1].action != "twofa.view_secret" || calls[1].req != reqReveal {
+		t.Fatalf("expected call 1 to forward reveal HTTP request, got action=%s req=%p", calls[1].action, calls[1].req)
+	}
+	if calls[2].action != "twofa.generate_code" || calls[2].req != reqCode {
+		t.Fatalf("expected call 2 to forward code HTTP request, got action=%s req=%p", calls[2].action, calls[2].req)
+	}
+	for _, idx := range []int{3, 4} {
+		c := calls[idx]
+		if c.req.RemoteAddr != "mcp" {
+			t.Fatalf("MCP audit call %d expected RemoteAddr=\"mcp\", got %q", idx, c.req.RemoteAddr)
+		}
+		if gotOrg := plugin.OrgIDFromContext(c.req.Context()); gotOrg != 1 {
+			t.Fatalf("MCP audit call %d expected orgID=1 in request context, got %d", idx, gotOrg)
+		}
+	}
+	if calls[3].action != "twofa.mcp_get_code" || calls[4].action != "twofa.mcp_verify_code" {
+		t.Fatalf("unexpected MCP audit actions: %q, %q", calls[3].action, calls[4].action)
+	}
+}
+
+func TestPlugin_UpdateAccountClearsOptionalFields(t *testing.T) {
+	p, mux, _ := setupTestEnv(t)
+	vs, err := p.vault()
+	if err != nil {
+		t.Fatalf("vault unavailable: %v", err)
+	}
+
+	createBody, _ := json.Marshal(map[string]any{
+		"name":    "AWS Prod",
+		"issuer":  "Amazon",
+		"account": "root@acme.com",
+		"secret":  "JBSWY3DPEHPK3PXP",
+		"tags":    "Cloud, Prod",
+		"notes":   "Backup key",
+		"pinned":  true,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/twofa/accounts", bytes.NewReader(createBody))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	mux.Serve("POST /api/twofa/accounts", w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create failed: %d %s", w.Code, w.Body.String())
+	}
+	var created AccountSummary
+	_ = json.Unmarshal(w.Body.Bytes(), &created)
+
+	// 1. Partial PUT omitting issuer/account/notes/name/algorithm preserves them.
+	partialBody, _ := json.Marshal(map[string]any{
+		"tags": "Cloud",
+	})
+	req = httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/twofa/accounts/%d", created.ID), bytes.NewReader(partialBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", fmt.Sprintf("%d", created.ID))
+	w = httptest.NewRecorder()
+	mux.Serve("PUT /api/twofa/accounts/{id}", w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("partial update failed: %d %s", w.Code, w.Body.String())
+	}
+	var partial AccountSummary
+	_ = json.Unmarshal(w.Body.Bytes(), &partial)
+	if partial.Name != "AWS Prod" || partial.Issuer != "Amazon" || partial.Account != "root@acme.com" ||
+		partial.Notes != "Backup key" || partial.Algorithm != "SHA1" || !partial.Pinned || partial.Tags != "Cloud" {
+		t.Fatalf("partial update did not preserve omitted fields: %+v", partial)
+	}
+
+	// 2. Explicit empty strings clear Issuer, Account, Tags, and Notes (and do not resurrect Tags from item.Tags).
+	clearBody, _ := json.Marshal(map[string]any{
+		"issuer":    "",
+		"account":   "",
+		"tags":      "",
+		"notes":     "",
+		"name":      "",
+		"algorithm": "",
+	})
+	req = httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/twofa/accounts/%d", created.ID), bytes.NewReader(clearBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.SetPathValue("id", fmt.Sprintf("%d", created.ID))
+	w = httptest.NewRecorder()
+	mux.Serve("PUT /api/twofa/accounts/{id}", w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("clear update failed: %d %s", w.Code, w.Body.String())
+	}
+	var cleared AccountSummary
+	_ = json.Unmarshal(w.Body.Bytes(), &cleared)
+	if cleared.Name != "AWS Prod" || cleared.Algorithm != "SHA1" {
+		t.Fatalf("empty name/algorithm should preserve existing required values, got %+v", cleared)
+	}
+	if cleared.Issuer != "" || cleared.Account != "" || cleared.Tags != "" || cleared.Notes != "" {
+		t.Fatalf("expected issuer, account, tags, notes to be cleared, got %+v", cleared)
+	}
+
+	// 3. Subsequent GET list must still return empty cleared fields.
+	req = httptest.NewRequest(http.MethodGet, "/api/twofa/accounts", nil)
+	w = httptest.NewRecorder()
+	mux.Serve("GET /api/twofa/accounts", w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("list failed: %d %s", w.Code, w.Body.String())
+	}
+	var list []AccountSummary
+	_ = json.Unmarshal(w.Body.Bytes(), &list)
+	if len(list) != 1 || list[0].Issuer != "" || list[0].Account != "" || list[0].Tags != "" || list[0].Notes != "" {
+		t.Fatalf("expected cleared fields to stay empty on GET list, got %+v", list)
+	}
+
+	// 4. Vault otpauthUri must reflect cleared issuer and account.
+	sec, err := vs.GetSecret(context.Background(), 1, created.ID)
+	if err != nil {
+		t.Fatalf("GetSecret failed: %v", err)
+	}
+	uri, _ := sec.Payload["otpauthUri"].(string)
+	parsedAcc, _, err := ParseOTPAuthURI(uri)
+	if err != nil {
+		t.Fatalf("ParseOTPAuthURI(%q) failed: %v", uri, err)
+	}
+	if parsedAcc.Issuer != "" || parsedAcc.Account != "AWS Prod" {
+		t.Fatalf("expected otpauthUri to drop cleared issuer/account and use account name label, got %+v (uri=%q)", parsedAcc, uri)
 	}
 }

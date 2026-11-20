@@ -16,7 +16,7 @@ var (
 	ErrMissingSecret = errors.New("invalid otpauth uri: secret query parameter is required")
 )
 
-// ParseOTPAuthURI parses a standard Google Authenticator / Key URI string into
+// ParseOTPAuthURI parses a standard otpauth:// Key URI string into
 // a TwoFAAccount model and the raw plaintext secret.
 func ParseOTPAuthURI(uriStr string) (*TwoFAAccount, string, error) {
 	uriStr = strings.TrimSpace(uriStr)
