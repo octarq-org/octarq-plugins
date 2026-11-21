@@ -65,12 +65,14 @@ export function DomainListHub({
                 {t("domains.connectProvider")}
               </Button>
             )}
-            <button
-              onClick={onAddNewDomain}
-              className="inline-flex min-h-8 cursor-pointer items-center text-xs text-muted-foreground underline underline-offset-2 transition-colors hover:text-foreground"
-            >
-              {t("domains.orAddManually")}
-            </button>
+            {accounts.length > 0 && (
+              <button
+                onClick={onAddNewDomain}
+                className="inline-flex min-h-8 cursor-pointer items-center text-xs text-muted-foreground underline underline-offset-2 transition-colors hover:text-foreground"
+              >
+                {t("domains.orAddManually")}
+              </button>
+            )}
           </div>
         }
       >
