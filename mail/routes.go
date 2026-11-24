@@ -50,6 +50,9 @@ func registerAPIRoutes(p *Plugin, api huma.API, ctx *plugin.Context) {
 	huma.Register(api, huma.Operation{Method: "POST", Path: "/api/mail/suppressions", Summary: "Create Mail Suppression", Tags: []string{"Emails"}, DefaultStatus: 201}, p.createSuppression)
 	huma.Register(api, huma.Operation{Method: "DELETE", Path: "/api/mail/suppressions/{id}", Summary: "Delete Mail Suppression", Tags: []string{"Emails"}}, p.deleteSuppression)
 
+	huma.Register(api, huma.Operation{Method: "GET", Path: "/api/mail/ai/status", Summary: "Mail AI Status", Tags: []string{"AI"}}, p.aiStatus)
+	huma.Register(api, huma.Operation{Method: "POST", Path: "/api/mail/assist/summarize-email/{id}", Summary: "Summarize Email", Tags: []string{"AI"}}, p.aiSummarizeEmail)
+
 	huma.Register(api, huma.Operation{
 		Method: "POST", Path: "/api/webhook/{orgSlug}/email/inbound/{token}",
 		Summary: "Inbound Email Webhook", Tags: []string{"Mailboxes"},
