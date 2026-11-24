@@ -13,7 +13,7 @@ It manages domain zones, connects DNS providers (Cloudflare, DNSPod), provides d
 - **🔄 Dynamic DNS (DDNS)**: Secure per-token DDNS endpoints for dynamic IP updates from edge routers and servers.
 - **📧 Email Blueprints**: Automatically generate and verify MX, SPF, DKIM, and DMARC records.
 - **🤖 Agent-Native MCP Tools**: Expose domain and record operations (`list_domains`, `get_domain`, `sync_provider`) to AI agents.
-- **🧩 Cross-Plugin SPI**: Exposes `plugin.DNSManager` service contract.
+- **🧩 Cross-Plugin SPI**: Exposes the `contract.Manager` service (`dns.manager`).
 
 ---
 
