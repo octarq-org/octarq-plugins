@@ -115,3 +115,17 @@ func TestMailLink_MountWithoutHTTPSurface(t *testing.T) {
 	p := &Plugin{}
 	p.Mount(nil, &plugin.Context{})
 }
+
+func TestOnEventConsumesMailInboundContract(t *testing.T) {
+	const payload = `{"id":7,"mailboxId":8,"orgId":3,"from":"sender@example.com","to":"user@example.net","subject":"Hello","text":"plain body","html":"<p>plain body</p>","receivedAt":"2026-01-02T03:04:05Z"}`
+	var e inboundEmail
+	if err := json.Unmarshal([]byte(payload), &e); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if e.OrgID != 3 {
+		t.Errorf("OrgID = %d, want 3", e.OrgID)
+	}
+	if e.From != "sender@example.com" {
+		t.Errorf("From = %q, want %q", e.From, "sender@example.com")
+	}
+}

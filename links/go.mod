@@ -6,7 +6,7 @@ require (
 	github.com/danielgtaylor/huma/v2 v2.38.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
-	github.com/octarq-org/octarq/server v0.8.1-0.20261124171901-088bd50dd05f
+	github.com/octarq-org/octarq/server v0.8.1-0.20261124180843-64f0d850e1ed
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	golang.org/x/net v0.60.0
 	gorm.io/gorm v1.31.2
