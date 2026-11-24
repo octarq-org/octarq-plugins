@@ -68,7 +68,7 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 		ctx.Provide("links.create", plugin.LinkCreator(p))
 		ctx.Provide(plugin.CleanupServiceName("links"), plugin.CleanupFunc(p.cleanupEvents))
 		ctx.Provide(plugin.MCPExportServiceName("links"), plugin.MCPExporter(p.mcpExportLinks))
-		ctx.Provide("links.trust_proxy", SetTrustProxy)
+		ctx.Provide(plugin.ServiceTrustProxy, plugin.TrustProxyProvider(SetTrustProxy))
 	}
 	if ctx.RegisterTask != nil {
 		ctx.RegisterTask("link.crawl", p.handleLinkCrawl)
@@ -162,15 +162,12 @@ type topLink struct {
 	Clicks int64  `json:"clicks"`
 }
 
-func (p *Plugin) overview(orgID uint, includeBot bool) map[string]any {
+func (p *Plugin) overview(orgID uint) map[string]any {
 	tdb := p.tenantDB(orgID)
 	if tdb == nil {
 		return map[string]any{}
 	}
 	botFilter := func(q *gorm.DB) *gorm.DB {
-		if includeBot {
-			return q
-		}
 		return q.Where("is_bot = ?", false)
 	}
 	count := func(model any, conds ...any) int64 {

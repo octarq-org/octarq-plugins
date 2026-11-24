@@ -54,7 +54,6 @@ var (
 	_ plugin.ExportFunc       = (*Plugin)(nil).exportData
 	_ plugin.PurgeFunc        = (*Plugin)(nil).purge
 	_ plugin.OverviewFunc     = (*Plugin)(nil).overview
-	_ plugin.EmailGetter      = (*Plugin)(nil).getEmailForSummarize
 	_ plugin.MCPExporter      = (*Plugin)(nil).mcpExportEmails
 	_ plugin.MCPExporter      = (*Plugin)(nil).mcpExportMailboxes
 )
@@ -172,7 +171,6 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 		ctx.Provide(plugin.ServiceMailSend, plugin.MailSender(p.sendMail))
 		ctx.Provide(plugin.ServiceMailReady, plugin.MailReady(p.mailReady))
 		ctx.Provide(plugin.ServiceMailSendSystem, plugin.SystemMailSender(p.sendSystemMail))
-		ctx.Provide(plugin.ServiceMailEmailGet, plugin.EmailGetter(p.getEmailForSummarize))
 		ctx.Provide(plugin.MCPExportServiceName("mailboxes"), plugin.MCPExporter(p.mcpExportMailboxes))
 		ctx.Provide(plugin.MCPExportServiceName("emails"), plugin.MCPExporter(p.mcpExportEmails))
 	}

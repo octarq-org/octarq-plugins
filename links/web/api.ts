@@ -34,7 +34,6 @@ export function effectiveLinkHosts(d: Domain | { hosts?: string[]; linkHosts?: H
 
 export interface Overview extends Record<string, unknown> {
   tokens?: number;
-  includeBot?: boolean;
   links?: number;
   activeLinks?: number;
   domains?: number;
@@ -161,7 +160,7 @@ export const linksApi = {
     const qs = sp.toString();
     return req<Domain[]>("GET", `/api/domains${qs ? `?${qs}` : ""}`);
   },
-  overview: (includeBot = false) => req<Overview>("GET", `/api/overview?include_bot=${includeBot}`),
+  overview: () => req<Overview>("GET", "/api/overview"),
   linksAiStatus,
   suggestLinkSlug,
   abuseReports: (status?: string) => {

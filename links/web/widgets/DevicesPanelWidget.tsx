@@ -1,9 +1,7 @@
 import { Panel, BarList, useTranslation, useOverviewData, type StatKV } from "@octarq/plugin-sdk";
-import { useIncludeBot } from "../store";
 
 export default function DevicesPanelWidget() {
-  const [includeBot] = useIncludeBot();
-  const o = useOverviewData(includeBot);
+  const o = useOverviewData();
   const { t } = useTranslation();
 
   if (!o || o.devices === undefined) return null;
@@ -11,7 +9,7 @@ export default function DevicesPanelWidget() {
   const devices = (o.devices as StatKV[]) ?? [];
 
   return (
-    <Panel title={`${t("links.devices")}${includeBot ? " " + t("links.inclBots") : ""}`}>
+    <Panel title={`${t("links.devices")}`}>
       <BarList rows={devices} />
     </Panel>
   );

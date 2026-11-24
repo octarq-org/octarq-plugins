@@ -115,26 +115,7 @@ func (p *Plugin) exportData(orgID uint) map[string]any {
 
 var htmlTagRe = regexp.MustCompile(`(?s)<style.*?</style>|<script.*?</script>|<[^>]*>`)
 
-func (p *Plugin) getEmailForSummarize(orgID uint, id uint) (from, subject, body string, ok bool) {
-	var count int64
-	p.db.Model(&Email{}).
-		Joins("JOIN mailboxes ON mailboxes.id = emails.mailbox_id AND mailboxes.owner_id = ?", orgID).
-		Where("emails.id = ?", id).Count(&count)
-	if count == 0 {
-		return "", "", "", false
-	}
-	var e Email
-	if p.db.First(&e, id).Error != nil {
-		return "", "", "", false
-	}
-	b := e.Text
-	if strings.TrimSpace(b) == "" {
-		b = htmlTagRe.ReplaceAllString(e.HTML, " ")
-	}
-	return e.FromAddr, e.Subject, b, true
-}
-
-func (p *Plugin) overview(orgID uint, includeBot bool) map[string]any {
+func (p *Plugin) overview(orgID uint) map[string]any {
 	tdb := p.tenantDB(orgID)
 	if tdb == nil {
 		return map[string]any{}

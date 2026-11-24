@@ -165,7 +165,7 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 	ctx.Provide(plugin.PurgeServiceName("dns"), plugin.PurgeFunc(p.purge))
 	ctx.Provide(plugin.ExportServiceName("dns"), plugin.ExportFunc(p.exportData))
 	ctx.Provide(plugin.MCPExportServiceName("domains"), plugin.MCPExporter(p.mcpExportDomains))
-	ctx.Provide("dns.trust_proxy", SetTrustProxy)
+	ctx.Provide(plugin.ServiceTrustProxy, plugin.TrustProxyProvider(SetTrustProxy))
 }
 
 func (p *Plugin) purge(orgID uint) error {
@@ -204,7 +204,7 @@ func (p *Plugin) exportData(orgID uint) map[string]any {
 	}
 }
 
-func (p *Plugin) overview(orgID uint, includeBot bool) map[string]any {
+func (p *Plugin) overview(orgID uint) map[string]any {
 	count := func(model any, conds ...any) int64 {
 		var n int64
 		q := p.db.Model(model).Where("owner_id = ?", orgID)

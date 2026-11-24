@@ -3,7 +3,6 @@ package mail
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -11,39 +10,6 @@ import (
 
 	"github.com/octarq-org/octarq/server/plugin"
 )
-
-func TestGetEmailForSummarize(t *testing.T) {
-	p, _ := newBouncePlugin(t)
-	db := p.db
-
-	mb := Mailbox{OrgID: 1, Address: "sum@example.com", Enabled: true}
-	db.Create(&mb)
-
-	textEmail := Email{MailboxID: mb.ID, FromAddr: "a@x.com", Subject: "s1", Text: "plain body", HTML: "<p>ht</p>", ReceivedAt: time.Now()}
-	db.Create(&textEmail)
-	from, subject, body, ok := p.getEmailForSummarize(1, textEmail.ID)
-	if !ok || from != "a@x.com" || subject != "s1" || body != "plain body" {
-		t.Errorf("text email: ok=%v from=%q subject=%q body=%q", ok, from, subject, body)
-	}
-
-	htmlEmail := Email{MailboxID: mb.ID, FromAddr: "b@x.com", Subject: "s2", Text: "", HTML: "<p>Hello <b>World</b></p>", ReceivedAt: time.Now()}
-	db.Create(&htmlEmail)
-	_, _, body2, ok2 := p.getEmailForSummarize(1, htmlEmail.ID)
-	if !ok2 || !strings.Contains(body2, "Hello") || strings.Contains(body2, "<p>") {
-		t.Errorf("html email: ok=%v body=%q", ok2, body2)
-	}
-
-	if _, _, _, ok := p.getEmailForSummarize(1, 999); ok {
-		t.Error("missing email must not resolve")
-	}
-	mb2 := Mailbox{OrgID: 2, Address: "other@example.com", Enabled: true}
-	db.Create(&mb2)
-	otherEmail := Email{MailboxID: mb2.ID, FromAddr: "c@x.com", Subject: "s3", Text: "x", ReceivedAt: time.Now()}
-	db.Create(&otherEmail)
-	if _, _, _, ok := p.getEmailForSummarize(1, otherEmail.ID); ok {
-		t.Error("cross-org email must not resolve")
-	}
-}
 
 func TestSplitListAndIsReservedSlugMail(t *testing.T) {
 	if got := splitList(""); got != nil {

@@ -1,10 +1,7 @@
 import { Panel, AreaChart, useTranslation, useOverviewData, type StatKV } from "@octarq/plugin-sdk";
-import { useIncludeBot } from "../store";
-import { BotToggle } from "../components/BotToggle";
 
 export default function ClicksChartWidget() {
-  const [includeBot, setIncludeBot] = useIncludeBot();
-  const o = useOverviewData(includeBot);
+  const o = useOverviewData();
   const { t } = useTranslation();
 
   if (!o || o.series === undefined) return null;
@@ -13,9 +10,7 @@ export default function ClicksChartWidget() {
   const clicks30d = (o.clicks30d as number) ?? 0;
   const botClicks30d = (o.botClicks30d as number) ?? 0;
 
-  const botLabel = includeBot
-    ? t("links.botInclLabel", { count: botClicks30d })
-    : t("links.botHiddenLabel", { count: botClicks30d });
+  const botLabel = t("links.botHiddenLabel", { count: botClicks30d });
 
   return (
     <Panel
@@ -26,7 +21,6 @@ export default function ClicksChartWidget() {
           <span className="text-sm text-muted-foreground">
             {t("links.clicksTotal", { count: clicks30d })} · {botLabel}
           </span>
-          <BotToggle value={includeBot} onChange={setIncludeBot} />
         </div>
       }
     >
