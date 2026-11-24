@@ -11,7 +11,7 @@ import (
 
 func forgetOrigin(names ...string) {
 	for _, n := range names {
-		origin.ClearDomainCache(n)
+		origin.ClearHostCache(n)
 	}
 }
 

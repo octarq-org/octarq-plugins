@@ -1,6 +1,7 @@
 package links
 
 import (
+	"context"
 	"testing"
 
 	"github.com/octarq-org/octarq/server/pkg/hostlist"
@@ -19,6 +20,10 @@ func TestResolveServiceSignatureMatchesConsumer(t *testing.T) {
 func TestResolveSlugAttributesByHost(t *testing.T) {
 	db, p, engine := setupOwnershipTestDB(t)
 	p.engine = engine
+	hosts := newFakeHostRegistry()
+	_ = hosts.ReplaceOwned(context.Background(), 1, "s1", []string{"victim.test"}, true)
+	_ = hosts.ReplaceOwned(context.Background(), 2, "s2", []string{"other.test"}, true)
+	engine.SetHosts(hosts)
 
 	db.Create(&testDomain{OrgID: 1, Name: "victim.test", ForLink: true})
 	db.Create(&testDomain{OrgID: 2, Name: "other.test", ForLink: true})
@@ -39,6 +44,9 @@ func TestResolveSlugAttributesByHost(t *testing.T) {
 func TestResolveSlugRefusesContestedHost(t *testing.T) {
 	db, p, engine := setupOwnershipTestDB(t)
 	p.engine = engine
+	hosts := newFakeHostRegistry()
+	hosts.setAmbiguous("victim.test", true)
+	engine.SetHosts(hosts)
 
 	db.Create(&testDomain{
 		OrgID: 2, Name: "attacker.test", ForLink: true,

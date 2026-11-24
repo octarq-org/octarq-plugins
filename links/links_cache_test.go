@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/glebarez/sqlite"
-	"github.com/octarq-org/octarq/server/origin"
 	"github.com/octarq-org/octarq/server/plugin"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -30,8 +29,6 @@ func TestEngine_LookupCaching(t *testing.T) {
 		DeleteCache: cacheBackend.Delete,
 	}
 
-	resolver := origin.NewResolver(db)
-	_ = resolver
 	engine := NewEngine(db, pctx)
 	defer engine.Close()
 

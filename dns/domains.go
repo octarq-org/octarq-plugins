@@ -150,6 +150,13 @@ func (p *Plugin) createDomain(ctx context.Context, input *CreateDomainInput) (*C
 	if err := p.db.Create(&dom).Error; err != nil {
 		return nil, huma.NewError(http.StatusConflict, "Domain already exists in this workspace")
 	}
+	if err := p.syncDomainHosts(r.Context(), &dom); err != nil {
+		p.db.Delete(&dom)
+		if errors.Is(err, plugin.ErrHostTaken) {
+			return nil, huma.NewError(http.StatusConflict, err.Error())
+		}
+		return nil, huma.Error400BadRequest(err.Error())
+	}
 	forgetOrigin(dom.Name)
 	p.audit(r, "domain.create", "domain", dom.ID, map[string]any{"name": dom.Name})
 	if p.publishEvent != nil {
@@ -222,6 +229,12 @@ func (p *Plugin) updateDomain(ctx context.Context, input *UpdateDomainInput) (*U
 		}
 		dom.ProviderAccountID = input.Body.ProviderAccountID
 	}
+	if err := p.syncDomainHosts(r.Context(), &dom); err != nil {
+		if errors.Is(err, plugin.ErrHostTaken) {
+			return nil, huma.NewError(http.StatusConflict, err.Error())
+		}
+		return nil, huma.Error400BadRequest(err.Error())
+	}
 	p.db.Save(&dom)
 	forgetOrigin(dom.Name)
 	p.audit(r, "domain.update", "domain", dom.ID, map[string]any{"name": dom.Name})
@@ -261,6 +274,7 @@ func (p *Plugin) deleteDomain(ctx context.Context, input *DeleteDomainInput) (*D
 	if res := p.db.Where("id = ? AND owner_id = ?", input.ID, p.orgID(r)).Delete(&Domain{}); res.RowsAffected == 0 {
 		return nil, huma.Error404NotFound("Domain not found")
 	}
+	_ = p.removeDomainHosts(r.Context(), dom.OrgID, dom.ID)
 	forgetOrigin(dom.Name)
 	p.audit(r, "domain.delete", "domain", input.ID, nil)
 	return &DeleteDomainOutput{Body: map[string]bool{"ok": true}}, nil

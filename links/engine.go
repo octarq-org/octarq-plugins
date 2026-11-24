@@ -9,50 +9,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/octarq-org/octarq/server/origin"
 	"github.com/octarq-org/octarq/server/pkg/safego"
 	"github.com/octarq-org/octarq/server/plugin"
 	"gorm.io/gorm"
 )
-
-type ipRateLimiter struct {
-	mu     sync.Mutex
-	counts map[string]int
-	resets map[string]time.Time
-	limit  int
-	window time.Duration
-}
-
-func newIPRateLimiter(limit int, window time.Duration) *ipRateLimiter {
-	return &ipRateLimiter{
-		counts: make(map[string]int),
-		resets: make(map[string]time.Time),
-		limit:  limit,
-		window: window,
-	}
-}
-
-func (l *ipRateLimiter) Allow(ip string) bool {
-	if l == nil || l.limit <= 0 {
-		return true
-	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	now := time.Now()
-	reset, ok := l.resets[ip]
-	if !ok || now.After(reset) {
-		l.counts[ip] = 1
-		l.resets[ip] = now.Add(l.window)
-		return true
-	}
-
-	if l.counts[ip] >= l.limit {
-		return false
-	}
-	l.counts[ip]++
-	return true
-}
 
 type clickItem struct {
 	orgID       uint
@@ -76,9 +36,14 @@ type clickItem struct {
 	createdAt   time.Time
 }
 
+type HostResolver interface {
+	OwnerOf(host string) (uint, bool)
+	ServesTraffic(host string) bool
+}
+
 type Engine struct {
 	db          *gorm.DB
-	resolver    *origin.Resolver
+	hosts       HostResolver
 	ctx         *plugin.Context
 	host        plugin.Host
 	queue       chan clickItem
@@ -90,13 +55,22 @@ type Engine struct {
 }
 
 func NewEngine(db *gorm.DB, ctx *plugin.Context) *Engine {
+	h := plugin.EnsureHost(ctx)
+	var resolver HostResolver
+	if h != nil && h.Hosts() != nil {
+		resolver = h.Hosts()
+	}
 	e := &Engine{
-		db: db, resolver: origin.NewResolver(db), ctx: ctx, host: plugin.EnsureHost(ctx),
+		db: db, hosts: resolver, ctx: ctx, host: h,
 		queue: make(chan clickItem, 5000), rateLimiter: newIPRateLimiter(300, time.Minute),
 	}
 	e.wg.Add(1)
 	go e.worker()
 	return e
+}
+
+func (e *Engine) SetHosts(resolver HostResolver) {
+	e.hosts = resolver
 }
 
 func (e *Engine) SetRateLimit(limit int, window time.Duration) {

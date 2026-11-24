@@ -169,6 +169,12 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 }
 
 func (p *Plugin) purge(orgID uint) error {
+	var domains []Domain
+	p.db.Where("owner_id = ?", orgID).Find(&domains)
+	for _, dom := range domains {
+		_ = p.removeDomainHosts(context.Background(), orgID, dom.ID)
+	}
+
 	var names []string
 	p.db.Model(&Domain{}).Where("owner_id = ?", orgID).Pluck("name", &names)
 	p.db.Where("owner_id = ?", orgID).Delete(&Domain{})

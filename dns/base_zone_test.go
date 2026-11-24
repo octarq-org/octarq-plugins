@@ -9,6 +9,7 @@ import (
 
 	"github.com/octarq-org/octarq/server/origin"
 	"github.com/octarq-org/octarq/server/pkg/hostlist"
+	"github.com/octarq-org/octarq/server/plugin"
 )
 
 func seedBase(t *testing.T, p *Plugin, base string) {
@@ -188,14 +189,18 @@ func TestUpdateDomainRejectsReservedHostLists(t *testing.T) {
 
 func TestPurgeRemovesProvisionedSubdomain(t *testing.T) {
 	p, _ := setupFullDNSTestDB(t)
+	rv := newFakeHostRegistry()
+	p.SetHost(&plugin.TestHost{HostsMock: rv})
 	seedBase(t, p, "app.example.com")
 	dom1 := Domain{OrgID: 42, Name: "doomed.app.example.com", ForLink: true, LinkHosts: hostlist.HostList{{Host: "doomed.app.example.com", Enabled: true}}}
 	dom2 := Domain{OrgID: 43, Name: "bystander.app.example.com", ForLink: true, LinkHosts: hostlist.HostList{{Host: "bystander.app.example.com", Enabled: true}}}
 	p.db.Create(&dom1)
 	p.db.Create(&dom2)
-	origin.ClearDomainCache(dom1.Name)
-	origin.ClearDomainCache(dom2.Name)
-	if owner, ok := origin.OwnerOf(p.db, "doomed.app.example.com"); !ok || owner != 42 {
+	_ = p.syncDomainHosts(context.Background(), &dom1)
+	_ = p.syncDomainHosts(context.Background(), &dom2)
+	origin.ClearHostCache(dom1.Name)
+	origin.ClearHostCache(dom2.Name)
+	if owner, ok := rv.OwnerOf("doomed.app.example.com"); !ok || owner != 42 {
 		t.Fatalf("OwnerOf before purge = (%d, %v), want (42, true)", owner, ok)
 	}
 
@@ -208,10 +213,10 @@ func TestPurgeRemovesProvisionedSubdomain(t *testing.T) {
 	if n != 0 {
 		t.Errorf("purged workspace's subdomain row still present")
 	}
-	if owner, ok := origin.OwnerOf(p.db, "doomed.app.example.com"); ok || owner != 0 {
+	if owner, ok := rv.OwnerOf("doomed.app.example.com"); ok || owner != 0 {
 		t.Errorf("OwnerOf after purge = (%d, %v), want (0, false)", owner, ok)
 	}
-	if owner, ok := origin.OwnerOf(p.db, "bystander.app.example.com"); !ok || owner != 43 {
+	if owner, ok := rv.OwnerOf("bystander.app.example.com"); !ok || owner != 43 {
 		t.Errorf("bystander subdomain after purge = (%d, %v), want (43, true)", owner, ok)
 	}
 }

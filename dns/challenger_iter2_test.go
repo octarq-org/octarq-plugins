@@ -11,7 +11,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	humago "github.com/danielgtaylor/huma/v2/adapters/humago"
 	"github.com/octarq-org/octarq-plugins/dns/provider"
-	"github.com/octarq-org/octarq/server/origin"
+	"github.com/octarq-org/octarq/server/plugin"
 )
 
 func (p *Plugin) patchedSyncDomains(ctx context.Context, input *SyncDomainsInput, evictedNames *[]string) (*SyncDomainsOutput, error) {
@@ -71,16 +71,19 @@ func (p *Plugin) patchedSyncDomains(ctx context.Context, input *SyncDomainsInput
 			p.db.Save(&dom)
 			updated++
 			forgetOrigin(name)
+			_ = p.syncDomainHosts(ctx, &dom)
 			if evictedNames != nil {
 				*evictedNames = append(*evictedNames, "updated:"+name)
 			}
 		} else {
-			if err := p.db.Create(&Domain{
+			newDom := Domain{
 				OrgID: p.orgID(r),
-				Name:  name, ProviderAccountID: acc.ID, ZoneID: z.ID,
-			}).Error; err == nil {
+				Name:  name, ProviderAccountID: acc.ID, ZoneID: z.ID, ForLink: true,
+			}
+			if err := p.db.Create(&newDom).Error; err == nil {
 				created++
 				forgetOrigin(name)
+				_ = p.syncDomainHosts(ctx, &newDom)
 				if evictedNames != nil {
 					*evictedNames = append(*evictedNames, "created:"+name)
 				}
@@ -97,27 +100,32 @@ func (p *Plugin) patchedSyncDomains(ctx context.Context, input *SyncDomainsInput
 func TestVerification_RES02_Remediation(t *testing.T) {
 	t.Parallel()
 	p, mkCtx := setupFreshTestDB(t)
-	rv := origin.NewResolver(p.db)
+	rv := newFakeHostRegistry()
+	p.SetHost(&plugin.TestHost{HostsMock: rv})
 
 	domOrg1 := Domain{
 		OrgID:             1,
 		Name:              "existing-org1.com",
 		ProviderAccountID: 10,
 		ZoneID:            "old-zone-id",
+		ForLink:           true,
 	}
 	if err := p.db.Create(&domOrg1).Error; err != nil {
 		t.Fatalf("setup Org 1 existing domain: %v", err)
 	}
+	_ = p.syncDomainHosts(context.Background(), &domOrg1)
 
 	domOrg2 := Domain{
 		OrgID:             2,
 		Name:              "contested-org2.com",
 		ProviderAccountID: 20,
 		ZoneID:            "org2-zone-id",
+		ForLink:           true,
 	}
 	if err := p.db.Create(&domOrg2).Error; err != nil {
 		t.Fatalf("setup Org 2 domain: %v", err)
 	}
+	_ = p.syncDomainHosts(context.Background(), &domOrg2)
 
 	fake := &fakeDNSProvider{
 		zones: []provider.Zone{

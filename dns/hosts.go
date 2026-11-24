@@ -155,3 +155,76 @@ type DNSProvidersOutput struct {
 func (p *Plugin) dnsProviders(ctx context.Context, input *DNSProvidersInput) (*DNSProvidersOutput, error) {
 	return &DNSProvidersOutput{Body: provider.Names()}, nil
 }
+
+func domainHosts(dom *Domain) []string {
+	if !dom.ForLink && !dom.ForMail {
+		return []string{}
+	}
+	seen := make(map[string]bool)
+	var hosts []string
+	addHost := func(raw string) {
+		h := normalizeHost(raw)
+		if h == "" || seen[h] {
+			return
+		}
+		seen[h] = true
+		hosts = append(hosts, h)
+	}
+	if dom.ForLink {
+		var enabledLink []string
+		for _, h := range dom.LinkHosts {
+			if h.Enabled {
+				enabledLink = append(enabledLink, h.Host)
+			}
+		}
+		if len(dom.LinkHosts) == 0 {
+			addHost(dom.Name)
+		} else {
+			for _, h := range enabledLink {
+				addHost(h)
+			}
+		}
+	}
+	if dom.ForMail {
+		var enabledMail []string
+		for _, h := range dom.MailHosts {
+			if h.Enabled {
+				enabledMail = append(enabledMail, h.Host)
+			}
+		}
+		if len(dom.MailHosts) == 0 {
+			addHost(dom.Name)
+		} else {
+			for _, h := range enabledMail {
+				addHost(h)
+			}
+		}
+	}
+	return hosts
+}
+
+func (p *Plugin) syncDomainHosts(ctx context.Context, dom *Domain) error {
+	if p.host == nil || p.host.Hosts() == nil {
+		return nil
+	}
+	source := fmt.Sprintf("dns.domain.%d", dom.ID)
+	hosts := domainHosts(dom)
+	traffic := dom.ForLink
+	err := p.host.Hosts().ReplaceOwned(ctx, dom.OrgID, source, hosts, traffic)
+	if err != nil && !errors.Is(err, plugin.ErrHostsUnavailable) {
+		return err
+	}
+	return nil
+}
+
+func (p *Plugin) removeDomainHosts(ctx context.Context, orgID, domainID uint) error {
+	if p.host == nil || p.host.Hosts() == nil {
+		return nil
+	}
+	source := fmt.Sprintf("dns.domain.%d", domainID)
+	err := p.host.Hosts().ReplaceOwned(ctx, orgID, source, []string{}, false)
+	if err != nil && !errors.Is(err, plugin.ErrHostsUnavailable) {
+		return err
+	}
+	return nil
+}
