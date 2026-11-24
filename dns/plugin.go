@@ -104,6 +104,7 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 	}
 	p.host = plugin.EnsureHost(ctx)
 	if p.host != nil {
+		SetTrustProxy(p.host.TrustProxy())
 		if p.host.Session() != nil {
 			p.orgID = p.host.Session().OrgID
 			p.requireRole = p.host.Session().RequireRole
@@ -165,7 +166,6 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 	ctx.Provide(plugin.PurgeServiceName("dns"), plugin.PurgeFunc(p.purge))
 	ctx.Provide(plugin.ExportServiceName("dns"), plugin.ExportFunc(p.exportData))
 	ctx.Provide(plugin.MCPExportServiceName("domains"), plugin.MCPExporter(p.mcpExportDomains))
-	ctx.Provide(plugin.ServiceTrustProxy, plugin.TrustProxyProvider(SetTrustProxy))
 }
 
 func (p *Plugin) purge(orgID uint) error {

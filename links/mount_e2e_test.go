@@ -65,7 +65,7 @@ func TestMountWiresEverythingAndServesRoot(t *testing.T) {
 	if len(tasks) != 1 || tasks[0] != "link.crawl" {
 		t.Errorf("tasks = %v, want [link.crawl]", tasks)
 	}
-	for _, want := range []string{"links.overview", "links.purge", "links.export", "links.create", "links.cleanup", "links.mcp_export", "net.trust_proxy"} {
+	for _, want := range []string{"links.overview", "links.purge", "links.export", "links.create", "links.cleanup", "links.mcp_export"} {
 		if !slicesContains(provides, want) {
 			t.Errorf("service %s not provided; got %v", want, provides)
 		}

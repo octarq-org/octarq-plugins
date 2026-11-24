@@ -22,6 +22,7 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 	}
 	p.host = plugin.EnsureHost(ctx)
 	if p.host != nil {
+		SetTrustProxy(p.host.TrustProxy())
 		if p.host.Session() != nil {
 			p.auth.UserID = p.host.Session().UserID
 			p.auth.OrgID = p.host.Session().OrgID
@@ -68,7 +69,6 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 		ctx.Provide("links.create", plugin.LinkCreator(p))
 		ctx.Provide(plugin.CleanupServiceName("links"), plugin.CleanupFunc(p.cleanupEvents))
 		ctx.Provide(plugin.MCPExportServiceName("links"), plugin.MCPExporter(p.mcpExportLinks))
-		ctx.Provide(plugin.ServiceTrustProxy, plugin.TrustProxyProvider(SetTrustProxy))
 	}
 	if ctx.RegisterTask != nil {
 		ctx.RegisterTask("link.crawl", p.handleLinkCrawl)

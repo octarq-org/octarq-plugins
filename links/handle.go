@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -216,12 +217,12 @@ func (e *Engine) record(r *http.Request, orgID uint, slug string, linkID uint, i
 	}
 }
 
-var trustProxy bool
+var trustProxy atomic.Bool
 
-func SetTrustProxy(v bool) { trustProxy = v }
+func SetTrustProxy(v bool) { trustProxy.Store(v) }
 
 func clientIP(r *http.Request) string {
-	if trustProxy {
+	if trustProxy.Load() {
 		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 			if first := strings.TrimSpace(strings.Split(xff, ",")[0]); first != "" {
 				return first
