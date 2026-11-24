@@ -61,14 +61,14 @@ export function EmailViewForm({
   const [summary, setSummary] = useState("");
 
   useEffect(() => {
-    mailApi.aiAssistStatus().then((s) => setAiEnabled(s.configured)).catch(() => {});
+    mailApi.mailAiStatus().then((s) => setAiEnabled(s.configured)).catch(() => {});
   }, []);
   useEffect(() => setSummary(""), [email.id]);
 
   async function summarize() {
     setAiBusy(true);
     try {
-      const r = await mailApi.aiSummarizeEmail(email.id);
+      const r = await mailApi.summarizeEmail(email.id);
       setSummary(r.summary);
     } catch {
       setSummary(t("mail.aiSummaryFailed"));

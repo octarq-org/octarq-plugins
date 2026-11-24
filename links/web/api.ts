@@ -98,6 +98,10 @@ export interface LinksCapabilities {
   mode: "configured" | "unavailable";
 }
 
+export const linksAiStatus = () => req<{ configured: boolean; provider: string }>("GET", "/api/links/ai/status");
+export const suggestLinkSlug = (target: string, title?: string) =>
+  req<{ slugs: string[] }>("POST", "/api/links/ai/suggest-slug", { target, title });
+
 export const linksApi = {
   links: (params: { q?: string; tag?: string; host?: string; archived?: boolean; limit?: number; offset?: number } = {}) => {
     const sp = new URLSearchParams();
@@ -141,9 +145,8 @@ export const linksApi = {
     return req<Domain[]>("GET", `/api/domains${qs ? `?${qs}` : ""}`);
   },
   overview: (includeBot = false) => req<Overview>("GET", `/api/overview?include_bot=${includeBot}`),
-  aiAssistStatus: () => req<{ configured: boolean; provider: string }>("GET", "/api/ai/assist/status"),
-  aiSuggestSlug: (target: string, title?: string) =>
-    req<{ slugs: string[] }>("POST", "/api/ai/assist/suggest-slug", { target, title }),
+  linksAiStatus,
+  suggestLinkSlug,
 };
 
 export { linksApi as api };

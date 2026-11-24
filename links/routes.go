@@ -37,6 +37,8 @@ func (p *Plugin) registerRoutes(ctx *plugin.Context) {
 		huma.Register(api, huma.Operation{Method: "GET", Path: "/api/links/{id}/stats", Summary: "Link Stats", Tags: []string{"Links"}}, p.linkStats)
 		huma.Register(api, huma.Operation{Method: "GET", Path: "/api/links/{id}/qr", Summary: "Link QR", Tags: []string{"Links"}}, p.linkQR)
 		huma.Register(api, huma.Operation{Method: "GET", Path: "/api/links/export.csv", Summary: "Export Links", Tags: []string{"Links"}}, p.exportLinksCSV)
+		huma.Register(api, huma.Operation{Method: "GET", Path: "/api/links/ai/status", Summary: "Links AI Status", Tags: []string{"Links"}}, p.linksAIStatus)
+		huma.Register(api, huma.Operation{Method: "POST", Path: "/api/links/ai/suggest-slug", Summary: "Suggest Link Slug", Tags: []string{"Links"}}, p.suggestLinkSlug)
 	}
 	if err := plugin.RegisterEndpoint(ctx, plugin.EndpointSpec[DeclarativeLinkInput, DeclarativeLinkOutput]{
 		Name:        "create_shortlink",

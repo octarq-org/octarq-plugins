@@ -1,7 +1,7 @@
 import { Field, Switch, Button, Select, FormError, Input, Textarea, Alert, StatusBadge, useTranslation } from "@octarq/plugin-sdk";
 import { useEffect, useState } from "react";
 import { useNavigate, useInRouterContext } from "react-router-dom";
-import { api, linksApi, Link, LinksCapabilities } from "../api";
+import { linksApi, linksAiStatus, suggestLinkSlug, Link, LinksCapabilities } from "../api";
 import { Sparkles, Trash2, Plus } from "lucide-react";
 
 function DomainConfigNavButton({ onClick, label }: { onClick: () => void; label: string }) {
@@ -97,7 +97,7 @@ export function LinkEditorForm({
   const [geoCapabilities, setGeoCapabilities] = useState<LinksCapabilities | null>(null);
 
   useEffect(() => {
-    api.aiAssistStatus().then((s) => setAiEnabled(s.configured)).catch(() => {});
+    linksAiStatus().then((s) => setAiEnabled(s.configured)).catch(() => {});
     linksApi.capabilities().then(setGeoCapabilities).catch(() => setGeoCapabilities({ geoReady: false, mode: "unavailable" }));
   }, []);
 
@@ -106,7 +106,7 @@ export function LinkEditorForm({
     setAiBusy(true);
     setAiSlugs([]);
     try {
-      const r = await api.aiSuggestSlug(target, title || undefined);
+      const r = await suggestLinkSlug(target, title || undefined);
       setAiSlugs(r.slugs);
     } catch {
       setErr(t("links.aiSuggestFailed"));

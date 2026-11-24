@@ -120,6 +120,14 @@ export interface MailSuppression {
   updatedAt: string;
 }
 
+export const mailAiStatus = () => req<{ configured: boolean; provider: string }>("GET", "/api/mail/ai/status");
+
+export const summarizeEmail = (id: number) =>
+  req<{ summary: string; category?: string; importance?: number; otp?: string }>(
+    "POST",
+    `/api/mail/assist/summarize-email/${id}`,
+  );
+
 export const mailApi = {
   mailboxes: () => req<Mailbox[]>("GET", "/api/mailboxes"),
   createMailbox: (m: Partial<Mailbox>) => req<Mailbox>("POST", "/api/mailboxes", m),
@@ -198,12 +206,8 @@ export const mailApi = {
     req<any>("PUT", "/api/settings", s),
   inboundToken: () => req<{ inboundToken: string }>("GET", "/api/settings/inbound-token"),
 
-  aiAssistStatus: () => req<{ configured: boolean; provider: string }>("GET", "/api/ai/assist/status"),
-  aiSummarizeEmail: (id: number) =>
-    req<{ summary: string; category?: string; importance?: number; otp?: string }>(
-      "POST",
-      `/api/ai/assist/summarize-email/${id}`,
-    ),
+  mailAiStatus,
+  summarizeEmail,
 
   overview: (includeBot = false) => req<any>("GET", `/api/overview?include_bot=${includeBot}`),
 };

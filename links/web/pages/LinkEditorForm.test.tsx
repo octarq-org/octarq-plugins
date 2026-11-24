@@ -51,10 +51,10 @@ describe("LinkEditorForm", () => {
       const urlObj = new URL(rawUrl, "http://localhost");
       const path = urlObj.pathname;
 
-      if (method === "GET" && path === "/api/ai/assist/status") {
+      if (method === "GET" && path === "/api/links/ai/status") {
         return jsonResponse({ configured: true, provider: "openai" });
       }
-      if (method === "POST" && path === "/api/ai/assist/suggest-slug") {
+      if (method === "POST" && path === "/api/links/ai/suggest-slug") {
         return jsonResponse({ slugs: ["ai-suggest-1", "ai-suggest-2"] });
       }
       if (method === "GET" && path === "/api/links/metadata") {
@@ -140,10 +140,10 @@ describe("LinkEditorForm", () => {
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
       const urlObj = new URL(rawUrl, "http://localhost");
-      if (urlObj.pathname === "/api/ai/assist/status") {
+      if (urlObj.pathname === "/api/links/ai/status") {
         return jsonResponse({ configured: true, provider: "openai" });
       }
-      if (urlObj.pathname === "/api/ai/assist/suggest-slug") {
+      if (urlObj.pathname === "/api/links/ai/suggest-slug") {
         return jsonResponse({ message: "AI rate limit" }, 500);
       }
       throw new Error(`Unhandled fetch: ${rawUrl}`);
@@ -254,7 +254,7 @@ describe("LinkEditorForm", () => {
       const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
       const urlObj = new URL(rawUrl, "http://localhost");
 
-      if (method === "GET" && urlObj.pathname === "/api/ai/assist/status") {
+      if (method === "GET" && urlObj.pathname === "/api/links/ai/status") {
         return jsonResponse({ configured: false, provider: "" });
       }
       if (method === "POST" && urlObj.pathname === "/api/links") {
@@ -327,7 +327,7 @@ describe("LinkEditorForm", () => {
       const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
       const urlObj = new URL(rawUrl, "http://localhost");
 
-      if (method === "GET" && urlObj.pathname === "/api/ai/assist/status") {
+      if (method === "GET" && urlObj.pathname === "/api/links/ai/status") {
         return jsonResponse({ configured: false, provider: "" });
       }
       if (method === "PUT" && urlObj.pathname === "/api/links/101") {
@@ -384,7 +384,7 @@ describe("LinkEditorForm", () => {
       const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
       const urlObj = new URL(rawUrl, "http://localhost");
 
-      if (method === "GET" && urlObj.pathname === "/api/ai/assist/status") {
+      if (method === "GET" && urlObj.pathname === "/api/links/ai/status") {
         return jsonResponse({ configured: false, provider: "" });
       }
       if (method === "POST" && urlObj.pathname === "/api/links") {
@@ -416,7 +416,7 @@ describe("LinkEditorForm", () => {
       const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
       const urlObj = new URL(rawUrl, "http://localhost");
 
-      if (method === "GET" && urlObj.pathname === "/api/ai/assist/status") {
+      if (method === "GET" && urlObj.pathname === "/api/links/ai/status") {
         return jsonResponse({ configured: false, provider: "" });
       }
       if (method === "POST" && urlObj.pathname === "/api/links") {
@@ -478,7 +478,7 @@ describe("LinkEditorForm", () => {
       if (urlObj.pathname === "/api/links/capabilities") {
         return jsonResponse({ geoReady: true, mode: "configured" });
       }
-      if (urlObj.pathname === "/api/ai/assist/status") {
+      if (urlObj.pathname === "/api/links/ai/status") {
         return jsonResponse({ configured: false });
       }
       return jsonResponse({});
@@ -507,7 +507,7 @@ describe("LinkEditorForm", () => {
       if (urlObj.pathname === "/api/links/capabilities") {
         return jsonResponse({ geoReady: false, mode: "unavailable" });
       }
-      if (urlObj.pathname === "/api/ai/assist/status") {
+      if (urlObj.pathname === "/api/links/ai/status") {
         return jsonResponse({ configured: false });
       }
       return jsonResponse({});
@@ -590,7 +590,7 @@ describe("LinkEditorForm", () => {
       const method = (init?.method ?? "GET").toUpperCase();
       const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
       const urlObj = new URL(rawUrl, "http://localhost");
-      if (method === "GET" && urlObj.pathname === "/api/ai/assist/status") {
+      if (method === "GET" && urlObj.pathname === "/api/links/ai/status") {
         return jsonResponse({ configured: false, provider: "" });
       }
       if (method === "GET" && urlObj.pathname === "/api/links/capabilities") {

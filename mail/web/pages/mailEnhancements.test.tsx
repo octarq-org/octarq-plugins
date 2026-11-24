@@ -67,8 +67,8 @@ describe("Mail Enhancements", () => {
           receivedAt: new Date().toISOString(),
         });
       }
-      if (method === "GET" && path === "/api/ai-assist/status") {
-        return jsonResponse({ configured: false });
+      if (method === "GET" && path === "/api/mail/ai/status") {
+        return jsonResponse({ configured: false, provider: "" });
       }
 
       throw new Error(`Unhandled fetch in test: ${method} ${rawUrl}`);
@@ -248,5 +248,54 @@ describe("Mail Enhancements", () => {
     expect(screen.getByText("Monthly platform subscription invoice for $49.")).toBeDefined();
     expect(screen.getByTestId("importance-dots")).toBeDefined();
     expect(screen.getByTestId("importance-dots").textContent).toBe("●●●●○");
+  });
+
+  it("checks AI status and summarizes email via plugin endpoints", async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const method = (init?.method ?? "GET").toUpperCase();
+      const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
+      const urlObj = new URL(rawUrl, "http://localhost");
+      const path = urlObj.pathname;
+
+      if (method === "GET" && path === "/api/mail/ai/status") {
+        return jsonResponse({ configured: true, provider: "claude" });
+      }
+      if (method === "POST" && path === "/api/mail/assist/summarize-email/77") {
+        return jsonResponse({ summary: "Invoice due Friday for $49." });
+      }
+      throw new Error(`Unhandled fetch in test: ${method} ${rawUrl}`);
+    });
+
+    const mockEmail: Email = {
+      id: 77,
+      mailboxId: 1,
+      from: "billing@acme.com",
+      to: "user@example.com",
+      subject: "Invoice Due",
+      text: "Your invoice for $49 is due Friday.",
+      html: "",
+      read: true,
+      note: "",
+      attachments: "[]",
+      authSpf: "pass",
+      authDkim: "pass",
+      authDmarc: "pass",
+      receivedAt: "2026-10-24T10:00:00Z",
+    };
+
+    renderWithProviders(
+      <EmailViewForm
+        email={mockEmail}
+        onClose={vi.fn()}
+        onReply={vi.fn()}
+        onChanged={vi.fn()}
+      />
+    );
+
+    const btn = await screen.findByRole("button", { name: "AI summary" });
+    fireEvent.click(btn);
+
+    const box = await screen.findByTestId("email-summary-box");
+    expect(box.textContent).toContain("Invoice due Friday for $49.");
   });
 });
