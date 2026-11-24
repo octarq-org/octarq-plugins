@@ -51,6 +51,8 @@ func (p *Plugin) RegisterMCP(srv *mcp.Server) {
 		Name:        "octarq_network__delete_dns_record",
 		Description: "Delete a DNS record from a managed domain's provider by domain ID and provider record ID.",
 	}, p.mcpDeleteDNSRecord)
+
+	p.registerMCPResources(srv)
 }
 
 type updateDomainConfigInput struct {

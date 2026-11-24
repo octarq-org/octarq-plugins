@@ -3,7 +3,9 @@ package dns
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/octarq-org/octarq-plugins/dns/provider"
@@ -257,4 +259,155 @@ func TestMCPDNSRecordsValidation(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for domain not found")
 	}
+}
+
+func connectDNSClientSession(t *testing.T, ctx context.Context, srv *mcp.Server) *mcp.ClientSession {
+	t.Helper()
+	client := mcp.NewClient(&mcp.Implementation{Name: "client", Version: "1.0"}, nil)
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	serverSession, err := srv.Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	t.Cleanup(func() { serverSession.Close() })
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { clientSession.Close() })
+	return clientSession
+}
+
+func TestMCPResources_DomainsHealth(t *testing.T) {
+	p, _ := setupFreshTestDB(t)
+	srv := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1.0"}, nil)
+	p.RegisterMCP(srv)
+
+	now := time.Now().UTC()
+	d1 := Domain{OrgID: 10, Name: "active.example.com", ProviderAccountID: 1, ZoneID: "z1", ForMail: true, ForLink: true, CreatedAt: now, UpdatedAt: now}
+	d2 := Domain{OrgID: 10, Name: "mailonly.example.com", ProviderAccountID: 1, ZoneID: "z2", ForMail: true, ForLink: false, CreatedAt: now, UpdatedAt: now}
+	d3 := Domain{OrgID: 10, Name: "dormant.example.com", ProviderAccountID: 1, ZoneID: "z3", ForMail: false, ForLink: false, CreatedAt: now, UpdatedAt: now}
+	dOther := Domain{OrgID: 20, Name: "other.example.com", ProviderAccountID: 2, ZoneID: "z4", ForMail: true, ForLink: true, CreatedAt: now, UpdatedAt: now}
+
+	p.db.Create(&d1)
+	p.db.Create(&d2)
+	p.db.Create(&d3)
+	p.db.Create(&dOther)
+
+	ctx10 := plugin.WithOrgID(context.Background(), 10)
+	cs10 := connectDNSClientSession(t, ctx10, srv)
+
+	readRes, err := cs10.ReadResource(ctx10, &mcp.ReadResourceParams{URI: "octarq://domains/health"})
+	if err != nil {
+		t.Fatalf("ReadResource(domains/health): %v", err)
+	}
+	var res DomainsHealthResource
+	if err := json.Unmarshal([]byte(readRes.Contents[0].Text), &res); err != nil {
+		t.Fatalf("unmarshal domains health: %v", err)
+	}
+	if res.OrgID != 10 {
+		t.Errorf("OrgID = %d, want 10", res.OrgID)
+	}
+	if res.TotalDomains != 3 {
+		t.Errorf("TotalDomains = %d, want 3", res.TotalDomains)
+	}
+	if res.ActiveMailDomains != 2 {
+		t.Errorf("ActiveMailDomains = %d, want 2", res.ActiveMailDomains)
+	}
+	if res.ActiveLinkDomains != 1 {
+		t.Errorf("ActiveLinkDomains = %d, want 1", res.ActiveLinkDomains)
+	}
+	if len(res.Domains) != 3 {
+		t.Fatalf("len(Domains) = %d, want 3", len(res.Domains))
+	}
+	stMap := map[string]string{}
+	for _, d := range res.Domains {
+		stMap[d.Name] = d.Status
+	}
+	if stMap["active.example.com"] != "active" {
+		t.Errorf("active.example.com status = %s, want active", stMap["active.example.com"])
+	}
+	if stMap["mailonly.example.com"] != "active" {
+		t.Errorf("mailonly.example.com status = %s, want active", stMap["mailonly.example.com"])
+	}
+	if stMap["dormant.example.com"] != "inactive" {
+		t.Errorf("dormant.example.com status = %s, want inactive", stMap["dormant.example.com"])
+	}
+
+	ctx20 := plugin.WithOrgID(context.Background(), 20)
+	cs20 := connectDNSClientSession(t, ctx20, srv)
+	read20, err := cs20.ReadResource(ctx20, &mcp.ReadResourceParams{URI: "octarq://domains/health"})
+	if err != nil {
+		t.Fatalf("ReadResource(domains/health org20): %v", err)
+	}
+	var res20 DomainsHealthResource
+	if err := json.Unmarshal([]byte(read20.Contents[0].Text), &res20); err != nil {
+		t.Fatalf("unmarshal domains health org20: %v", err)
+	}
+	if res20.OrgID != 20 || res20.TotalDomains != 1 || res20.Domains[0].Name != "other.example.com" {
+		t.Errorf("unexpected res20: %+v", res20)
+	}
+
+	ctxEmpty := plugin.WithOrgID(context.Background(), 999)
+	csEmpty := connectDNSClientSession(t, ctxEmpty, srv)
+	readEmpty, err := csEmpty.ReadResource(ctxEmpty, &mcp.ReadResourceParams{URI: "octarq://domains/health"})
+	if err != nil {
+		t.Fatalf("ReadResource empty: %v", err)
+	}
+	if !strings.Contains(readEmpty.Contents[0].Text, `"domains": []`) {
+		t.Errorf("expected empty array [] for domains, got: %s", readEmpty.Contents[0].Text)
+	}
+
+	csNoOrg := connectDNSClientSession(t, context.Background(), srv)
+	_, errNoOrg := csNoOrg.ReadResource(context.Background(), &mcp.ReadResourceParams{URI: "octarq://domains/health"})
+	if errNoOrg == nil {
+		t.Error("expected error for zero org, got nil")
+	}
+
+	_, errNotFound := cs10.ReadResource(ctx10, &mcp.ReadResourceParams{URI: "octarq://unknown"})
+	if errNotFound == nil {
+		t.Error("expected error for unknown URI, got nil")
+	}
+}
+
+func TestMCPResources_ConflictAndCoreConflictPanic(t *testing.T) {
+	srv := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1.0"}, nil)
+	addMCPResource(srv, "dns", &mcp.Resource{
+		URI: "octarq://domains/conflict-test",
+	}, func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		return nil, nil
+	})
+
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Fatal("expected panic on conflict with different owner")
+			}
+		}()
+		addMCPResource(srv, "other_owner", &mcp.Resource{
+			URI: "octarq://domains/conflict-test",
+		}, func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+			return nil, nil
+		})
+	}()
+
+	srvCore := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1.0"}, nil)
+	srvCore.AddResource(&mcp.Resource{
+		URI: "octarq://domains/core-existing",
+	}, func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		return nil, nil
+	})
+
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Fatal("expected panic on core conflict")
+			}
+		}()
+		addMCPResource(srvCore, "dns", &mcp.Resource{
+			URI: "octarq://domains/core-existing",
+		}, func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+			return nil, nil
+		})
+	}()
 }

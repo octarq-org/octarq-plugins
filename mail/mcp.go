@@ -123,6 +123,8 @@ func (p *Plugin) RegisterMCP(srv *mcp.Server) {
 		Name:        "octarq_network__get_email_content",
 		Description: "Get the sanitized plain text content of an email by ID with safety guardrails (sensitive tokens redacted, inline base64 images stripped, capped at 4KB).",
 	}, p.mcpGetEmailContent)
+
+	p.registerMCPResources(srv)
 }
 
 func (p *Plugin) mcpListMailboxes(ctx context.Context, _ *mcp.CallToolRequest, _ listMailboxesInput) (*mcp.CallToolResult, any, error) {
