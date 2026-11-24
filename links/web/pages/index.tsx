@@ -1,6 +1,7 @@
 import {
   Alert,
   Empty,
+  Field,
   PageShell,
   PageCard,
   Panel,
@@ -18,6 +19,7 @@ import {
   TabBar,
   TableError,
   TableSkeleton,
+  Textarea,
   confirmDialog,
   toast,
   useTranslation,
@@ -25,10 +27,10 @@ import {
   useCurrentRole,
   usePluginGate,
 } from "@octarq/plugin-sdk";
-import { useEffect, useMemo, useState } from "react";
-import { useSearchParams, NavLink } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api, linksApi, Link, Domain, effectiveLinkHosts } from "../api";
-import { AlertCircle, Download, Link2, Search, Settings, Plus, Activity, ShieldCheck, AlertTriangle, Blocks } from "lucide-react";
+import { AlertCircle, Download, Link2, Search, Settings, Plus, Activity, ShieldCheck, AlertTriangle } from "lucide-react";
 import { parseLinksFilter, buildLinksFilterQuery } from "../filters";
 import { LinkTableRow } from "./LinkTableRow";
 import { LinkModals } from "./LinkModals";
@@ -93,6 +95,47 @@ export default function LinksPage() {
   const [exporting, setExporting] = useState(false);
   const { t } = useTranslation();
   const pluginGate = usePluginGate();
+
+  const [reservedSlugs, setReservedSlugs] = useState("");
+  const [savingReserved, setSavingReserved] = useState(false);
+
+  const loadReserved = useCallback(async () => {
+    try {
+      const data = await linksApi.getSettings();
+      setReservedSlugs(data.reservedSlugs || "");
+    } catch {
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tab === "reserved") {
+      void loadReserved();
+    }
+  }, [tab, loadReserved]);
+
+  const handleSaveReserved = async () => {
+    setSavingReserved(true);
+    try {
+      const res = await linksApi.updateSettings({ reservedSlugs });
+      setReservedSlugs(res.reservedSlugs || "");
+      toast.success(t("links.settingsSaved", "Settings saved"));
+    } catch (e: any) {
+      toast.error(e?.message || t("links.saveFailed", "Could not save settings; retry the request"));
+    } finally {
+      setSavingReserved(false);
+    }
+  };
+
+  const customReservedList = useMemo(() => {
+    return reservedSlugs
+      .split(/[\n,]/)
+      .map((s) => s.trim().toLowerCase())
+      .filter((s) => s.length > 0 && !SYSTEM_RESERVED_SLUGS.includes(s));
+  }, [reservedSlugs]);
+
+  const allReservedSlugs = useMemo(() => {
+    return [...SYSTEM_RESERVED_SLUGS, ...customReservedList];
+  }, [customReservedList]);
 
   useEffect(() => {
     if (searchParams.get("create") === "1") {
@@ -442,26 +485,41 @@ export default function LinksPage() {
 
       {tab === "reserved" && (
         <div className="space-y-6" data-testid="reserved-projection-view">
-          <div className="flex items-center justify-between p-3 rounded-lg border border-primary/20 bg-accent-soft text-xs text-foreground">
-            <div className="flex items-center gap-2">
-              <Blocks className="h-4 w-4 text-accent-fg shrink-0" />
-              <span>{t("links.reservedInstanceNotice", "Configure custom instance-level reserved slugs in Instance Settings.")}</span>
-            </div>
-            <NavLink
-              to="/instance/settings"
-              className="text-accent-fg hover:underline font-medium text-xs whitespace-nowrap ml-3"
+          <PageCard className="space-y-4">
+            <Field
+              label={t("links.customReservedLabel", "Custom Reserved Words")}
+              hint={t("links.customReservedHint", "Enter one reserved word per line. Short links cannot use these words.")}
             >
-              {t("links.reservedInstanceAction", "Configure Instance Settings →")}
-            </NavLink>
-          </div>
+              <Textarea
+                className="font-mono text-xs"
+                rows={4}
+                value={reservedSlugs}
+                onChange={(e) => setReservedSlugs(e.target.value)}
+                placeholder={"preview\ninternal\nstatus"}
+                disabled={!isInstanceAdmin || savingReserved}
+                aria-label={t("links.customReservedLabel", "Custom Reserved Words")}
+              />
+            </Field>
+            {isInstanceAdmin && (
+              <div className="flex justify-end">
+                <Button
+                  variant="primary"
+                  className="text-xs"
+                  onClick={handleSaveReserved}
+                  disabled={savingReserved}
+                >
+                  {savingReserved ? t("links.saving", "Saving…") : t("links.saveReserved", "Save reserved words")}
+                </Button>
+              </div>
+            )}
+          </PageCard>
 
           <Panel
             title={t("links.reservedTitle", "System Reserved Words")}
             description={t("links.reservedDesc", "Reserved words prevent short links from colliding with system routes and administrative endpoints.")}
           >
-
             <div className="flex flex-wrap gap-2 pt-2">
-              {SYSTEM_RESERVED_SLUGS.map((slug) => (
+              {allReservedSlugs.map((slug) => (
                 <span
                   key={slug}
                   className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-mono bg-well border border-border text-foreground"

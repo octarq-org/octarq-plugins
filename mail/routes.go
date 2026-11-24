@@ -9,6 +9,9 @@ import (
 )
 
 func registerAPIRoutes(p *Plugin, api huma.API, ctx *plugin.Context) {
+	huma.Register(api, huma.Operation{Method: "GET", Path: "/api/mail/settings", Summary: "Get Mail Settings", Tags: []string{"Settings"}}, p.getSettings)
+	huma.Register(api, huma.Operation{Method: "PUT", Path: "/api/mail/settings", Summary: "Update Mail Settings", Tags: []string{"Settings"}}, p.updateSettings)
+
 	huma.Register(api, huma.Operation{Method: "GET", Path: "/api/smtp-senders", Summary: "List SMTP Senders", Tags: []string{"SMTP"}}, p.listSMTPSenders)
 	huma.Register(api, huma.Operation{Method: "POST", Path: "/api/smtp-senders", Summary: "Create SMTP Sender", Tags: []string{"SMTP"}, DefaultStatus: 201}, p.createSMTPSender)
 	huma.Register(api, huma.Operation{Method: "PUT", Path: "/api/smtp-senders/{id}", Summary: "Update SMTP Sender", Tags: []string{"SMTP"}}, p.updateSMTPSender)

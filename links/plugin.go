@@ -21,7 +21,9 @@ type Plugin struct {
 	}
 	audit               func(r *http.Request, action, targetType string, targetID uint, meta map[string]any)
 	getGlobalSetting    func(key string) string
+	setGlobalSetting    func(key, value string) error
 	getWorkspaceSetting func(orgID uint, key string) string
+	setWorkspaceSetting func(orgID uint, key, value string) error
 	enqueue             func(ctx context.Context, taskType string, payload []byte) error
 	deleteCache         func(ctx context.Context, key string) error
 	publishEvent        func(orgID uint, event string, data any)
@@ -134,7 +136,7 @@ func (p *Plugin) isReservedSlug(slug string) bool {
 	}
 	if p.getGlobalSetting != nil {
 		for _, res := range splitList(p.getGlobalSetting("reserved_slugs")) {
-			if res == slug {
+			if strings.ToLower(res) == slug {
 				return true
 			}
 		}
@@ -143,11 +145,14 @@ func (p *Plugin) isReservedSlug(slug string) bool {
 }
 
 func splitList(s string) []string {
+	fields := strings.FieldsFunc(s, func(r rune) bool {
+		return r == ',' || r == '\n' || r == '\r'
+	})
 	var out []string
-	for _, p := range strings.Split(s, ",") {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			out = append(out, p)
+	for _, f := range fields {
+		f = strings.TrimSpace(f)
+		if f != "" {
+			out = append(out, f)
 		}
 	}
 	return out
