@@ -50,7 +50,6 @@ var (
 	_ plugin.ExportFunc   = (*Plugin)(nil).exportData
 	_ plugin.PurgeFunc    = (*Plugin)(nil).purge
 	_ plugin.OverviewFunc = (*Plugin)(nil).overview
-	_ plugin.LinkResolver = (*Plugin)(nil).resolveSlug
 	_ plugin.MCPExporter  = (*Plugin)(nil).mcpExportLinks
 	_ plugin.CleanupFunc  = (*Plugin)(nil).cleanupEvents
 )

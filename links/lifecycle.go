@@ -63,7 +63,6 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 		ctx.Provide(plugin.OverviewServiceName("links"), plugin.OverviewFunc(p.overview))
 		ctx.Provide(plugin.PurgeServiceName("links"), plugin.PurgeFunc(p.purge))
 		ctx.Provide(plugin.ExportServiceName("links"), plugin.ExportFunc(p.exportData))
-		ctx.Provide(plugin.ServiceLinkResolve, plugin.LinkResolver(p.resolveSlug))
 		ctx.Provide("links.create", plugin.LinkCreator(p))
 		ctx.Provide(plugin.CleanupServiceName("links"), plugin.CleanupFunc(p.cleanupEvents))
 		ctx.Provide(plugin.MCPExportServiceName("links"), plugin.MCPExporter(p.mcpExportLinks))
