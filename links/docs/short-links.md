@@ -3,6 +3,8 @@ title: Links
 description: Create branded short URLs, route visitors with rules, run A/B tests, protect links, and track clicks.
 category: operations
 order: 10
+routes:
+  - /links
 ---
 
 Octarq Links gives every destination a short, shareable address. You can route visitors by location or device, run an A/B test, set an expiry or password, and measure every click—without changing the public URL.

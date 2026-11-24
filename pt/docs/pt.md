@@ -3,6 +3,8 @@ title: PT Accounts
 description: Manage private-tracker accounts — refresh logins, sign in daily, and read traffic, ratio, bonus, and warnings.
 category: operations
 order: 40
+routes:
+  - /personal/pt
 ---
 
 # PT Accounts

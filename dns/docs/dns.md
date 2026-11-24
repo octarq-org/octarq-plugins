@@ -3,6 +3,8 @@ title: DNS
 description: Connect DNS providers, manage records, verify mail and link setup, and apply email blueprints.
 category: infrastructure
 order: 10
+routes:
+  - /domains
 ---
 
 Octarq DNS connects to your DNS providers to manage domain zones and records. You can sync domains from Cloudflare and DNSPod, edit DNS records directly, verify email and link routing, and apply email setup blueprints with one click.
