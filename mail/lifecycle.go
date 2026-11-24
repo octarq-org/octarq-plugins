@@ -17,7 +17,9 @@ type Plugin struct {
 	orgID               func(*http.Request) uint
 	audit               func(r *http.Request, action, targetType string, targetID uint, meta map[string]any)
 	getWorkspaceSetting func(orgID uint, key string) string
+	setWorkspaceSetting func(orgID uint, key, value string) error
 	getGlobalSetting    func(key string) string
+	setGlobalSetting    func(key, value string) error
 	sendLimiter         *rateLimiter
 	testLimiter         *rateLimiter
 	emailMu             sync.RWMutex
@@ -128,7 +130,9 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 		}
 		if p.host.Settings() != nil {
 			p.getWorkspaceSetting = p.host.Settings().GetWorkspaceSetting
+			p.setWorkspaceSetting = p.host.Settings().SetWorkspaceSetting
 			p.getGlobalSetting = p.host.Settings().GetGlobalSetting
+			p.setGlobalSetting = p.host.Settings().SetGlobalSetting
 		}
 		if p.host.Events() != nil {
 			p.publishEvent = p.host.Events().PublishEvent

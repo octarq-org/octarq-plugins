@@ -195,7 +195,7 @@ describe("Mail Forms", () => {
         return jsonResponse({ ok: true });
       }
 
-      if (method === "GET" && path === "/api/settings") {
+      if (method === "GET" && path === "/api/mail/settings") {
         return jsonResponse({ autoWrapLinks: true });
       }
 
@@ -336,7 +336,7 @@ describe("Mail Forms", () => {
         const path = urlObj.pathname;
 
         if (method === "GET" && (path === "/api/vault/items" || path === "/api/smtp-senders")) return jsonResponse(mockIntegrations);
-        if (method === "GET" && path === "/api/settings") return jsonResponse({});
+        if (method === "GET" && path === "/api/mail/settings") return jsonResponse({});
         if (method === "POST" && path === "/api/emails/send") {
           return jsonResponse({ message: "SMTP relay authentication failed" }, 400);
         }
@@ -368,7 +368,7 @@ describe("Mail Forms", () => {
         const urlObj = new URL(rawUrl, "http://localhost");
         const path = urlObj.pathname;
         if (method === "GET" && (path === "/api/vault/items" || path === "/api/smtp-senders")) return jsonResponse([]);
-        if (method === "GET" && path === "/api/settings") return jsonResponse({});
+        if (method === "GET" && path === "/api/mail/settings") return jsonResponse({});
         throw new Error(`Unhandled fetch: ${method} ${rawUrl}`);
       });
 
@@ -389,7 +389,7 @@ describe("Mail Forms", () => {
 
         if (method === "GET" && path === "/api/vault/items") return jsonResponse({ detail: "Not Found" }, 404);
         if (method === "GET" && path === "/api/smtp-senders") return jsonResponse(mockSenders);
-        if (method === "GET" && path === "/api/settings") return jsonResponse({});
+        if (method === "GET" && path === "/api/mail/settings") return jsonResponse({});
         if (method === "POST" && path === "/api/emails/send") return jsonResponse({ ok: true });
         throw new Error(`Unhandled fetch: ${method} ${rawUrl}`);
       });

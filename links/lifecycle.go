@@ -30,7 +30,9 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 		}
 		if p.host.Settings() != nil {
 			p.getGlobalSetting = p.host.Settings().GetGlobalSetting
+			p.setGlobalSetting = p.host.Settings().SetGlobalSetting
 			p.getWorkspaceSetting = p.host.Settings().GetWorkspaceSetting
+			p.setWorkspaceSetting = p.host.Settings().SetWorkspaceSetting
 		}
 		if p.host.Events() != nil {
 			p.publishEvent = p.host.Events().PublishEvent

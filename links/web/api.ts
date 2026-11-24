@@ -113,7 +113,13 @@ export interface AbuseReport {
   createdAt: string;
 }
 
+export interface LinksSettingsData {
+  reservedSlugs: string;
+}
+
 export const linksApi = {
+  getSettings: () => req<LinksSettingsData>("GET", "/api/links/settings"),
+  updateSettings: (s: LinksSettingsData) => req<LinksSettingsData>("PUT", "/api/links/settings", s),
   links: (params: { q?: string; tag?: string; host?: string; archived?: boolean; limit?: number; offset?: number } = {}) => {
     const sp = new URLSearchParams();
     if (params.q) sp.set("q", params.q);

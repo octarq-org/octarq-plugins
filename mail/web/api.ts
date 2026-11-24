@@ -201,9 +201,9 @@ export const mailApi = {
   deleteSMTPSender: (id: number) => req<void>("DELETE", `/api/smtp-senders/${id}`),
   testSMTPSender: (id: number) => req<{ ok: boolean }>("POST", `/api/smtp-senders/${id}/test`),
 
-  settings: () => req<MailSettingsData>("GET", "/api/settings"),
+  settings: () => req<MailSettingsData>("GET", "/api/mail/settings"),
   updateSettings: (s: Partial<MailSettingsData> & { inboundToken?: string }) =>
-    req<any>("PUT", "/api/settings", s),
+    req<any>("PUT", "/api/mail/settings", s),
   inboundToken: () => req<{ inboundToken: string }>("GET", "/api/settings/inbound-token"),
 
   mailAiStatus,

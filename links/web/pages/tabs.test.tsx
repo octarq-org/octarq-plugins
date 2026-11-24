@@ -13,6 +13,8 @@ vi.mock("../api", () => ({
     deleteLink: vi.fn(),
     domains: vi.fn(),
     exportCsv: vi.fn(),
+    getSettings: vi.fn(),
+    updateSettings: vi.fn(),
   },
   api: {
     links: vi.fn(),
@@ -20,6 +22,8 @@ vi.mock("../api", () => ({
     deleteLink: vi.fn(),
     domains: vi.fn(),
     exportCsv: vi.fn(),
+    getSettings: vi.fn(),
+    updateSettings: vi.fn(),
   },
   effectiveLinkHosts: (d: any) => [d.domain || d.name],
 }));
@@ -41,6 +45,10 @@ describe("LinksPage — 3 Horizontal Projection Tabs", () => {
     vi.clearAllMocks();
     (api.domains as any).mockResolvedValue([{ id: 1, domain: "go.link" }]);
     (linksApi.domains as any).mockResolvedValue([{ id: 1, domain: "go.link" }]);
+    (linksApi.getSettings as any).mockResolvedValue({ reservedSlugs: "customone\ncustomtwo" });
+    (api.getSettings as any).mockResolvedValue({ reservedSlugs: "customone\ncustomtwo" });
+    (linksApi.updateSettings as any).mockImplementation(async (s: any) => s);
+    (api.updateSettings as any).mockImplementation(async (s: any) => s);
     (linksApi.links as any).mockResolvedValue([
       {
         id: 1,
@@ -82,6 +90,23 @@ describe("LinksPage — 3 Horizontal Projection Tabs", () => {
     expect(screen.getByText("System Reserved Words")).toBeDefined();
     expect(screen.getByText("/api")).toBeDefined();
     expect(screen.getByText("/instance")).toBeDefined();
+
+    await waitFor(() => {
+      expect(screen.getByText("/customone")).toBeDefined();
+      expect(screen.getByText("/customtwo")).toBeDefined();
+    });
+
+    const textarea = screen.getByRole("textbox", { name: /Custom Reserved Words/i });
+    expect((textarea as HTMLTextAreaElement).value).toBe("customone\ncustomtwo");
+
+    fireEvent.change(textarea, { target: { value: "customone\ncustomtwo\nbrandnew" } });
+    const saveBtn = screen.getByRole("button", { name: /Save reserved words/i });
+    fireEvent.click(saveBtn);
+
+    await waitFor(() => {
+      expect(linksApi.updateSettings).toHaveBeenCalledWith({ reservedSlugs: "customone\ncustomtwo\nbrandnew" });
+      expect(screen.getByText("/brandnew")).toBeDefined();
+    });
 
     fireEvent.click(screen.getByTestId("tab-links"));
     expect(screen.getByTestId("links-projection-view")).toBeDefined();

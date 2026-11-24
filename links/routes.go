@@ -19,6 +19,8 @@ func (p *Plugin) Actions() []plugin.Action {
 func (p *Plugin) registerRoutes(ctx *plugin.Context) {
 	api := ctx.Huma
 	if api != nil {
+		huma.Register(api, huma.Operation{Method: "GET", Path: "/api/links/settings", Summary: "Get Links Settings", Tags: []string{"Settings"}}, p.getSettings)
+		huma.Register(api, huma.Operation{Method: "PUT", Path: "/api/links/settings", Summary: "Update Links Settings", Tags: []string{"Settings"}}, p.updateSettings)
 		huma.Register(api, huma.Operation{Method: "GET", Path: "/api/links", Summary: "List Links", Tags: []string{"Links"}}, p.listLinks)
 		huma.Register(api, huma.Operation{Method: "POST", Path: "/api/links", Summary: "Create Link", Tags: []string{"Links"}, DefaultStatus: 201}, p.createLink)
 		huma.Register(api, huma.Operation{Method: "POST", Path: "/api/links/quick", Summary: "Quick Create Link", Tags: []string{"Links"}, DefaultStatus: 201}, p.quickCreateLink)

@@ -30,7 +30,7 @@ describe("MailSettings inbound webhook URL", () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
       const path = new URL(rawUrl, "http://localhost").pathname;
-      if (path === "/api/settings") {
+      if (path === "/api/mail/settings") {
         return jsonResponse({
           orgSlug: "acme-corp",
           inboundTokenSet: true,
@@ -55,5 +55,51 @@ describe("MailSettings inbound webhook URL", () => {
     const input = (await screen.findByDisplayValue(/\/api\/webhook\/acme-corp\/email\/inbound\//)) as HTMLInputElement;
     expect(input.value).toContain("/api/webhook/acme-corp/email/inbound/");
     expect(input.value).not.toContain("/api/v1/webhook/");
+  });
+
+  it("calls PUT /api/mail/settings when saving settings", async () => {
+    let putBody: any = null;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const rawUrl = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
+      const path = new URL(rawUrl, "http://localhost").pathname;
+      const method = init?.method || "GET";
+      if (path === "/api/mail/settings" && method === "GET") {
+        return jsonResponse({
+          orgSlug: "acme-corp",
+          inboundTokenSet: false,
+          reservedMailboxes: "admin",
+          catchAll: false,
+          autoWrapLinks: false,
+        });
+      }
+      if (path === "/api/mail/settings" && method === "PUT") {
+        putBody = JSON.parse(init?.body as string);
+        return jsonResponse({
+          orgSlug: "acme-corp",
+          reservedMailboxes: putBody.reservedMailboxes,
+          catchAll: putBody.catchAll,
+          autoWrapLinks: putBody.autoWrapLinks,
+        });
+      }
+      throw new Error(`Unexpected fetch: ${method} ${rawUrl}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <I18nProvider>
+        <MailSettings />
+      </I18nProvider>
+    );
+
+    await screen.findByDisplayValue("admin");
+    const saveBtn = screen.getByRole("button", { name: /saveSettings/i });
+    saveBtn.click();
+
+    await waitFor(() => {
+      expect(putBody).toBeDefined();
+      expect(putBody.reservedMailboxes).toBe("admin");
+      expect(putBody.catchAll).toBe(false);
+      expect(putBody.autoWrapLinks).toBe(false);
+    });
   });
 });
