@@ -53,7 +53,7 @@ describe("Link password redaction and edit preservation", () => {
       const path = urlObj.pathname;
       if (method === "GET" && path === "/api/links") return jsonResponse(mockLinksWithPassword);
       if (method === "GET" && path === "/api/domains") return jsonResponse([]);
-      if (method === "GET" && path === "/api/ai/assist/status") return jsonResponse({ configured: false, provider: "" });
+      if (method === "GET" && path === "/api/links/ai/status") return jsonResponse({ configured: false, provider: "" });
       if (method === "GET" && path === "/api/links/capabilities") return jsonResponse({ geoReady: false, mode: "unavailable" });
       if (method === "PUT" && path === "/api/links/1") {
         updatedPayload = JSON.parse((init?.body as string) || "{}");
