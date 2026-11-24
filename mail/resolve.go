@@ -1,12 +1,13 @@
 package mail
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/octarq-org/octarq/server/pkg/hostlist"
 	"github.com/octarq-org/octarq/server/pkg/safego"
-	"github.com/octarq-org/octarq/server/plugin"
 )
 
 type domainMailHost struct {
@@ -40,7 +41,23 @@ func (p *Plugin) isReservedMailbox(orgID uint, addr string) bool {
 	return false
 }
 
-func (p *Plugin) emitEmail(e plugin.EmailEvent) {
+type InboundEmail struct {
+	ID         uint      `json:"id"`
+	MailboxID  uint      `json:"mailboxId"`
+	OrgID      uint      `json:"orgId"`
+	From       string    `json:"from"`
+	To         string    `json:"to"`
+	Subject    string    `json:"subject"`
+	Text       string    `json:"text"`
+	HTML       string    `json:"html"`
+	ReceivedAt time.Time `json:"receivedAt"`
+}
+
+func (p *Plugin) emitEmail(e InboundEmail) {
+	payload, err := json.Marshal(e)
+	if err != nil {
+		return
+	}
 	p.emailMu.RLock()
 	handlers := p.emailHandlers
 	p.emailMu.RUnlock()
@@ -48,13 +65,13 @@ func (p *Plugin) emitEmail(e plugin.EmailEvent) {
 		if h != nil {
 			handler := h
 			safego.Go("mail.dispatch-plugin", func() {
-				handler(e)
+				handler("mail.inbound", payload)
 			})
 		}
 	}
 }
 
-func (p *Plugin) OnEmail(handler func(plugin.EmailEvent)) {
+func (p *Plugin) Dispatch(handler func(topic string, payload json.RawMessage)) {
 	if handler == nil {
 		return
 	}

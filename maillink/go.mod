@@ -5,7 +5,7 @@ go 1.27.3
 require (
 	github.com/glebarez/sqlite v1.11.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
-	github.com/octarq-org/octarq/server v0.8.1-0.20261119055749-cb1493a6e46f
+	github.com/octarq-org/octarq/server v0.8.1-0.20261124164711-6fb6eb9d7820
 	gorm.io/gorm v1.31.2
 )
 

@@ -160,7 +160,7 @@ func (p *Plugin) processInboundMail(ctx context.Context, orgID uint, overrideTo 
 		})
 	}
 
-	p.emitEmail(plugin.EmailEvent{
+	p.emitEmail(InboundEmail{
 		ID:         e.ID,
 		MailboxID:  mb.ID,
 		OrgID:      mb.OrgID,

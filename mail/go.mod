@@ -7,7 +7,7 @@ require (
 	github.com/emersion/go-message v0.18.2
 	github.com/glebarez/sqlite v1.11.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
-	github.com/octarq-org/octarq/server v0.8.1-0.20261124162559-2a6933177755
+	github.com/octarq-org/octarq/server v0.8.1-0.20261124164711-6fb6eb9d7820
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/ulule/limiter/v3 v3.11.2
 	gorm.io/gorm v1.31.2
