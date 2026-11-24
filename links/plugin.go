@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/octarq-org/octarq/server/plugin"
 	"gorm.io/gorm"
@@ -26,6 +27,8 @@ type Plugin struct {
 	publishEvent        func(orgID uint, event string, data any)
 	requireRole         func(r *http.Request, min string) bool
 	isInstanceAdmin     func(r *http.Request) bool
+	abuseLimiter        *ipRateLimiter
+	emit                func(ctx context.Context, payload plugin.NotificationPayload) error
 	ctx                 *plugin.Context
 	host                plugin.Host
 }
@@ -35,11 +38,12 @@ func (p *Plugin) Host() plugin.Host { return p.host }
 func (p *Plugin) SetHost(h plugin.Host) { p.host = h }
 
 var (
-	_ plugin.Plugin       = (*Plugin)(nil)
-	_ plugin.Describer    = (*Plugin)(nil)
-	_ plugin.MenuProvider = (*Plugin)(nil)
-	_ plugin.HelpDocsFS   = (*Plugin)(nil)
-	_ plugin.Starter      = (*Plugin)(nil)
+	_ plugin.Plugin                = (*Plugin)(nil)
+	_ plugin.Describer             = (*Plugin)(nil)
+	_ plugin.MenuProvider          = (*Plugin)(nil)
+	_ plugin.HelpDocsFS            = (*Plugin)(nil)
+	_ plugin.Starter               = (*Plugin)(nil)
+	_ plugin.UnscopedRouteProvider = (*Plugin)(nil)
 )
 
 var (
@@ -52,7 +56,9 @@ var (
 )
 
 func New() *Plugin {
-	return &Plugin{}
+	return &Plugin{
+		abuseLimiter: newIPRateLimiter(5, time.Hour),
+	}
 }
 
 func (p *Plugin) Name() string { return "links" }
@@ -67,7 +73,18 @@ func (p *Plugin) Describe() plugin.Info {
 	}
 }
 func (p *Plugin) Models() []any {
-	return []any{&Link{}, &LinkEvent{}}
+	return []any{&Link{}, &LinkEvent{}, &AbuseReport{}}
+}
+
+func (p *Plugin) UnscopedPrefixes() []string {
+	return []string{"/abuse"}
+}
+
+func (p *Plugin) Menus() []plugin.MenuItem {
+	return []plugin.MenuItem{
+		{ID: "links", Label: "Links", Path: "/links", Icon: "link-2", Category: "Marketing", Area: "operations", Order: 10},
+		{ID: "abuse", Label: "Abuse Reports", Path: "/links/abuse", Icon: "shield-alert", Category: "Security", Area: "operations", RequiredRole: "admin", Order: 20},
+	}
 }
 
 //go:embed docs

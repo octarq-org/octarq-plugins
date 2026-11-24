@@ -102,6 +102,17 @@ export const linksAiStatus = () => req<{ configured: boolean; provider: string }
 export const suggestLinkSlug = (target: string, title?: string) =>
   req<{ slugs: string[] }>("POST", "/api/links/ai/suggest-slug", { target, title });
 
+export interface AbuseReport {
+  id: number;
+  slug: string;
+  target: string;
+  reason: "spam" | "phishing" | "malware" | "other" | string;
+  description: string;
+  reporterIp: string;
+  status: "open" | "reviewed" | "dismissed" | string;
+  createdAt: string;
+}
+
 export const linksApi = {
   links: (params: { q?: string; tag?: string; host?: string; archived?: boolean; limit?: number; offset?: number } = {}) => {
     const sp = new URLSearchParams();
@@ -147,6 +158,12 @@ export const linksApi = {
   overview: (includeBot = false) => req<Overview>("GET", `/api/overview?include_bot=${includeBot}`),
   linksAiStatus,
   suggestLinkSlug,
+  abuseReports: (status?: string) => {
+    const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+    return req<AbuseReport[]>("GET", `/api/links/abuse${qs}`);
+  },
+  updateAbuseReport: (id: number, status: string) =>
+    req<AbuseReport>("PUT", `/api/links/abuse/${id}`, { status }),
 };
 
 export { linksApi as api };
