@@ -102,25 +102,21 @@ func (p *Plugin) syncDomains(ctx context.Context, input *SyncDomainsInput) (*Syn
 		p.db.Save(&toUpdate)
 		for _, d := range toUpdate {
 			forgetOrigin(d.Name)
+			_ = p.syncDomainHosts(r.Context(), &d)
 		}
 	}
 	if len(toCreate) > 0 {
 		res := p.db.Clauses(clause.OnConflict{DoNothing: true}).CreateInBatches(&toCreate, 100)
 		created = int(res.RowsAffected)
-		if created == len(toCreate) {
-			for _, d := range toCreate {
-				forgetOrigin(d.Name)
-			}
-		} else if created > 0 {
-			toCreateNames := make([]string, len(toCreate))
-			for i, d := range toCreate {
-				toCreateNames[i] = d.Name
-			}
-			var insertedNames []string
-			p.db.Model(&Domain{}).Where("owner_id = ? AND name IN ?", p.orgID(r), toCreateNames).Pluck("name", &insertedNames)
-			for _, n := range insertedNames {
-				forgetOrigin(n)
-			}
+		toCreateNames := make([]string, len(toCreate))
+		for i, d := range toCreate {
+			toCreateNames[i] = d.Name
+		}
+		var insertedDoms []Domain
+		p.db.Where("owner_id = ? AND name IN ?", p.orgID(r), toCreateNames).Find(&insertedDoms)
+		for _, d := range insertedDoms {
+			forgetOrigin(d.Name)
+			_ = p.syncDomainHosts(r.Context(), &d)
 		}
 	}
 

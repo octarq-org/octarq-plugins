@@ -113,6 +113,9 @@ func newTestEngine(t *testing.T) *Engine {
 
 func TestLookupHostPreference(t *testing.T) {
 	s := newTestEngine(t)
+	hosts := newFakeHostRegistry()
+	_ = hosts.ReplaceOwned(context.Background(), 1, "s1", []string{"example.com"}, true)
+	s.SetHosts(hosts)
 	s.db.Create(&testDomain{OrgID: 1, Name: "example.com", ForLink: true})
 	s.db.Create(&Link{OrgID: 1, Slug: "x", Host: "", Target: "https://any", Enabled: true})
 	s.db.Create(&Link{OrgID: 1, Slug: "x", Host: "go.example.com", Target: "https://exact", Enabled: true})

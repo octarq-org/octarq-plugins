@@ -7,14 +7,16 @@ import (
 	"testing"
 
 	"github.com/octarq-org/octarq/server/origin"
+	"github.com/octarq-org/octarq/server/plugin"
 )
 
 func TestDomainWritesInvalidateOriginCache(t *testing.T) {
 	p, mkCtx := setupFullDNSTestDB(t)
+	rv := newFakeHostRegistry()
+	p.SetHost(&plugin.TestHost{HostsMock: rv})
 	ctx := context.Background()
-	rv := origin.NewResolver(p.db)
 
-	if rv.AnyRegistered() {
+	if rv.Any() {
 		t.Fatal("a database with no domain rows reported a registered whitelist")
 	}
 	if _, ok := rv.OwnerOf("app.mydomain.com"); ok {
@@ -26,15 +28,16 @@ func TestDomainWritesInvalidateOriginCache(t *testing.T) {
 		t.Fatalf("seed provider account: %v", err)
 	}
 
+	forLink := true
 	create := httptest.NewRequest(http.MethodPost, "/api/dns/domains", nil)
 	if _, err := p.createDomain(ctx, &CreateDomainInput{
 		Ctx:  mkCtx(create),
-		Body: domainDTO{Name: "mydomain.com", ProviderAccountID: acc.ID},
+		Body: domainDTO{Name: "mydomain.com", ProviderAccountID: acc.ID, ForLink: &forLink},
 	}); err != nil {
 		t.Fatalf("createDomain: %v", err)
 	}
 
-	if !rv.AnyRegistered() {
+	if !rv.Any() {
 		t.Error("after creating a domain origin still reports no whitelist: the request Host is still being honoured verbatim")
 	}
 	org, ok := rv.OwnerOf("app.mydomain.com")
@@ -59,12 +62,17 @@ func TestDomainWritesInvalidateOriginCache(t *testing.T) {
 
 func TestPurgeInvalidatesOriginCache(t *testing.T) {
 	p, _ := setupFullDNSTestDB(t)
-	rv := origin.NewResolver(p.db)
+	rv := newFakeHostRegistry()
+	p.SetHost(&plugin.TestHost{HostsMock: rv})
 
-	if err := p.db.Create(&Domain{OrgID: 1, Name: "purgeme.example"}).Error; err != nil {
+	dom := Domain{OrgID: 1, Name: "purgeme.example", ForLink: true}
+	if err := p.db.Create(&dom).Error; err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	origin.ClearDomainCache("purgeme.example")
+	if err := p.syncDomainHosts(context.Background(), &dom); err != nil {
+		t.Fatalf("sync domain hosts: %v", err)
+	}
+	origin.ClearHostCache("purgeme.example")
 	if org, ok := rv.OwnerOf("app.purgeme.example"); !ok || org != 1 {
 		t.Fatalf("OwnerOf = (%d, %v) before purge, want (1, true); the assertion below would be vacuous", org, ok)
 	}

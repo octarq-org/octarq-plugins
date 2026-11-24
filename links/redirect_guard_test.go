@@ -1,6 +1,7 @@
 package links
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -94,7 +95,10 @@ func TestLookupRefusesContestedHost(t *testing.T) {
 				t.Fatalf("seed attacker link: %v", err)
 			}
 
+			hosts := newFakeHostRegistry()
+			hosts.setAmbiguous("victim.test", true)
 			eng := NewEngine(db, mockCtx())
+			eng.SetHosts(hosts)
 			got, ok := eng.Lookup("victim.test", "promo")
 			if ok {
 				t.Fatalf("contested host resolved to org %d target %q — must refuse, not pick a side", got.OrgID, got.Target)
@@ -117,7 +121,10 @@ func TestLookupScopesOwnedHostToOwner(t *testing.T) {
 		t.Fatalf("seed org2 link: %v", err)
 	}
 
+	hosts := newFakeHostRegistry()
+	_ = hosts.ReplaceOwned(context.Background(), 1, "test.source", []string{"victim.test"}, true)
 	eng := NewEngine(db, mockCtx())
+	eng.SetHosts(hosts)
 
 	got, ok := eng.Lookup("victim.test", "x")
 	if !ok || got.ID != legit.ID {

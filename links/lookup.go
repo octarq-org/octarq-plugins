@@ -58,12 +58,14 @@ func (e *Engine) Lookup(host, slug string) (*Link, bool) {
 }
 
 func (e *Engine) scopeForHost(slug, host string) (*gorm.DB, bool) {
-	if owner, ok := e.resolver.OwnerOf(host); ok {
-		return e.db.Where("slug = ? AND (host = ? OR host = '')", slug, host).
-			Where("owner_id = ?", owner), true
-	}
-	if e.resolver.ServesTraffic(host) {
-		return nil, false
+	if e.hosts != nil {
+		if owner, ok := e.hosts.OwnerOf(host); ok {
+			return e.db.Where("slug = ? AND (host = ? OR host = '')", slug, host).
+				Where("owner_id = ?", owner), true
+		}
+		if e.hosts.ServesTraffic(host) {
+			return nil, false
+		}
 	}
 	return e.db.Where("slug = ? AND host = ''", slug), true
 }

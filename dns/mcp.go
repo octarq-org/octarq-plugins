@@ -81,9 +81,13 @@ func (p *Plugin) mcpUpdateDomainConfig(ctx context.Context, _ *mcp.CallToolReque
 	if in.Note != "" {
 		dom.Note = in.Note
 	}
+	if err := p.syncDomainHosts(ctx, &dom); err != nil {
+		return nil, nil, err
+	}
 	if err := p.db.WithContext(ctx).Save(&dom).Error; err != nil {
 		return nil, nil, err
 	}
+	forgetOrigin(dom.Name)
 	return jsonResult(domainOut{ID: dom.ID, Name: dom.Name, ForMail: dom.ForMail, ForLink: dom.ForLink, ZoneID: dom.ZoneID})
 }
 
