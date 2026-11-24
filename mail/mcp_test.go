@@ -2,6 +2,8 @@ package mail
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -394,4 +396,167 @@ func TestMCPGetEmailContentAndSummary(t *testing.T) {
 	if _, _, err := p.mcpGetEmailSummary(ctx2, nil, getEmailSummaryInput{EmailID: email1.ID}); err == nil {
 		t.Errorf("security violation: Org 2 must not read Org 1's email summary")
 	}
+}
+
+func connectMailClientSession(t *testing.T, ctx context.Context, srv *mcp.Server) *mcp.ClientSession {
+	t.Helper()
+	client := mcp.NewClient(&mcp.Implementation{Name: "client", Version: "1.0"}, nil)
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	serverSession, err := srv.Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	t.Cleanup(func() { serverSession.Close() })
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { clientSession.Close() })
+	return clientSession
+}
+
+func TestMCPResources_MailboxLatest(t *testing.T) {
+	db, p := setupMailboxTestDB(t)
+	db.Where("1 = 1").Delete(&Mailbox{})
+	db.Where("1 = 1").Delete(&Email{})
+
+	srv := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1.0"}, nil)
+	p.RegisterMCP(srv)
+	p.RegisterMCP(srv)
+
+	now := time.Now().UTC()
+	mb1 := Mailbox{OrgID: 1, Address: "inbox@example.com", Enabled: true}
+	mbEmpty := Mailbox{OrgID: 1, Address: "empty@example.com", Enabled: true}
+	mbOrg2 := Mailbox{OrgID: 2, Address: "secret@other.com", Enabled: true}
+	db.Create(&mb1)
+	db.Create(&mbEmpty)
+	db.Create(&mbOrg2)
+
+	e1 := Email{MailboxID: mb1.ID, FromAddr: "sender1@test.com", Subject: "First", Read: false, ReceivedAt: now.Add(-10 * time.Minute)}
+	e2 := Email{MailboxID: mb1.ID, FromAddr: "sender2@test.com", Subject: "Latest", Read: true, ReceivedAt: now.Add(-1 * time.Minute)}
+	e3 := Email{MailboxID: mb1.ID, FromAddr: "sender3@test.com", Subject: "Unread", Read: false, ReceivedAt: now.Add(-5 * time.Minute)}
+	db.Create(&e1)
+	db.Create(&e2)
+	db.Create(&e3)
+
+	ctx1 := plugin.WithOrgID(context.Background(), 1)
+	cs1 := connectMailClientSession(t, ctx1, srv)
+
+	uri1 := fmt.Sprintf("octarq://mailboxes/%d/latest", mb1.ID)
+	read1, err := cs1.ReadResource(ctx1, &mcp.ReadResourceParams{URI: uri1})
+	if err != nil {
+		t.Fatalf("ReadResource(%s): %v", uri1, err)
+	}
+	var res1 MailboxLatestResource
+	if err := json.Unmarshal([]byte(read1.Contents[0].Text), &res1); err != nil {
+		t.Fatalf("unmarshal mailbox latest: %v", err)
+	}
+	if res1.OrgID != 1 {
+		t.Errorf("OrgID = %d, want 1", res1.OrgID)
+	}
+	if res1.MailboxID != mb1.ID {
+		t.Errorf("MailboxID = %d, want %d", res1.MailboxID, mb1.ID)
+	}
+	if res1.Address != "inbox@example.com" {
+		t.Errorf("Address = %s, want inbox@example.com", res1.Address)
+	}
+	if res1.Unread != 2 {
+		t.Errorf("Unread = %d, want 2 (e1, e3)", res1.Unread)
+	}
+	if res1.Latest == nil {
+		t.Fatal("Latest is nil, expected email")
+	}
+	if res1.Latest.ID != e2.ID || res1.Latest.Subject != "Latest" || res1.Latest.From != "sender2@test.com" {
+		t.Errorf("unexpected Latest email: %+v", res1.Latest)
+	}
+
+	uriEmpty := fmt.Sprintf("octarq://mailboxes/%d/latest", mbEmpty.ID)
+	readEmpty, err := cs1.ReadResource(ctx1, &mcp.ReadResourceParams{URI: uriEmpty})
+	if err != nil {
+		t.Fatalf("ReadResource(%s): %v", uriEmpty, err)
+	}
+	var resEmpty MailboxLatestResource
+	if err := json.Unmarshal([]byte(readEmpty.Contents[0].Text), &resEmpty); err != nil {
+		t.Fatalf("unmarshal empty mailbox latest: %v", err)
+	}
+	if resEmpty.Unread != 0 {
+		t.Errorf("empty mailbox Unread = %d, want 0", resEmpty.Unread)
+	}
+	if resEmpty.Latest != nil {
+		t.Errorf("expected null Latest, got: %+v", resEmpty.Latest)
+	}
+	if !strings.Contains(readEmpty.Contents[0].Text, `"latest": null`) {
+		t.Errorf("expected JSON to contain '\"latest\": null', got: %s", readEmpty.Contents[0].Text)
+	}
+
+	ctx2 := plugin.WithOrgID(context.Background(), 2)
+	cs2 := connectMailClientSession(t, ctx2, srv)
+	_, errCrossOrg := cs2.ReadResource(ctx2, &mcp.ReadResourceParams{URI: uri1})
+	if errCrossOrg == nil {
+		t.Error("expected ResourceNotFound when org 2 reads org 1's mailbox")
+	}
+
+	_, errNotFound := cs1.ReadResource(ctx1, &mcp.ReadResourceParams{URI: "octarq://mailboxes/99999/latest"})
+	if errNotFound == nil {
+		t.Error("expected ResourceNotFound for non-existent mailbox")
+	}
+
+	for _, badURI := range []string{
+		"octarq://mailboxes/abc/latest",
+		"octarq://mailboxes/0/latest",
+		"octarq://mailboxes/latest",
+		"octarq://mailboxes/1/2/latest",
+	} {
+		if _, err := cs1.ReadResource(ctx1, &mcp.ReadResourceParams{URI: badURI}); err == nil {
+			t.Errorf("expected error for malformed URI %q", badURI)
+		}
+	}
+
+	csNoOrg := connectMailClientSession(t, context.Background(), srv)
+	_, errNoOrg := csNoOrg.ReadResource(context.Background(), &mcp.ReadResourceParams{URI: uri1})
+	if errNoOrg == nil {
+		t.Error("expected error for zero org, got nil")
+	}
+}
+
+func TestMCPResources_MailConflictPanics(t *testing.T) {
+	srv := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1.0"}, nil)
+	addMCPResourceTemplate(srv, "mail", &mcp.ResourceTemplate{
+		URITemplate: "octarq://mailboxes/{id}/latest",
+	}, func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		return nil, nil
+	})
+
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Fatal("expected panic on conflict with different owner")
+			}
+		}()
+		addMCPResourceTemplate(srv, "other", &mcp.ResourceTemplate{
+			URITemplate: "octarq://mailboxes/{id}/latest",
+		}, func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+			return nil, nil
+		})
+	}()
+
+	srvCore := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1.0"}, nil)
+	srvCore.AddResourceTemplate(&mcp.ResourceTemplate{
+		URITemplate: "octarq://mailboxes/{id}/core-tmpl",
+	}, func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		return nil, nil
+	})
+
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Fatal("expected panic on core template conflict")
+			}
+		}()
+		addMCPResourceTemplate(srvCore, "mail", &mcp.ResourceTemplate{
+			URITemplate: "octarq://mailboxes/{id}/core-tmpl",
+		}, func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+			return nil, nil
+		})
+	}()
 }

@@ -79,6 +79,8 @@ func (p *Plugin) RegisterMCP(srv *mcp.Server) {
 		Name:        "octarq_network__batch_create_links",
 		Description: "Create multiple short links in a single operation.",
 	}, p.mcpBatchCreateLinks)
+
+	p.registerMCPResources(srv)
 }
 
 func (p *Plugin) mcpListLinks(ctx context.Context, _ *mcp.CallToolRequest, in listLinksInput) (*mcp.CallToolResult, any, error) {

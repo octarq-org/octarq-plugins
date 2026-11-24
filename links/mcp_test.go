@@ -2,6 +2,8 @@ package links
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -450,4 +452,183 @@ func TestLinksCapabilities(t *testing.T) {
 	if outReady.Body.GeoReady != true || outReady.Body.Mode != "configured" {
 		t.Errorf("wired capabilities: %+v", outReady.Body)
 	}
+}
+
+func connectTestSession(t *testing.T, ctx context.Context, srv *mcp.Server) *mcp.ClientSession {
+	t.Helper()
+	client := mcp.NewClient(&mcp.Implementation{Name: "client", Version: "1.0"}, nil)
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	serverSession, err := srv.Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	t.Cleanup(func() { serverSession.Close() })
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { clientSession.Close() })
+	return clientSession
+}
+
+func TestMCPResources_LinksTrendingAndTraffic(t *testing.T) {
+	p, _ := setupFullLinksTestDB(t)
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1.0"}, nil)
+	p.RegisterMCP(server)
+	p.RegisterMCP(server)
+
+	now := time.Now().UTC()
+	l1 := Link{OrgID: 1, Host: "go.corp.com", Slug: "l1", Title: "Link 1", Clicks: 50, Enabled: true, Archived: false, CreatedAt: now.AddDate(0, 0, -2)}
+	l2 := Link{OrgID: 1, Host: "go.corp.com", Slug: "l2", Title: "Link 2", Clicks: 30, Enabled: true, Archived: false, CreatedAt: now.AddDate(0, 0, -10)}
+	l3 := Link{OrgID: 1, Host: "go.corp.com", Slug: "l3", Title: "Link 3", Clicks: 20, Enabled: false, Archived: true, CreatedAt: now.AddDate(0, 0, -40)}
+	lOrg2 := Link{OrgID: 2, Host: "other.com", Slug: "secret", Title: "Secret", Clicks: 500, Enabled: true, Archived: false, CreatedAt: now}
+
+	p.db.Create(&l1)
+	p.db.Create(&l2)
+	p.db.Create(&l3)
+	p.db.Create(&lOrg2)
+
+	ctx1 := plugin.WithOrgID(context.Background(), 1)
+	cs1 := connectTestSession(t, ctx1, server)
+
+	readTrending, err := cs1.ReadResource(ctx1, &mcp.ReadResourceParams{URI: "octarq://links/trending"})
+	if err != nil {
+		t.Fatalf("ReadResource(trending): %v", err)
+	}
+	var trend TrendingLinksResource
+	if err := json.Unmarshal([]byte(readTrending.Contents[0].Text), &trend); err != nil {
+		t.Fatalf("unmarshal trending JSON: %v", err)
+	}
+	if trend.OrgID != 1 {
+		t.Errorf("expected OrgID = 1, got %d", trend.OrgID)
+	}
+	if len(trend.Links) != 2 {
+		t.Fatalf("expected 2 unarchived links, got %d", len(trend.Links))
+	}
+	if trend.Links[0].Slug != "l1" || trend.Links[0].Clicks != 50 {
+		t.Errorf("expected top link l1 with 50 clicks, got %+v", trend.Links[0])
+	}
+	if trend.Links[1].Slug != "l2" || trend.Links[1].Clicks != 30 {
+		t.Errorf("expected second link l2 with 30 clicks, got %+v", trend.Links[1])
+	}
+
+	ctx2 := plugin.WithOrgID(context.Background(), 2)
+	cs2 := connectTestSession(t, ctx2, server)
+
+	readTrending2, err := cs2.ReadResource(ctx2, &mcp.ReadResourceParams{URI: "octarq://links/trending"})
+	if err != nil {
+		t.Fatalf("ReadResource(trending org2): %v", err)
+	}
+	var trend2 TrendingLinksResource
+	if err := json.Unmarshal([]byte(readTrending2.Contents[0].Text), &trend2); err != nil {
+		t.Fatalf("unmarshal trending2 JSON: %v", err)
+	}
+	if trend2.OrgID != 2 || len(trend2.Links) != 1 || trend2.Links[0].Slug != "secret" {
+		t.Errorf("unexpected trend2: %+v", trend2)
+	}
+
+	readTraffic, err := cs1.ReadResource(ctx1, &mcp.ReadResourceParams{URI: "octarq://metrics/traffic"})
+	if err != nil {
+		t.Fatalf("ReadResource(traffic): %v", err)
+	}
+	var traffic TrafficMetricsResource
+	if err := json.Unmarshal([]byte(readTraffic.Contents[0].Text), &traffic); err != nil {
+		t.Fatalf("unmarshal traffic JSON: %v", err)
+	}
+	if traffic.OrgID != 1 {
+		t.Errorf("traffic OrgID = %d, want 1", traffic.OrgID)
+	}
+	if traffic.TotalLinks != 3 {
+		t.Errorf("traffic TotalLinks = %d, want 3", traffic.TotalLinks)
+	}
+	if traffic.ActiveLinks != 2 {
+		t.Errorf("traffic ActiveLinks = %d, want 2", traffic.ActiveLinks)
+	}
+	if traffic.TotalClicks != 100 {
+		t.Errorf("traffic TotalClicks = %d, want 100", traffic.TotalClicks)
+	}
+	if traffic.Clicks7d != 50 {
+		t.Errorf("traffic Clicks7d = %d, want 50 (l1 created 2 days ago)", traffic.Clicks7d)
+	}
+	if traffic.Clicks30d != 80 {
+		t.Errorf("traffic Clicks30d = %d, want 80 (l1 + l2)", traffic.Clicks30d)
+	}
+	if len(traffic.TopLinks) != 2 {
+		t.Errorf("traffic TopLinks count = %d, want 2", len(traffic.TopLinks))
+	}
+
+	ctxEmpty := plugin.WithOrgID(context.Background(), 999)
+	csEmpty := connectTestSession(t, ctxEmpty, server)
+
+	readEmpty, err := csEmpty.ReadResource(ctxEmpty, &mcp.ReadResourceParams{URI: "octarq://links/trending"})
+	if err != nil {
+		t.Fatalf("ReadResource empty org: %v", err)
+	}
+	if !strings.Contains(readEmpty.Contents[0].Text, `"links": []`) {
+		t.Errorf("expected empty array [] for links, got: %s", readEmpty.Contents[0].Text)
+	}
+
+	readTrafficEmpty, err := csEmpty.ReadResource(ctxEmpty, &mcp.ReadResourceParams{URI: "octarq://metrics/traffic"})
+	if err != nil {
+		t.Fatalf("ReadResource traffic empty org: %v", err)
+	}
+	if !strings.Contains(readTrafficEmpty.Contents[0].Text, `"top_links": []`) {
+		t.Errorf("expected empty array [] for top_links, got: %s", readTrafficEmpty.Contents[0].Text)
+	}
+
+	csNoOrg := connectTestSession(t, context.Background(), server)
+	_, errNoOrg := csNoOrg.ReadResource(context.Background(), &mcp.ReadResourceParams{URI: "octarq://links/trending"})
+	if errNoOrg == nil {
+		t.Error("expected error for unauthenticated/zero-org context, got nil")
+	}
+
+	_, errNotFound := cs1.ReadResource(ctx1, &mcp.ReadResourceParams{URI: "octarq://unknown/resource"})
+	if errNotFound == nil {
+		t.Error("expected error for unknown resource URI")
+	}
+}
+
+func TestMCPResources_ConflictPanic(t *testing.T) {
+	srv := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1.0"}, nil)
+	addMCPResource(srv, "links", &mcp.Resource{
+		URI: "octarq://links/test-conflict",
+	}, func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		return nil, nil
+	})
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic on conflict, got none")
+		}
+	}()
+
+	addMCPResource(srv, "other_plugin", &mcp.Resource{
+		URI: "octarq://links/test-conflict",
+	}, func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		return nil, nil
+	})
+}
+
+func TestMCPResources_CoreConflictPanic(t *testing.T) {
+	srv := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1.0"}, nil)
+	srv.AddResource(&mcp.Resource{
+		URI: "octarq://metrics/traffic-core-existing",
+	}, func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		return nil, nil
+	})
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic on core conflict, got none")
+		}
+	}()
+
+	addMCPResource(srv, "links", &mcp.Resource{
+		URI: "octarq://metrics/traffic-core-existing",
+	}, func(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+		return nil, nil
+	})
 }
