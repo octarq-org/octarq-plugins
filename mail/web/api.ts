@@ -209,7 +209,7 @@ export const mailApi = {
   mailAiStatus,
   summarizeEmail,
 
-  overview: (includeBot = false) => req<any>("GET", `/api/overview?include_bot=${includeBot}`),
+  overview: () => req<any>("GET", "/api/overview"),
 };
 
 export { mailApi as api };

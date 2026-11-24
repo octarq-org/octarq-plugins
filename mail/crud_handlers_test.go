@@ -216,7 +216,7 @@ func TestMailOverviewHandler(t *testing.T) {
 	p.db.Create(&Mailbox{OrgID: 1, Address: "info@example.com", Enabled: true})
 	p.db.Create(&Email{MailboxID: 1, Subject: "Test", Read: false, ReceivedAt: time.Now()})
 
-	stats := p.overview(1, false)
+	stats := p.overview(1)
 	if stats["mailboxesCount"] == 0 && stats["mailboxes"] == 0 {
 		t.Errorf("overview expected non-zero mailboxes count, got %+v", stats)
 	}

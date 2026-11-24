@@ -283,7 +283,7 @@ func TestOverviewCounts(t *testing.T) {
 	p.db.Create(&Domain{OrgID: 1, Name: "b.com", ProviderAccountID: accID, ForMail: true})
 	p.db.Create(&Domain{OrgID: 2, Name: "c.com", ProviderAccountID: accID})
 
-	ov := p.overview(1, false)
+	ov := p.overview(1)
 	if ov["domains"] != int64(2) {
 		t.Errorf("domains = %v, want 2", ov["domains"])
 	}

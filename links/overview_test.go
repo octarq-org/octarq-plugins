@@ -37,7 +37,7 @@ func TestOverviewBotClicksScopedToOrgLinks(t *testing.T) {
 	db.Create(&LinkEvent{LinkID: link.ID, IsBot: true, CreatedAt: now})
 	db.Create(&LinkEvent{LinkID: link.ID, IsBot: false, CreatedAt: now})
 
-	out := p.overview(org, true)
+	out := p.overview(org)
 
 	if got := out["botClicks7d"].(int64); got != 2 {
 		t.Errorf("botClicks7d = %d, want 2", got)
@@ -60,7 +60,7 @@ func TestOverviewTopLinksIncludesTitleAndTags(t *testing.T) {
 		t.Fatalf("create link: %v", err)
 	}
 
-	out := p.overview(org, true)
+	out := p.overview(org)
 	top, ok := out["topLinks"].([]topLink)
 	if !ok || len(top) == 0 {
 		t.Fatalf("topLinks missing or empty: %v", out["topLinks"])

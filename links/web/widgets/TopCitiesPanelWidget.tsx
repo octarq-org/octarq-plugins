@@ -1,9 +1,7 @@
 import { Panel, BarList, useTranslation, useOverviewData, type StatKV } from "@octarq/plugin-sdk";
-import { useIncludeBot } from "../store";
 
 export default function TopCitiesPanelWidget() {
-  const [includeBot] = useIncludeBot();
-  const o = useOverviewData(includeBot);
+  const o = useOverviewData();
   const { t } = useTranslation();
 
   if (!o || o.cities === undefined) return null;
@@ -12,7 +10,7 @@ export default function TopCitiesPanelWidget() {
   const hasClicksInWindow = (o.clicks30d ?? 0) > 0;
 
   return (
-    <Panel title={`${t("links.topCities")}${includeBot ? " " + t("links.inclBots") : ""}`}>
+    <Panel title={`${t("links.topCities")}`}>
       <BarList rows={cities} empty={
         hasClicksInWindow ? (
           <span>

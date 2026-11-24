@@ -113,7 +113,7 @@ func TestLinksOverview(t *testing.T) {
 	p.db.Create(&Link{OrgID: 1, Slug: "l1", Target: "https://a.com", Clicks: 10})
 	p.db.Create(&LinkEvent{LinkID: 1, Referer: "google.com", Country: "US", CreatedAt: time.Now()})
 
-	stats := p.overview(1, false)
+	stats := p.overview(1)
 	if stats["totalLinks"] == 0 && stats["links"] == 0 {
 		t.Errorf("overview expected non-zero links count, got %+v", stats)
 	}
