@@ -4,9 +4,11 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/octarq-org/octarq-plugins/dns/provider"
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
@@ -376,5 +378,78 @@ func TestHostSync_MCPUpdateDomainConfig(t *testing.T) {
 	}
 	if !fake.ServesTraffic("mcp-test.org") {
 		t.Fatal("expected mcp-test.org to serve traffic after MCP update")
+	}
+}
+
+func TestSyncDomainsReportsHostBindConflict(t *testing.T) {
+	p, mkCtx := setupFreshTestDB(t)
+	fake := newFakeHostRegistry()
+	p.SetHost(&plugin.TestHost{HostsMock: fake})
+
+	ctx := context.Background()
+	if err := fake.Bind(ctx, 2, "taken.example.com", true, "other-plugin"); err != nil {
+		t.Fatalf("pre-bind conflicting host: %v", err)
+	}
+
+	fakeProv := &fakeDNSProvider{zones: []provider.Zone{{ID: "z-taken", Name: "taken.example.com"}}}
+	provName := registerFakeProvider(t, "sync-bind-conflict", fakeProv)
+	acc, err := seedVaultProviderAccount(p, 1, "sync-bind-conflict-acc", provName, map[string]any{"apiToken": "tok"})
+	if err != nil {
+		t.Fatalf("seed provider account: %v", err)
+	}
+	if err := p.db.Create(&Domain{OrgID: 1, Name: "taken.example.com", ProviderAccountID: acc.ID, ZoneID: "z-old", ForLink: true}).Error; err != nil {
+		t.Fatalf("seed domain: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/domains/sync", nil)
+	_, err = p.syncDomains(ctx, &SyncDomainsInput{
+		Ctx: mkCtx(req),
+		Body: struct {
+			ProviderAccountID uint `json:"providerAccountId,omitempty"`
+		}{acc.ID},
+	})
+	if err == nil {
+		t.Fatal("expected conflict error when host binding fails")
+	}
+	if statusOf(t, err) != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", statusOf(t, err), http.StatusConflict)
+	}
+	if !strings.Contains(err.Error(), "taken.example.com") {
+		t.Fatalf("error %q does not name the domain that could not be registered", err)
+	}
+}
+
+func TestSyncDomainsSucceedsWhenHostsBind(t *testing.T) {
+	p, mkCtx := setupFreshTestDB(t)
+	fake := newFakeHostRegistry()
+	p.SetHost(&plugin.TestHost{HostsMock: fake})
+
+	ctx := context.Background()
+	fakeProv := &fakeDNSProvider{zones: []provider.Zone{{ID: "z-free", Name: "free.example.com"}}}
+	provName := registerFakeProvider(t, "sync-bind-ok", fakeProv)
+	acc, err := seedVaultProviderAccount(p, 1, "sync-bind-ok-acc", provName, map[string]any{"apiToken": "tok"})
+	if err != nil {
+		t.Fatalf("seed provider account: %v", err)
+	}
+	if err := p.db.Create(&Domain{OrgID: 1, Name: "free.example.com", ProviderAccountID: acc.ID, ZoneID: "z-old", ForLink: true}).Error; err != nil {
+		t.Fatalf("seed domain: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/domains/sync", nil)
+	out, err := p.syncDomains(ctx, &SyncDomainsInput{
+		Ctx: mkCtx(req),
+		Body: struct {
+			ProviderAccountID uint `json:"providerAccountId,omitempty"`
+		}{acc.ID},
+	})
+	if err != nil {
+		t.Fatalf("syncDomains: %v", err)
+	}
+	if out.Body["updated"] != 1 {
+		t.Fatalf("updated = %v, want 1", out.Body["updated"])
+	}
+	owner, ok := fake.OwnerOf("free.example.com")
+	if !ok || owner != 1 {
+		t.Fatalf("expected free.example.com to be owned by org 1, got owner=%d ok=%v", owner, ok)
 	}
 }
