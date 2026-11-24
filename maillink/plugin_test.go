@@ -37,6 +37,7 @@ func (h *mockHost) Crypto() plugin.CryptoVault                                 {
 func (h *mockHost) Settings() plugin.SettingsStore                             { return nil }
 func (h *mockHost) Events() plugin.EventSpine                                  { return nil }
 func (h *mockHost) Hosts() plugin.HostRegistry                                 { return plugin.NoopHostRegistry() }
+func (h *mockHost) TrustProxy() bool                                           { return false }
 func (h *mockHost) SpendLedger() plugin.SpendLedger                            { return nil }
 func (h *mockHost) HarnessSpec(context.Context, uint) (json.RawMessage, error) { return nil, nil }
 func (h *mockHost) TenantDB(orgID uint) *plugin.TenantDB {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/octarq-org/octarq-plugins/links/contract"
 	"github.com/octarq-org/octarq/server/plugin"
 	"gorm.io/gorm"
 )
@@ -66,7 +67,7 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 		ctx.Provide(plugin.OverviewServiceName("links"), plugin.OverviewFunc(p.overview))
 		ctx.Provide(plugin.PurgeServiceName("links"), plugin.PurgeFunc(p.purge))
 		ctx.Provide(plugin.ExportServiceName("links"), plugin.ExportFunc(p.exportData))
-		ctx.Provide("links.create", plugin.LinkCreator(p))
+		ctx.Provide(contract.ServiceCreate, contract.Creator(p))
 		ctx.Provide(plugin.CleanupServiceName("links"), plugin.CleanupFunc(p.cleanupEvents))
 		ctx.Provide(plugin.MCPExportServiceName("links"), plugin.MCPExporter(p.mcpExportLinks))
 	}

@@ -146,7 +146,7 @@ func TestGetStorageProviderBackends(t *testing.T) {
 
 	custom := &fakeStorageProvider{}
 	p.ctx = &plugin.Context{Lookup: func(name string) (any, bool) {
-		if name == plugin.ServiceMailStorageProvider {
+		if name == ServiceStorageProvider {
 			return custom, true
 		}
 		return nil, false
@@ -164,7 +164,7 @@ func TestGetStorageProviderBackends(t *testing.T) {
 
 	dbP := NewDBStorageProvider(p.db)
 	p.ctx = &plugin.Context{Lookup: func(name string) (any, bool) {
-		if name == plugin.ServiceMailStorageProvider {
+		if name == ServiceStorageProvider {
 			return dbP, true
 		}
 		return nil, false
@@ -275,7 +275,7 @@ func TestSendSystemMailSuccessRecordsUsage(t *testing.T) {
 
 	usage := 0
 	p.recordUsage = func(orgID uint, metric string, n int64) {
-		if metric == plugin.MetricMailOut {
+		if metric == metricMailOut {
 			usage++
 		}
 	}

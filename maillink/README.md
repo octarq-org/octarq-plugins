@@ -8,7 +8,7 @@ can grab it over MCP.** No bespoke integration, ~a screenful of Go.
 ```
 📬 inbound email  ──▶  maillink (OnEmail hook)
                         ├─ finds the first URL in the body
-                        ├─ shortens it via the core links.create service
+                        ├─ shortens it via the links `contract.ServiceCreate` service
                         └─ records it
                                   │
 🤖 Claude Code ──▶ MCP tool `list_email_links` ──▶ "here's the short link from your latest email"
@@ -17,7 +17,7 @@ can grab it over MCP.** No bespoke integration, ~a screenful of Go.
 It touches four public `plugin.Context` seams and nothing else:
 
 - **`OnEmail`** — the inbound-mail hook.
-- **`LookupAs[plugin.LinkCreator]`** — the core `links.create` service (no import of the links plugin).
+- **`LookupAs[contract.Creator]`** — the links `contract.ServiceCreate` service.
 - **a GORM `Model`** — auto-migrated, records each auto-created link.
 - **`MCPProvider`** — exposes `list_email_links` so agents can read them.
 

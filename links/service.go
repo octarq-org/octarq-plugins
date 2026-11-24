@@ -6,6 +6,7 @@ import (
 	"log"
 	"strings"
 
+	"github.com/octarq-org/octarq-plugins/links/contract"
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
@@ -38,4 +39,4 @@ func (p *Plugin) CreateLink(ctx context.Context, orgID uint, targetURL string) (
 	return l.Slug, nil
 }
 
-var _ plugin.LinkCreator = (*Plugin)(nil)
+var _ contract.Creator = (*Plugin)(nil)

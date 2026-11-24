@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/octarq-org/octarq-plugins/dns/contract"
 	"github.com/octarq-org/octarq-plugins/dns/provider"
-	"github.com/octarq-org/octarq/server/plugin"
 )
 
 type fakeDNSProvider struct {
@@ -340,11 +340,11 @@ func TestDNSManagerEndToEnd(t *testing.T) {
 		t.Fatalf("mgr.List: %v %+v", err, recs)
 	}
 
-	created, err := mgr.Set(ctx, 1, domID, plugin.DNSRecord{Type: "A", Name: "api.example.com", Content: "2.2.2.2"})
+	created, err := mgr.Set(ctx, 1, domID, contract.Record{Type: "A", Name: "api.example.com", Content: "2.2.2.2"})
 	if err != nil || created.ID == "" {
 		t.Fatalf("mgr.Set create: %v", err)
 	}
-	updated, err := mgr.Set(ctx, 1, domID, plugin.DNSRecord{ID: "r1", Type: "A", Name: "x.example.com", Content: "9.9.9.9"})
+	updated, err := mgr.Set(ctx, 1, domID, contract.Record{ID: "r1", Type: "A", Name: "x.example.com", Content: "9.9.9.9"})
 	if err != nil || updated.Content != "9.9.9.9" {
 		t.Fatalf("mgr.Set update: %v %+v", err, updated)
 	}

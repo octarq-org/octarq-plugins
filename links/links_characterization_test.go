@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/octarq-org/octarq-plugins/links/contract"
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
@@ -18,7 +19,7 @@ func TestLinks_Characterization_InterfaceContracts(t *testing.T) {
 		_ plugin.MenuProvider = (*Plugin)(nil)
 		_ plugin.HelpDocsFS   = (*Plugin)(nil)
 		_ plugin.Starter      = (*Plugin)(nil)
-		_ plugin.LinkCreator  = (*Plugin)(nil)
+		_ contract.Creator    = (*Plugin)(nil)
 	)
 
 	p := New()

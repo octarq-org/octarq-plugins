@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/glebarez/sqlite"
+	linkscontract "github.com/octarq-org/octarq-plugins/links/contract"
 	"github.com/octarq-org/octarq-plugins/mail/pkg/mail"
 	"github.com/octarq-org/octarq/server/pkg/hostlist"
 	"github.com/octarq-org/octarq/server/plugin"
@@ -82,7 +83,7 @@ func TestWrapLinksInEmail(t *testing.T) {
 	mockCreator := &mockTestLinkCreator{db: db}
 	p.ctx = &plugin.Context{
 		Lookup: func(name string) (any, bool) {
-			if name == "links.create" {
+			if name == linkscontract.ServiceCreate {
 				return mockCreator, true
 			}
 			return nil, false
@@ -162,7 +163,7 @@ func TestWrapLinksAvoidDoubleWrapAndInternal(t *testing.T) {
 	mockCreator := &mockTestLinkCreator{db: db}
 	p.ctx = &plugin.Context{
 		Lookup: func(name string) (any, bool) {
-			if name == "links.create" {
+			if name == linkscontract.ServiceCreate {
 				return mockCreator, true
 			}
 			return nil, false
@@ -218,7 +219,7 @@ func TestWrapLinksSlugExhaustionFallback(t *testing.T) {
 	mockCreator := &mockTestLinkCreator{db: db, fail: true}
 	p.ctx = &plugin.Context{
 		Lookup: func(name string) (any, bool) {
-			if name == "links.create" {
+			if name == linkscontract.ServiceCreate {
 				return mockCreator, true
 			}
 			return nil, false

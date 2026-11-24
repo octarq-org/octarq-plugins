@@ -3,8 +3,8 @@ package dns
 import (
 	"testing"
 
+	"github.com/octarq-org/octarq-plugins/dns/contract"
 	"github.com/octarq-org/octarq-plugins/dns/provider"
-	"github.com/octarq-org/octarq/server/plugin"
 )
 
 func TestValidateRecord(t *testing.T) {
@@ -49,17 +49,17 @@ func TestDNSRecordMappingRoundTrip(t *testing.T) {
 		ID: "r1", Type: "MX", Name: "example.com", Content: "mail.example.com",
 		TTL: 600, Proxied: true, Comment: "note", Priority: &prio,
 	}
-	pr := toPluginRecord(in)
+	pr := toContractRecord(in)
 	if pr.ID != in.ID || pr.Type != in.Type || pr.Name != in.Name || pr.Content != in.Content ||
 		pr.TTL != in.TTL || pr.Proxied != in.Proxied || pr.Comment != in.Comment ||
 		pr.Priority == nil || *pr.Priority != prio {
-		t.Errorf("toPluginRecord lost data: %+v", pr)
+		t.Errorf("toContractRecord lost data: %+v", pr)
 	}
-	back := fromPluginRecord(pr)
+	back := fromContractRecord(pr)
 	if back != in {
 		t.Errorf("round-trip mismatch:\n got %+v\nwant %+v", back, in)
 	}
-	if fromPluginRecord(plugin.DNSRecord{Type: "A"}).ID != "" {
+	if fromContractRecord(contract.Record{Type: "A"}).ID != "" {
 		t.Error("empty ID should round-trip to empty (create)")
 	}
 }

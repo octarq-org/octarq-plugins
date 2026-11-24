@@ -172,7 +172,7 @@ func TestCoexistenceRead(t *testing.T) {
 
 	reg := plugin.NewRegistry()
 	memStorage := newMemoryStorageProvider()
-	reg.Provide(plugin.ServiceMailStorageProvider, plugin.StorageProvider(memStorage))
+	reg.Provide(ServiceStorageProvider, plugin.StorageProvider(memStorage))
 
 	pctx := &plugin.Context{
 		DB:   db,
@@ -301,12 +301,12 @@ func TestStorageUsageMetering(t *testing.T) {
 	if len(calls) != 2 {
 		t.Fatalf("expected 2 RecordUsage calls (raw bytes + message count), got %d: %+v", len(calls), calls)
 	}
-	if calls[0].orgID != 10 || calls[0].metric != plugin.MetricRawBytes || calls[0].n != int64(len(rawEML)) {
+	if calls[0].orgID != 10 || calls[0].metric != metricRawBytes || calls[0].n != int64(len(rawEML)) {
 		t.Errorf("raw-bytes call mismatch: expected org=10 metric=%s n=%d, got %+v",
-			plugin.MetricRawBytes, len(rawEML), calls[0])
+			metricRawBytes, len(rawEML), calls[0])
 	}
-	if calls[1].orgID != 10 || calls[1].metric != plugin.MetricMailIn || calls[1].n != 1 {
-		t.Errorf("mailIn call mismatch: expected org=10 metric=%s n=1, got %+v", plugin.MetricMailIn, calls[1])
+	if calls[1].orgID != 10 || calls[1].metric != metricMailIn || calls[1].n != 1 {
+		t.Errorf("mailIn call mismatch: expected org=10 metric=%s n=1, got %+v", metricMailIn, calls[1])
 	}
 }
 
@@ -322,7 +322,7 @@ func TestPurgeDeletesExternalProviderBlobs(t *testing.T) {
 		Lookup:  reg.Lookup,
 	}
 	p.Mount(http.NewServeMux(), pctx)
-	reg.Provide(plugin.ServiceMailStorageProvider, plugin.StorageProvider(mem))
+	reg.Provide(ServiceStorageProvider, plugin.StorageProvider(mem))
 
 	mb := Mailbox{OrgID: 1, Address: "purge@example.com", Enabled: true}
 	db.Create(&mb)

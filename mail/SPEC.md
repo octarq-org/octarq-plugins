@@ -457,9 +457,9 @@ CREATE INDEX idx_mail_drafts_in_reply_to_id ON mail_drafts(in_reply_to_id);
 
 | Service / Dependency | Usage Context & Resolution Mechanism |
 |---|---|
-| `plugin.ServiceMailStorageProvider` (`"mail.storage_provider"`) | Resolved via `plugin.LookupAs[plugin.StorageProvider](ctx, ...)`. Implemented by Octarq Pro `modules/mailstorage` for remote S3/MinIO/R2 object storage. Defaults to OSS `DBStorageProvider`. |
+| `ServiceStorageProvider` (`"storage.provider"`) | Resolved via `plugin.LookupAs[plugin.StorageProvider](ctx, ...)`. Implemented by Octarq Pro `modules/mailstorage` for remote S3/MinIO/R2 object storage. Defaults to OSS `DBStorageProvider`. |
 | `idempotency.ServiceName` | Middleware attached to `POST /api/emails/send` to guarantee idempotent message dispatch. |
-| `links.Link` & `plugin.LinkCreator` | Scans outbound emails for HTTP(S) links and creates short links under the workspace's link domain. |
+| `links.Link` & `linkscontract.Creator` | Scans outbound emails for HTTP(S) links and creates short links under the workspace's link domain. |
 | `dns.Domain` | Evaluates email domains (`for_mail = true`) and verifies `EffectiveMailHosts()` in catch-all resolution. |
 | `plugin.Context` core services | `ctx.DB`, `ctx.OrgID`, `ctx.Audit`, `ctx.Encrypt` / `ctx.Decrypt`, `ctx.GetWorkspaceSetting`, `ctx.GetGlobalSetting`, `ctx.Notify`, `ctx.PublishEvent`, `ctx.RecordUsage`, `ctx.RequireRole`, `ctx.RegisterWebhookEvent`, `ctx.RegisterTenantView`. |
 

@@ -9,8 +9,8 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
+	"github.com/octarq-org/octarq-plugins/dns/contract"
 	"github.com/octarq-org/octarq-plugins/dns/provider"
-	"github.com/octarq-org/octarq/server/plugin"
 )
 
 func TestResolveMethods(t *testing.T) {
@@ -255,10 +255,10 @@ func TestManagerSetProviderFailure(t *testing.T) {
 	_, domID := seedDomainForProvider(t, p, "mgr-fail.example.com", "z", provName)
 	ctx := context.Background()
 
-	if _, err := p.DNSManager().Set(ctx, 1, domID, plugin.DNSRecord{ID: "r1", Type: "A", Name: "x", Content: "1.1.1.1"}); err == nil {
+	if _, err := p.DNSManager().Set(ctx, 1, domID, contract.Record{ID: "r1", Type: "A", Name: "x", Content: "1.1.1.1"}); err == nil {
 		t.Error("Set(update) must propagate provider error")
 	}
-	if _, err := p.DNSManager().Set(ctx, 1, domID, plugin.DNSRecord{Type: "A", Name: "x", Content: "1.1.1.1"}); err == nil {
+	if _, err := p.DNSManager().Set(ctx, 1, domID, contract.Record{Type: "A", Name: "x", Content: "1.1.1.1"}); err == nil {
 		t.Error("Set(create) must propagate provider error")
 	}
 }

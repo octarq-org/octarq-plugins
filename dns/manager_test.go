@@ -10,11 +10,12 @@ import (
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 	"github.com/glebarez/sqlite"
 	"github.com/octarq-org/octarq-plugins/dns"
+	"github.com/octarq-org/octarq-plugins/dns/contract"
 	"github.com/octarq-org/octarq/server/plugin"
 	"gorm.io/gorm"
 )
 
-func mountForManager(t *testing.T, dbName string) (*gorm.DB, plugin.DNSManager) {
+func mountForManager(t *testing.T, dbName string) (*gorm.DB, contract.Manager) {
 	t.Helper()
 	gdb, err := gorm.Open(sqlite.Open("file:"+dbName+"?mode=memory&cache=shared"), &gorm.Config{})
 	if err != nil {
@@ -40,13 +41,13 @@ func mountForManager(t *testing.T, dbName string) (*gorm.DB, plugin.DNSManager) 
 		},
 	})
 
-	v, ok := reg.Lookup(plugin.ServiceDNSManager)
+	v, ok := reg.Lookup(contract.ServiceManager)
 	if !ok {
 		t.Fatal("dns plugin did not provide the DNS manager service")
 	}
-	mgr, ok := v.(plugin.DNSManager)
+	mgr, ok := v.(contract.Manager)
 	if !ok {
-		t.Fatalf("service %q is not a plugin.DNSManager: %T", plugin.ServiceDNSManager, v)
+		t.Fatalf("service %q is not a contract.Manager: %T", contract.ServiceManager, v)
 	}
 	return gdb, mgr
 }
@@ -64,7 +65,7 @@ func TestManagerScopesDomainToOrg(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	rec := plugin.DNSRecord{Type: "TXT", Name: "_acme-challenge.victim.com", Content: "x"}
+	rec := contract.Record{Type: "TXT", Name: "_acme-challenge.victim.com", Content: "x"}
 
 	crossOrg := map[string]error{}
 	_, err := mgr.List(ctx, 1, other.ID)

@@ -14,6 +14,8 @@ import (
 	"gorm.io/gorm"
 )
 
+const metricClicks = "clicks"
+
 type clickItem struct {
 	orgID       uint
 	slug        string
@@ -220,7 +222,7 @@ func (e *Engine) flushBatch(batch []clickItem) {
 				if suppressed[orgID] {
 					continue
 				}
-				e.ctx.RecordUsage(orgID, plugin.MetricClicks, count)
+				e.ctx.RecordUsage(orgID, metricClicks, count)
 			}
 		}
 		if e.host != nil && e.host.Events() != nil {

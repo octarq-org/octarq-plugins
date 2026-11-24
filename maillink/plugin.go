@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"regexp"
 
+	linkscontract "github.com/octarq-org/octarq-plugins/links/contract"
 	"github.com/octarq-org/octarq/server/plugin"
 	"gorm.io/gorm"
 )
@@ -86,7 +87,7 @@ func (p *Plugin) onEvent(topic string, payload json.RawMessage) {
 	if target == "" {
 		return
 	}
-	creator, ok := plugin.LookupAs[plugin.LinkCreator](p.ctx, "links.create")
+	creator, ok := plugin.LookupAs[linkscontract.Creator](p.ctx, linkscontract.ServiceCreate)
 	if !ok {
 		return
 	}

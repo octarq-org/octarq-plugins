@@ -11,12 +11,11 @@ import (
 	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/octarq-org/octarq-plugins/dns/contract"
 	"github.com/octarq-org/octarq-plugins/dns/provider"
 	"github.com/octarq-org/octarq/server/plugin"
 	"gorm.io/gorm"
 )
-
-const ServiceDNSManager = plugin.ServiceDNSManager
 
 var (
 	errNotFound                = errors.New("not found")
@@ -161,7 +160,7 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 		}, p.updateDDNS)
 	}
 
-	ctx.Provide(plugin.ServiceDNSManager, p.DNSManager())
+	ctx.Provide(contract.ServiceManager, p.DNSManager())
 	ctx.Provide(plugin.OverviewServiceName("dns"), plugin.OverviewFunc(p.overview))
 	ctx.Provide(plugin.PurgeServiceName("dns"), plugin.PurgeFunc(p.purge))
 	ctx.Provide(plugin.ExportServiceName("dns"), plugin.ExportFunc(p.exportData))

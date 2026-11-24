@@ -200,10 +200,10 @@ func TestMailRecordUsageSuccessAndFailure(t *testing.T) {
 	if len(calls) != 2 {
 		t.Fatalf("expected 2 successful RecordUsage calls, got %d", len(calls))
 	}
-	if calls[0].orgID != 100 || calls[0].metric != plugin.MetricMailOut || calls[0].n != 1 {
+	if calls[0].orgID != 100 || calls[0].metric != metricMailOut || calls[0].n != 1 {
 		t.Errorf("call 0 unexpected: %+v", calls[0])
 	}
-	if calls[1].orgID != 100 || calls[1].metric != plugin.MetricMailOut || calls[1].n != 2 {
+	if calls[1].orgID != 100 || calls[1].metric != metricMailOut || calls[1].n != 2 {
 		t.Errorf("call 1 unexpected: %+v", calls[1])
 	}
 }

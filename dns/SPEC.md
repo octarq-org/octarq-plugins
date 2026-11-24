@@ -9,7 +9,7 @@ The `dns` plugin (`octarq/plugins/dns`) is a core infrastructure plugin responsi
 4. **DNS Posture Verification**: Automated DNS probing of SPF, DKIM, DMARC, and CNAME resolution for mail and short-link hostnames.
 5. **Email DNS Blueprint**: One-click generation, validation, and auto-provisioning of standard email DNS routing records (MX, SPF, DMARC).
 6. **Dynamic DNS (DDNS) Engine**: Dyndns2-compatible dynamic DNS update service authenticated via SHA-256 token hashing.
-7. **Cross-Plugin Seam Provider**: Providing the `plugin.DNSManager` ("dns.manager") service for Pro modules and AI MCP tools.
+7. **Cross-Plugin Seam Provider**: Providing the `contract.Manager` ("dns.manager") service for Pro modules and AI MCP tools.
 
 - **Plugin Identifier**: `"dns"` (`plugin.go:82`)
 - **Plugin Metadata**:
@@ -27,7 +27,7 @@ The `dns` plugin (`octarq/plugins/dns`) is a core infrastructure plugin responsi
   - `plugin.PurgeFunc` (`plugin.go:69`)
   - `plugin.OverviewFunc` (`plugin.go:70`)
   - `plugin.MCPExporter` (`plugin.go:71`)
-  - `plugin.DNSManager` (`manager.go:19`)
+  - `contract.Manager` (`manager.go:13`)
 - **Binary Embedding Guarantee**: Co-located at `plugins/dns/SPEC.md`. Strictly excluded from binary embedding (`//go:embed docs` in `plugin.go:122` only bundles user help docs under `docs/`). Zero binary bloat, zero secret leak.
 
 ---
@@ -69,7 +69,7 @@ var (
 	_ plugin.PurgeFunc    = (*Plugin)(nil).purge
 	_ plugin.OverviewFunc = (*Plugin)(nil).overview
 	_ plugin.MCPExporter  = (*Plugin)(nil).mcpExportDomains
-	_ plugin.DNSManager   = (*Plugin)(nil).DNSManager()
+	_ contract.Manager   = (*Plugin)(nil).DNSManager()
 )
 ```
 
@@ -330,11 +330,11 @@ CREATE INDEX idx_dns_ddns_tokens_domain_id ON dns_ddns_tokens(domain_id);
 ## 6. Extension Seams & External Integration Points
 
 ### 6.1 Provided Services (`Mount` in `plugin.go:199-204`)
-1. **`plugin.ServiceDNSManager` ("dns.manager")**:
+1. **`contract.ServiceManager` ("dns.manager")**:
    - Backed by `dnsManager` (`manager.go:15-35`).
    - Pure Go interface implementation:
-     - `List(ctx context.Context, orgID, domainID uint) ([]plugin.DNSRecord, error)`
-     - `Set(ctx context.Context, orgID, domainID uint, r plugin.DNSRecord) (plugin.DNSRecord, error)`
+     - `List(ctx context.Context, orgID, domainID uint) ([]contract.Record, error)`
+     - `Set(ctx context.Context, orgID, domainID uint, r contract.Record) (contract.Record, error)`
      - `Delete(ctx context.Context, orgID, domainID uint, recordID string) error`
    - Scoped strictly by `orgID` to prevent tenant crossing.
 2. **`plugin.OverviewServiceName("dns")` (`"dns.overview"`)**: Returns counts for total domains, link domains, and mail domains.

@@ -2,7 +2,7 @@
 
 An open-source, enterprise-grade **Transactional Email & Mailbox plugin** for [Octarq](https://github.com/octarq-org/octarq).
 
-It provides virtual mailboxes, RFC822 MIME parsing, inbound webhook adapters, outbound SMTP relaying, suppression list management, click wrapping via `plugin.LinkCreator`, and agent-native MCP tools.
+It provides virtual mailboxes, RFC822 MIME parsing, inbound webhook adapters, outbound SMTP relaying, suppression list management, click wrapping via `linkscontract.Creator`, and agent-native MCP tools.
 
 ---
 
@@ -13,7 +13,7 @@ It provides virtual mailboxes, RFC822 MIME parsing, inbound webhook adapters, ou
 - **📤 Outbound SMTP Relay**: Authenticated outbound message delivery with anti-injection headers and TLS enforcement.
 - **🚫 Suppression Lists**: Auto-suppress bounced, complained, or unsubscribed addresses.
 - **🤖 Agent-Native MCP Tools**: Expose mailbox queries and drafting capabilities (`list_mailboxes`, `list_emails`, `send_email`) to AI agents.
-- **🧩 Cross-Plugin Seams**: Emits `email.receive` events, wraps short links via `plugin.LinkCreator` SPI ("links.create"), and exports `NewDBStorageProvider(db)` for object storage backends.
+- **🧩 Cross-Plugin Seams**: Emits `email.receive` events, wraps short links via the links `linkscontract.Creator` SPI (`linkscontract.ServiceCreate`), and exports `NewDBStorageProvider(db)` for object storage backends.
 
 ---
 

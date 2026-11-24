@@ -13,7 +13,7 @@ It provides branded short URLs, routing rules (device, country, language), passw
 - **🛡️ Passcode & Safety Guards**: Protect links with passcodes, click caps, expiry dates, and anti-abuse safeguards.
 - **📊 Real-time Click Analytics**: Non-blocking in-memory click buffering flushing asynchronously to SQLite/Postgres.
 - **🤖 Agent-Native MCP Tools**: Expose link management (`list_links`, `create_link`, `get_link_stats`, `archive_link`) to AI agents.
-- **🧩 Cross-Plugin SPI**: Publishes `plugin.LinkCreator` under `"links.create"` and `plugin.LinkResolver` under `plugin.ServiceLinkResolve`.
+- **🧩 Cross-Plugin SPI**: Publishes `contract.Creator` under `contract.ServiceCreate` and `plugin.LinkResolver` under `plugin.ServiceLinkResolve`.
 
 ---
 
