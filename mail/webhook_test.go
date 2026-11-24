@@ -1,6 +1,7 @@
 package mail
 
 import (
+	"encoding/json"
 	"sync"
 	"testing"
 	"time"
@@ -15,25 +16,26 @@ func TestEmitEmailFansOut(t *testing.T) {
 	p := &Plugin{}
 
 	var mu sync.Mutex
-	got := map[string]plugin.EmailEvent{}
+	got := map[string]InboundEmail{}
+	var topics []string
 	var wg sync.WaitGroup
 	wg.Add(2)
 
-	p.OnEmail(func(e plugin.EmailEvent) {
-		mu.Lock()
-		got["a"] = e
-		mu.Unlock()
-		wg.Done()
-	})
-	p.OnEmail(func(e plugin.EmailEvent) {
-		mu.Lock()
-		got["b"] = e
-		mu.Unlock()
-		wg.Done()
-	})
+	handle := func(key string) func(string, json.RawMessage) {
+		return func(topic string, payload json.RawMessage) {
+			var e InboundEmail
+			_ = json.Unmarshal(payload, &e)
+			mu.Lock()
+			got[key] = e
+			topics = append(topics, topic)
+			mu.Unlock()
+			wg.Done()
+		}
+	}
+	p.Dispatch(handle("a"))
+	p.Dispatch(handle("b"))
 
-	want := plugin.EmailEvent{ID: 7, OrgID: 3, From: "x@y.z", Subject: "hi"}
-	p.emitEmail(want)
+	p.emitEmail(InboundEmail{ID: 7, OrgID: 3, From: "x@y.z", Subject: "hi"})
 
 	done := make(chan struct{})
 	go func() { wg.Wait(); close(done) }()
@@ -48,12 +50,17 @@ func TestEmitEmailFansOut(t *testing.T) {
 	if got["a"].ID != 7 || got["b"].ID != 7 || got["a"].Subject != "hi" {
 		t.Errorf("handlers got wrong event: %+v", got)
 	}
+	for _, topic := range topics {
+		if topic != "mail.inbound" {
+			t.Errorf("topic = %q, want mail.inbound", topic)
+		}
+	}
 }
 
 func TestOnEmailNilIgnored(t *testing.T) {
 	p := &Plugin{}
-	p.OnEmail(nil)
-	p.emitEmail(plugin.EmailEvent{ID: 1})
+	p.Dispatch(nil)
+	p.emitEmail(InboundEmail{ID: 1})
 }
 
 func TestMailDispatcherProvided(t *testing.T) {
@@ -64,13 +71,13 @@ func TestMailDispatcherProvided(t *testing.T) {
 		Lookup:  reg.Lookup,
 	})
 
-	svc, ok := reg.Lookup(plugin.ServiceMailDispatcher)
+	svc, ok := reg.Lookup(plugin.ServiceEventsDispatch)
 	if !ok || svc == nil {
-		t.Fatal("mail.dispatcher service was not provided during Mount")
+		t.Fatal("events.dispatch service was not provided during Mount")
 		return
 	}
-	if _, isDispatcher := svc.(plugin.EmailDispatcher); !isDispatcher {
-		t.Fatalf("mail.dispatcher service has type %T, want plugin.EmailDispatcher", svc)
+	if _, isDispatcher := svc.(plugin.EventDispatcher); !isDispatcher {
+		t.Fatalf("events.dispatch service has type %T, want plugin.EventDispatcher", svc)
 	}
 }
 

@@ -2,6 +2,7 @@ package maillink
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"regexp"
@@ -43,7 +44,7 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 	p.ctx = ctx
 	p.host = plugin.EnsureHost(ctx)
 	if p.host != nil && p.host.Events() != nil {
-		p.host.Events().OnEmail(p.onEmail)
+		p.host.Events().OnEvent(p.onEvent)
 	}
 	if mux == nil || ctx.Guard == nil {
 		return
@@ -58,7 +59,22 @@ func (p *Plugin) Validate(ctx context.Context, host plugin.Host) error {
 	return nil
 }
 
-func (p *Plugin) onEmail(e plugin.EmailEvent) {
+type inboundEmail struct {
+	OrgID   uint   `json:"orgId"`
+	From    string `json:"from"`
+	Subject string `json:"subject"`
+	Text    string `json:"text"`
+	HTML    string `json:"html"`
+}
+
+func (p *Plugin) onEvent(topic string, payload json.RawMessage) {
+	if topic != "mail.inbound" {
+		return
+	}
+	var e inboundEmail
+	if err := json.Unmarshal(payload, &e); err != nil {
+		return
+	}
 	if e.OrgID == 0 {
 		return
 	}

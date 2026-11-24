@@ -3,6 +3,7 @@ package mail
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"io/fs"
 	"net/http"
 	"sync"
@@ -23,7 +24,7 @@ type Plugin struct {
 	sendLimiter         *rateLimiter
 	testLimiter         *rateLimiter
 	emailMu             sync.RWMutex
-	emailHandlers       []func(plugin.EmailEvent)
+	emailHandlers       []func(topic string, payload json.RawMessage)
 	notify              func(ctx context.Context, kind, cfgJSON, message string) error
 	emit                func(ctx context.Context, payload plugin.NotificationPayload) error
 	emitTo              func(ctx context.Context, recipient plugin.NotificationRecipient, payload plugin.NotificationPayload) error
@@ -47,15 +48,15 @@ var (
 )
 
 var (
-	_ plugin.MailSender       = (*Plugin)(nil).sendMail
-	_ plugin.EmailDispatcher  = (*Plugin)(nil).OnEmail
-	_ plugin.MailReady        = (*Plugin)(nil).mailReady
-	_ plugin.SystemMailSender = (*Plugin)(nil).sendSystemMail
-	_ plugin.ExportFunc       = (*Plugin)(nil).exportData
-	_ plugin.PurgeFunc        = (*Plugin)(nil).purge
-	_ plugin.OverviewFunc     = (*Plugin)(nil).overview
-	_ plugin.MCPExporter      = (*Plugin)(nil).mcpExportEmails
-	_ plugin.MCPExporter      = (*Plugin)(nil).mcpExportMailboxes
+	_ plugin.MessagingSender       = (*Plugin)(nil).sendMail
+	_ plugin.EventDispatcher       = (*Plugin)(nil).Dispatch
+	_ plugin.MessagingReady        = (*Plugin)(nil).mailReady
+	_ plugin.SystemMessagingSender = (*Plugin)(nil).sendSystemMail
+	_ plugin.ExportFunc            = (*Plugin)(nil).exportData
+	_ plugin.PurgeFunc             = (*Plugin)(nil).purge
+	_ plugin.OverviewFunc          = (*Plugin)(nil).overview
+	_ plugin.MCPExporter           = (*Plugin)(nil).mcpExportEmails
+	_ plugin.MCPExporter           = (*Plugin)(nil).mcpExportMailboxes
 )
 
 func New() *Plugin {
@@ -164,13 +165,13 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 	}
 
 	if ctx.Provide != nil {
-		ctx.Provide(plugin.ServiceMailDispatcher, plugin.EmailDispatcher(p.OnEmail))
+		ctx.Provide(plugin.ServiceEventsDispatch, plugin.EventDispatcher(p.Dispatch))
 		ctx.Provide(plugin.OverviewServiceName("mail"), plugin.OverviewFunc(p.overview))
 		ctx.Provide(plugin.PurgeServiceName("mail"), plugin.PurgeFunc(p.purge))
 		ctx.Provide(plugin.ExportServiceName("mail"), plugin.ExportFunc(p.exportData))
-		ctx.Provide(plugin.ServiceMailSend, plugin.MailSender(p.sendMail))
-		ctx.Provide(plugin.ServiceMailReady, plugin.MailReady(p.mailReady))
-		ctx.Provide(plugin.ServiceMailSendSystem, plugin.SystemMailSender(p.sendSystemMail))
+		ctx.Provide(plugin.ServiceMessagingSend, plugin.MessagingSender(p.sendMail))
+		ctx.Provide(plugin.ServiceMessagingReady, plugin.MessagingReady(p.mailReady))
+		ctx.Provide(plugin.ServiceMessagingSendSystem, plugin.SystemMessagingSender(p.sendSystemMail))
 		ctx.Provide(plugin.MCPExportServiceName("mailboxes"), plugin.MCPExporter(p.mcpExportMailboxes))
 		ctx.Provide(plugin.MCPExportServiceName("emails"), plugin.MCPExporter(p.mcpExportEmails))
 	}
