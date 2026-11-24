@@ -3,6 +3,8 @@ title: 2FA Vault
 description: Store TOTP accounts for third-party services, generate live codes, and share selected accounts with your workspace.
 category: operations
 order: 25
+routes:
+  - /personal/twofa
 ---
 
 The **2FA Vault** plugin stores Time-based One-Time Password (TOTP) accounts for services like AWS, Cloudflare, GitHub, and your registrar. It generates live verification codes on demand.

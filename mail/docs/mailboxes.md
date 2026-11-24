@@ -3,6 +3,8 @@ title: Mailboxes
 description: Receive inbound emails via webhooks, route messages to custom addresses, and configure outbound SMTP senders.
 category: operations
 order: 20
+routes:
+  - /mail
 ---
 
 Octarq Mailboxes gives your workspace dedicated email addresses on your custom domains. You can receive transactional incoming mail via webhooks, route unassigned addresses with catch-all rules, and send outbound messages through external SMTP relays.

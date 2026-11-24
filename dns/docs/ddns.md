@@ -3,6 +3,8 @@ title: Dynamic DNS
 description: Keep A and AAAA DNS records synchronized with dynamic IP addresses using standard Dyndns2 update endpoints.
 category: infrastructure
 order: 20
+routes:
+  - /domains
 ---
 
 Octarq Dynamic DNS (DDNS) keeps your domain's A (IPv4) and AAAA (IPv6) records synchronized with changing IP addresses on routers, NAS devices, homelabs, and servers. Each DDNS token provides a standard HTTP update URL that works with popular DDNS clients and scheduled scripts.
