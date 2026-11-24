@@ -674,7 +674,6 @@ export const linksI18n = {
       reasonMalware: "Malware",
       reasonOther: "Outro",
     },
-    reservedInstanceAction: "Configure Instância →",
     customReservedLabel: "Palavras reservadas personalizadas",
     customReservedHint: "Digite uma palavra reservada por linha. Links curtos não podem usar essas palavras.",
     saveReserved: "Salvar palavras reservadas",
