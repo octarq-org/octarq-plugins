@@ -208,8 +208,6 @@ export const mailApi = {
 
   mailAiStatus,
   summarizeEmail,
-  aiAssistStatus: mailAiStatus,
-  aiSummarizeEmail: summarizeEmail,
 
   overview: (includeBot = false) => req<any>("GET", `/api/overview?include_bot=${includeBot}`),
 };
