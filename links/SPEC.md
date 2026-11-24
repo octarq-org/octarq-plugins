@@ -18,7 +18,7 @@ The `links` plugin (`plugins/links`) provides core short link creation, multi-te
   - `plugin.InstanceMenuProvider` (`plugin.go:36`)
   - `plugin.HelpDocsFS` (`plugin.go:37`)
   - `plugin.Starter` (`plugin.go:38`)
-  - `plugin.LinkCreator` (`service.go:44`)
+  - `contract.Creator` (`service.go:41`)
 - **Binary Embedding Guarantee**: Co-located at `plugins/links/SPEC.md`. Strictly excluded from binary embedding (`//go:embed docs` in `plugin.go:76-77` only bundles user help docs under `docs/`). Zero binary bloat, zero secret leak.
 
 ---
@@ -64,7 +64,7 @@ var (
 	_ plugin.LinkResolver = (*Plugin)(nil).resolveSlug
 	_ plugin.MCPExporter  = (*Plugin)(nil).mcpExportLinks
 	_ plugin.CleanupFunc  = (*Plugin)(nil).cleanupEvents
-	_ plugin.LinkCreator  = (*Plugin)(nil)
+	_ contract.Creator    = (*Plugin)(nil)
 )
 ```
 
@@ -374,7 +374,7 @@ var (
 | `plugin.PurgeServiceName("links")` (`"links.purge"`) | `plugin.PurgeFunc(p.purge)` | Complete data purge on organization deletion |
 | `plugin.ExportServiceName("links")` (`"links.export"`) | `plugin.ExportFunc(p.exportData)` | Workspace JSON data export |
 | `plugin.ServiceLinkResolve` (`"links.resolve"`) | `plugin.LinkResolver(p.resolveSlug)` | Maps (host, slug) to target & orgID for abuse moderation |
-| `"links.create"` | `plugin.LinkCreator(p)` | Programmatic creation of short links across plugins |
+| `contract.ServiceCreate` (`"links.create"`) | `contract.Creator(p)` | Programmatic creation of short links across plugins |
 | `plugin.CleanupServiceName("links")` (`"links.cleanup"`) | `plugin.CleanupFunc(p.cleanupEvents)` | Time-based batch retention pruning of old click events |
 | `plugin.MCPExportServiceName("links")` (`"links.mcp_export"`) | `plugin.MCPExporter(p.mcpExportLinks)` | MCP-compatible JSON workspace data export |
 | `"links.trust_proxy"` | `func(bool)` (`SetTrustProxy`) | Sets upstream proxy header trust configuration |

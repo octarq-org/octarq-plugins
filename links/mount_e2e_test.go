@@ -12,6 +12,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 
+	"github.com/octarq-org/octarq-plugins/links/contract"
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
@@ -65,7 +66,7 @@ func TestMountWiresEverythingAndServesRoot(t *testing.T) {
 	if len(tasks) != 1 || tasks[0] != "link.crawl" {
 		t.Errorf("tasks = %v, want [link.crawl]", tasks)
 	}
-	for _, want := range []string{"links.overview", "links.purge", "links.export", "links.create", "links.cleanup", "links.mcp_export"} {
+	for _, want := range []string{"links.overview", "links.purge", "links.export", contract.ServiceCreate, "links.cleanup", "links.mcp_export"} {
 		if !slicesContains(provides, want) {
 			t.Errorf("service %s not provided; got %v", want, provides)
 		}
