@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/glebarez/sqlite"
+	linkscontract "github.com/octarq-org/octarq-plugins/links/contract"
 	"github.com/octarq-org/octarq/server/plugin"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -117,15 +118,77 @@ func TestMailLink_MountWithoutHTTPSurface(t *testing.T) {
 }
 
 func TestOnEventConsumesMailInboundContract(t *testing.T) {
-	const payload = `{"id":7,"mailboxId":8,"orgId":3,"from":"sender@example.com","to":"user@example.net","subject":"Hello","text":"plain body","html":"<p>plain body</p>","receivedAt":"2026-01-02T03:04:05Z"}`
-	var e inboundEmail
-	if err := json.Unmarshal([]byte(payload), &e); err != nil {
-		t.Fatalf("unmarshal: %v", err)
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{
+		Logger: logger.Discard,
+	})
+	if err != nil {
+		t.Fatalf("failed to open sqlite: %v", err)
 	}
-	if e.OrgID != 3 {
-		t.Errorf("OrgID = %d, want 3", e.OrgID)
+	if err := db.AutoMigrate(&MailLink{}); err != nil {
+		t.Fatalf("failed to migrate: %v", err)
 	}
-	if e.From != "sender@example.com" {
-		t.Errorf("From = %q, want %q", e.From, "sender@example.com")
+
+	reg := plugin.NewRegistry()
+	creator := &fakeLinkCreator{slug: "short-1"}
+	reg.Provide(linkscontract.ServiceCreate, linkscontract.Creator(creator))
+
+	p := &Plugin{
+		ctx: &plugin.Context{Lookup: reg.Lookup},
+		host: &mockHost{
+			db:      db,
+			session: &mockSession{orgID: func(r *http.Request) uint { return 1 }},
+		},
 	}
+
+	const payload = `{"id":7,"mailboxId":8,"orgId":3,"from":"sender@example.com","to":"user@example.net","subject":"Hello","text":"Read https://example.com/path today","html":"<p>Read <a href=\"https://example.com/path\">this</a></p>","receivedAt":"2026-01-02T03:04:05Z"}`
+	p.onEvent("mail.inbound", json.RawMessage(payload))
+
+	if creator.calls != 1 {
+		t.Fatalf("link creator called %d times, want 1", creator.calls)
+	}
+	if creator.orgID != 3 || creator.target != "https://example.com/path" {
+		t.Fatalf("creator got org=%d target=%q", creator.orgID, creator.target)
+	}
+
+	var links []MailLink
+	if err := db.Find(&links).Error; err != nil {
+		t.Fatalf("load links: %v", err)
+	}
+	if len(links) != 1 {
+		t.Fatalf("stored %d mail links, want 1", len(links))
+	}
+	got := links[0]
+	if got.OrgID != 3 || got.Slug != "short-1" || got.Target != "https://example.com/path" {
+		t.Fatalf("stored link = %+v", got)
+	}
+	if got.Subject != "Hello" || got.From != "sender@example.com" {
+		t.Fatalf("stored link did not keep the mail fields: %+v", got)
+	}
+
+	p.onEvent("mail.outbound", json.RawMessage(payload))
+
+	if creator.calls != 1 {
+		t.Fatalf("link creator called %d times after a different topic, want 1", creator.calls)
+	}
+	var count int64
+	if err := db.Model(&MailLink{}).Count(&count).Error; err != nil {
+		t.Fatalf("count links: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("stored %d mail links after a different topic, want 1", count)
+	}
+}
+
+type fakeLinkCreator struct {
+	slug   string
+	calls  int
+	orgID  uint
+	target string
+}
+
+func (f *fakeLinkCreator) CreateLink(_ context.Context, orgID uint, targetURL string) (string, error) {
+	f.calls++
+	f.orgID = orgID
+	f.target = targetURL
+	return f.slug, nil
 }

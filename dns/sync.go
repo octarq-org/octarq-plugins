@@ -98,11 +98,14 @@ func (p *Plugin) syncDomains(ctx context.Context, input *SyncDomainsInput) (*Syn
 		}
 	}
 
+	var bindFailed []string
 	if len(toUpdate) > 0 {
 		p.db.Save(&toUpdate)
 		for _, d := range toUpdate {
 			forgetOrigin(d.Name)
-			_ = p.syncDomainHosts(r.Context(), &d)
+			if err := p.syncDomainHosts(r.Context(), &d); err != nil {
+				bindFailed = append(bindFailed, d.Name)
+			}
 		}
 	}
 	if len(toCreate) > 0 {
@@ -116,8 +119,14 @@ func (p *Plugin) syncDomains(ctx context.Context, input *SyncDomainsInput) (*Syn
 		p.db.Where("owner_id = ? AND name IN ?", p.orgID(r), toCreateNames).Find(&insertedDoms)
 		for _, d := range insertedDoms {
 			forgetOrigin(d.Name)
-			_ = p.syncDomainHosts(r.Context(), &d)
+			if err := p.syncDomainHosts(r.Context(), &d); err != nil {
+				bindFailed = append(bindFailed, d.Name)
+			}
 		}
+	}
+
+	if len(bindFailed) > 0 {
+		return nil, huma.Error409Conflict("Could not register " + strings.Join(bindFailed, ", ") + ". Fix the conflicting host, then sync again.")
 	}
 
 	return &SyncDomainsOutput{
