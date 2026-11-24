@@ -338,7 +338,7 @@ func (p *Plugin) handleSendEmail(ctx context.Context, in SendEmailToolInput) (*S
 	}
 
 	if p.recordUsage != nil {
-		p.recordUsage(orgID, plugin.MetricMailOut, int64(len(msg.To)))
+		p.recordUsage(orgID, metricMailOut, int64(len(msg.To)))
 	}
 	p.upsertContacts(orgID, toAddrs)
 	p.recordSentEmail(orgID, senderFrom, strings.Join(toAddrs, ", "), msg.Subject, msg.Text, msg.HTML)

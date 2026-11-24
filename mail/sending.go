@@ -18,7 +18,7 @@ import (
 func (p *Plugin) getStorageProvider() (plugin.StorageProvider, error) {
 	var sp plugin.StorageProvider
 	if p.ctx != nil {
-		if found, ok := plugin.LookupAs[plugin.StorageProvider](p.ctx, plugin.ServiceMailStorageProvider); ok && found != nil {
+		if found, ok := plugin.LookupAs[plugin.StorageProvider](p.ctx, ServiceStorageProvider); ok && found != nil {
 			sp = found
 		}
 	}
@@ -314,7 +314,7 @@ func (p *Plugin) deliverVia(s *SMTPSender, to, subject, htmlBody, textBody strin
 		return err
 	}
 	if p.recordUsage != nil {
-		p.recordUsage(s.OrgID, plugin.MetricMailOut, 1)
+		p.recordUsage(s.OrgID, metricMailOut, 1)
 	}
 	return nil
 }
@@ -365,7 +365,7 @@ func (p *Plugin) sendMail(orgID uint, to, subject, htmlBody, textBody string) er
 			return err
 		}
 		if p.recordUsage != nil {
-			p.recordUsage(orgID, plugin.MetricMailOut, 1)
+			p.recordUsage(orgID, metricMailOut, 1)
 		}
 		return nil
 	}

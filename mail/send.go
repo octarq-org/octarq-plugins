@@ -11,6 +11,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
+	linkscontract "github.com/octarq-org/octarq-plugins/links/contract"
 	"github.com/octarq-org/octarq-plugins/mail/pkg/mail"
 	"github.com/octarq-org/octarq/server/plugin"
 )
@@ -96,7 +97,7 @@ func (p *Plugin) sendEmail(ctx context.Context, input *SendEmailInput) (*SendEma
 		return nil, huma.Error400BadRequest("Could not deliver email: " + err.Error())
 	}
 	if p.recordUsage != nil {
-		p.recordUsage(p.orgID(r), plugin.MetricMailOut, int64(len(msg.To)))
+		p.recordUsage(p.orgID(r), metricMailOut, int64(len(msg.To)))
 	}
 	p.upsertContacts(orgID, input.Body.To)
 	p.recordSentEmail(orgID, senderFrom, strings.Join(input.Body.To, ", "), msg.Subject, msg.Text, msg.HTML)
@@ -113,7 +114,7 @@ func (p *Plugin) wrapLinksInEmail(r *http.Request, msg *mail.Message) {
 	if p.ctx != nil {
 		lookup = p.ctx.Lookup
 	}
-	creator, ok := plugin.LookupServiceAs[plugin.LinkCreator](lookup, "links.create")
+	creator, ok := plugin.LookupServiceAs[linkscontract.Creator](lookup, linkscontract.ServiceCreate)
 	if !ok || creator == nil {
 		return
 	}

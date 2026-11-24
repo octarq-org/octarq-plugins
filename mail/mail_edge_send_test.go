@@ -12,6 +12,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
+	linkscontract "github.com/octarq-org/octarq-plugins/links/contract"
 	internalmail "github.com/octarq-org/octarq-plugins/mail/pkg/mail"
 	"github.com/octarq-org/octarq/server/plugin"
 	"github.com/ulule/limiter/v3"
@@ -130,7 +131,7 @@ func TestSendEmailTrackLinksWraps(t *testing.T) {
 	p.vaultSvc = newMockVaultService()
 	p.ctx = &plugin.Context{
 		Lookup: func(name string) (any, bool) {
-			if name == "links.create" {
+			if name == linkscontract.ServiceCreate {
 				return mockCreator, true
 			}
 			return nil, false
@@ -182,8 +183,8 @@ func TestSendEmailTrackLinksWraps(t *testing.T) {
 	if lk.Host != "" {
 		t.Errorf("wrapped link host = %q, want empty (host-agnostic)", lk.Host)
 	}
-	if usageOrg != 1 || usageMetric != plugin.MetricMailOut {
-		t.Errorf("recordUsage = org %d metric %q, want org 1 metric %s", usageOrg, usageMetric, plugin.MetricMailOut)
+	if usageOrg != 1 || usageMetric != metricMailOut {
+		t.Errorf("recordUsage = org %d metric %q, want org 1 metric %s", usageOrg, usageMetric, metricMailOut)
 	}
 	body := got()
 	if !strings.Contains(body, "http://mail.example.com/") {

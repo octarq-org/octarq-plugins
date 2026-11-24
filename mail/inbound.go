@@ -145,8 +145,8 @@ func (p *Plugin) processInboundMail(ctx context.Context, orgID uint, overrideTo 
 	}
 
 	if p.recordUsage != nil {
-		p.recordUsage(mb.OrgID, plugin.MetricRawBytes, int64(len(raw)))
-		p.recordUsage(mb.OrgID, plugin.MetricMailIn, 1)
+		p.recordUsage(mb.OrgID, metricRawBytes, int64(len(raw)))
+		p.recordUsage(mb.OrgID, metricMailIn, 1)
 	}
 
 	if p.host != nil && p.host.Events() != nil {

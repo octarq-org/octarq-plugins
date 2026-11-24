@@ -5,7 +5,8 @@ go 1.27.3
 require (
 	github.com/glebarez/sqlite v1.11.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
-	github.com/octarq-org/octarq/server v0.8.1-0.20261124164711-6fb6eb9d7820
+	github.com/octarq-org/octarq-plugins/links v0.0.0-20261124173742-e7981efcdf00
+	github.com/octarq-org/octarq/server v0.8.1-0.20261124171901-088bd50dd05f
 	gorm.io/gorm v1.31.2
 )
 
@@ -58,7 +59,6 @@ require (
 	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.1 // indirect
-	github.com/stretchr/objx v0.5.3 // indirect
 	github.com/tidwall/gjson v1.18.0 // indirect
 	github.com/tidwall/match v1.2.0 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
