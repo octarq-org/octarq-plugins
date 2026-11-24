@@ -48,6 +48,12 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 	if ctx.DeleteCache != nil {
 		p.deleteCache = ctx.DeleteCache
 	}
+	if ctx.Emit != nil {
+		p.emit = ctx.Emit
+	}
+	if p.abuseLimiter == nil {
+		p.abuseLimiter = newIPRateLimiter(5, time.Hour)
+	}
 
 	RegisterViews(ctx)
 
@@ -57,7 +63,6 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 		ctx.Provide(plugin.OverviewServiceName("links"), plugin.OverviewFunc(p.overview))
 		ctx.Provide(plugin.PurgeServiceName("links"), plugin.PurgeFunc(p.purge))
 		ctx.Provide(plugin.ExportServiceName("links"), plugin.ExportFunc(p.exportData))
-		ctx.Provide(plugin.ServiceLinkResolve, plugin.LinkResolver(p.resolveSlug))
 		ctx.Provide("links.create", plugin.LinkCreator(p))
 		ctx.Provide(plugin.CleanupServiceName("links"), plugin.CleanupFunc(p.cleanupEvents))
 		ctx.Provide(plugin.MCPExportServiceName("links"), plugin.MCPExporter(p.mcpExportLinks))
@@ -78,16 +83,28 @@ func (p *Plugin) purge(orgID uint) error {
 	linkIDs := tdb.Model(&Link{}).Select("id")
 	p.db.Where("link_id IN (?)", linkIDs).Delete(&LinkEvent{})
 	tdb.Delete(&Link{})
+	if p.db != nil {
+		p.db.Where("owner_id = ?", orgID).Delete(&AbuseReport{})
+	}
 	return nil
 }
 
 func (p *Plugin) exportData(orgID uint) map[string]any {
 	var l []Link
+	var abuseReports []AbuseReport
 	if tdb := p.tenantDB(orgID); tdb != nil {
 		tdb.Find(&l)
+		tdb.Find(&abuseReports)
+	} else if p.db != nil {
+		p.db.Where("owner_id = ?", orgID).Find(&l)
+		p.db.Where("owner_id = ?", orgID).Find(&abuseReports)
+	}
+	for i := range abuseReports {
+		abuseReports[i].ReporterIP = maskIP(abuseReports[i].ReporterIP)
 	}
 	return map[string]any{
-		"links": l,
+		"links":        l,
+		"abuseReports": abuseReports,
 	}
 }
 

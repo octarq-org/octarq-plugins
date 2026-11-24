@@ -4,7 +4,10 @@ import { linksI18n } from "./i18n";
 
 const links: UIPlugin = {
   name: "links",
-  routes: [{ path: "/links", Component: lazy(() => import("./pages")) }],
+  routes: [
+    { path: "/links", Component: lazy(() => import("./pages")) },
+    { path: "/links/abuse", Component: lazy(() => import("./pages/Abuse")) },
+  ],
   widgets: [
     { slot: "home-overview", order: 10, Component: lazy(() => import("./widgets/LinksStatCardWidget")) },
     { slot: "home-setup-steps", order: 20, Component: lazy(() => import("./widgets/LinksSetupStepWidget")) },

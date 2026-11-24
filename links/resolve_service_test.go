@@ -6,16 +6,6 @@ import (
 	"github.com/octarq-org/octarq/server/pkg/hostlist"
 )
 
-func TestResolveServiceSignatureMatchesConsumer(t *testing.T) {
-	_, p, _ := setupOwnershipTestDB(t)
-
-	var svc any = p.resolveSlug
-	if _, ok := svc.(func(host, slug string) (target string, orgID uint, ok bool)); !ok {
-		t.Fatal("resolveSlug no longer matches the signature internal/api/abuse.go asserts; " +
-			"update that assertion in the same change or abuse reports lose attribution silently")
-	}
-}
-
 func TestResolveSlugAttributesByHost(t *testing.T) {
 	db, p, engine := setupOwnershipTestDB(t)
 	p.engine = engine

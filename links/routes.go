@@ -10,12 +10,6 @@ import (
 	"github.com/octarq-org/octarq/server/plugin"
 )
 
-func (p *Plugin) Menus() []plugin.MenuItem {
-	return []plugin.MenuItem{
-		{ID: "links", Label: "Links", Path: "/links", Icon: "link-2", Category: "Marketing", Area: "operations", Order: 10},
-	}
-}
-
 func (p *Plugin) Actions() []plugin.Action {
 	return []plugin.Action{
 		{ID: "create-link", Label: "New Link", Path: "/links?create=1", Icon: "link-2", Category: "Marketing", Order: 10},
@@ -39,6 +33,9 @@ func (p *Plugin) registerRoutes(ctx *plugin.Context) {
 		huma.Register(api, huma.Operation{Method: "GET", Path: "/api/links/export.csv", Summary: "Export Links", Tags: []string{"Links"}}, p.exportLinksCSV)
 		huma.Register(api, huma.Operation{Method: "GET", Path: "/api/links/ai/status", Summary: "Links AI Status", Tags: []string{"Links"}}, p.linksAIStatus)
 		huma.Register(api, huma.Operation{Method: "POST", Path: "/api/links/ai/suggest-slug", Summary: "Suggest Link Slug", Tags: []string{"Links"}}, p.suggestLinkSlug)
+		huma.Register(api, huma.Operation{Method: "POST", Path: "/abuse", Summary: "Submit Abuse", Tags: []string{"Public"}, DefaultStatus: 201}, p.submitAbuse)
+		huma.Register(api, huma.Operation{Method: "GET", Path: "/api/links/abuse", Summary: "List Abuse Reports", Tags: []string{"Links"}}, p.listAbuseReports)
+		huma.Register(api, huma.Operation{Method: "PUT", Path: "/api/links/abuse/{id}", Summary: "Update Abuse Report", Tags: []string{"Links"}}, p.updateAbuseReport)
 	}
 	if err := plugin.RegisterEndpoint(ctx, plugin.EndpointSpec[DeclarativeLinkInput, DeclarativeLinkOutput]{
 		Name:        "create_shortlink",

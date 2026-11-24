@@ -46,6 +46,52 @@ func (testDomain) TableName() string { return "domains" }
 
 func (d testDomain) EffectiveLinkHosts() []string { return d.LinkHosts.Enabled() }
 
+type testOrgHost struct {
+	ID        uint   `gorm:"primaryKey"`
+	OrgID     uint   `gorm:"column:owner_id;index"`
+	Host      string `gorm:"size:253"`
+	Traffic   bool   `gorm:"column:traffic"`
+	Source    string `gorm:"size:64"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+func (testOrgHost) TableName() string { return "org_hosts" }
+
+func (d *testDomain) AfterCreate(tx *gorm.DB) error {
+	return syncTestDomainToOrgHosts(tx, d)
+}
+
+func (d *testDomain) AfterSave(tx *gorm.DB) error {
+	return syncTestDomainToOrgHosts(tx, d)
+}
+
+func syncTestDomainToOrgHosts(tx *gorm.DB, d *testDomain) error {
+	if !tx.Migrator().HasTable("org_hosts") {
+		_ = tx.AutoMigrate(&testOrgHost{})
+	}
+	if d.OrgID == 0 || d.Name == "" {
+		return nil
+	}
+	linkHosts := d.LinkHosts.Enabled()
+	traffic := d.ForLink
+	_ = tx.Create(&testOrgHost{
+		OrgID:   d.OrgID,
+		Host:    d.Name,
+		Traffic: traffic,
+		Source:  fmt.Sprintf("test:domain:%d", d.ID),
+	}).Error
+	for _, h := range linkHosts {
+		_ = tx.Create(&testOrgHost{
+			OrgID:   d.OrgID,
+			Host:    h,
+			Traffic: true,
+			Source:  fmt.Sprintf("test:domain:%d", d.ID),
+		}).Error
+	}
+	return nil
+}
+
 type testProviderAccount struct {
 	ID    uint   `gorm:"primaryKey"`
 	OrgID uint   `gorm:"column:owner_id"`
@@ -109,6 +155,7 @@ func setupLinksTestDB(t *testing.T) *gorm.DB {
 	if err := db.AutoMigrate(
 		&Link{},
 		&LinkEvent{},
+		&AbuseReport{},
 		&testOrg{},
 		&testSetting{},
 		&testDomain{},
