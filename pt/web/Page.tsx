@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Button,
   Empty,
+  Input,
   PageShell,
+  Select,
   Skeleton,
   StatCard,
   useConfirm,
@@ -32,6 +34,8 @@ export default function PTPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Tracker | undefined>(undefined);
   const [detailId, setDetailId] = useState<number | null>(null);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   const load = useCallback(async () => {
     try {
@@ -56,6 +60,34 @@ export default function PTPage() {
   const detail = useMemo(
     () => (detailId === null ? null : trackers.find((row) => row.id === detailId) ?? null),
     [detailId, trackers],
+  );
+
+  const visible = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return trackers.filter((tracker) => {
+      if (statusFilter === "valid" && !tracker.cookie_valid) return false;
+      if (statusFilter === "expired" && tracker.cookie_valid) return false;
+      if (statusFilter === "manual" && !tracker.needs_manual_action) return false;
+      if (statusFilter === "paused" && tracker.enabled) return false;
+      if (needle === "") return true;
+      return (
+        tracker.name.toLowerCase().includes(needle) ||
+        tracker.domain.toLowerCase().includes(needle)
+      );
+    });
+  }, [trackers, query, statusFilter]);
+
+  const filtering = query.trim() !== "" || statusFilter !== "all";
+
+  const statusOptions = useMemo(
+    () => [
+      { value: "all", label: t("filterAll", "All sites") },
+      { value: "valid", label: t("filterValid", "Login valid") },
+      { value: "expired", label: t("filterExpired", "Login expired") },
+      { value: "manual", label: t("filterManual", "Needs action") },
+      { value: "paused", label: t("filterPaused", "Paused") },
+    ],
+    [t],
   );
 
   const runAction = async (tracker: Tracker, kind: ActionKind) => {
@@ -264,26 +296,81 @@ export default function PTPage() {
           }
         />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {trackers.map((tracker) => (
-            <TrackerCard
-              key={tracker.id}
-              tracker={tracker}
-              t={t}
-              lang={lang}
-              busy={busyId === tracker.id}
-              onSignin={() => void runAction(tracker, "signin")}
-              onLogin={() => void runAction(tracker, "login")}
-              onRefresh={() => void runAction(tracker, "refresh")}
-              onDetails={() => setDetailId(tracker.id)}
-              onEdit={() => {
-                setEditing(tracker);
-                setFormOpen(true);
-              }}
-              onDelete={() => void remove(tracker)}
+        <>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={t("filterNamePlaceholder", "Filter by name or domain")}
+              aria-label={t("filterNamePlaceholder", "Filter by name or domain")}
+              className="min-w-0 flex-1 sm:max-w-xs"
             />
-          ))}
-        </div>
+            <Select
+              value={statusFilter}
+              onValueChange={setStatusFilter}
+              options={statusOptions}
+              aria-label={t("filterStatus", "Status")}
+              className="w-44"
+            />
+            <span className="text-[11px] text-muted-foreground">
+              {t("filterCount", "{{shown}} of {{total}} sites", {
+                shown: visible.length,
+                total: trackers.length,
+              })}
+            </span>
+            {filtering ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setQuery("");
+                  setStatusFilter("all");
+                }}
+              >
+                {t("clearFilters", "Clear filters")}
+              </Button>
+            ) : null}
+          </div>
+
+          {visible.length === 0 ? (
+            <Empty
+              reason={t("filterEmptyTitle", "No site matches the filter")}
+              detail={t("filterEmptyDesc", "Change the name or status filter.")}
+              action={
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setQuery("");
+                    setStatusFilter("all");
+                  }}
+                >
+                  {t("clearFilters", "Clear filters")}
+                </Button>
+              }
+            />
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {visible.map((tracker) => (
+                <TrackerCard
+                  key={tracker.id}
+                  tracker={tracker}
+                  t={t}
+                  lang={lang}
+                  busy={busyId === tracker.id}
+                  onSignin={() => void runAction(tracker, "signin")}
+                  onLogin={() => void runAction(tracker, "login")}
+                  onRefresh={() => void runAction(tracker, "refresh")}
+                  onDetails={() => setDetailId(tracker.id)}
+                  onEdit={() => {
+                    setEditing(tracker);
+                    setFormOpen(true);
+                  }}
+                  onDelete={() => void remove(tracker)}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {formOpen ? (
