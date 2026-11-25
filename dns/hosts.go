@@ -208,7 +208,7 @@ func (p *Plugin) syncDomainHosts(ctx context.Context, dom *Domain) error {
 		return err
 	}
 	apex := normalizeHost(dom.Name)
-	if apex == "" {
+	if apex == "" || apex == getBaseDomain(p.db, p.host) {
 		return nil
 	}
 	return p.replaceHosts(ctx, dom.OrgID, fmt.Sprintf("dns.apex.%d", dom.ID), []string{apex}, domainApexTraffic(dom))
