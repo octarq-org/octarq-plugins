@@ -63,7 +63,7 @@ jobs:
           fi
 
   go:
-    name: Go build, vet & test (${{ matrix.plugin }})
+    name: Go build, vet & test${{ matrix.plugin && format(' ({0})', matrix.plugin) || '' }}
     needs: changes
     if: needs.changes.outputs.plugins != '[]'
     runs-on: ubuntu-latest
