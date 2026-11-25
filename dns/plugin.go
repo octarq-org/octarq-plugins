@@ -160,6 +160,8 @@ func (p *Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 		}, p.updateDDNS)
 	}
 
+	p.reconcileDomainHosts()
+
 	ctx.Provide(contract.ServiceManager, p.DNSManager())
 	ctx.Provide(plugin.OverviewServiceName("dns"), plugin.OverviewFunc(p.overview))
 	ctx.Provide(plugin.PurgeServiceName("dns"), plugin.PurgeFunc(p.purge))
