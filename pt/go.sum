@@ -136,8 +136,8 @@ github.com/modelcontextprotocol/go-sdk v1.6.1 h1:0zOSupjKUxPKSocPT1Wtago+mUHU2/u
 github.com/modelcontextprotocol/go-sdk v1.6.1/go.mod h1:kzm3kzFL1/+AziGOE0nUs3gvPoNxMCvkxokMkuFapXQ=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq1c1nUAm88MOHcQC9l5mIlSMApZMrHA=
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
-github.com/octarq-org/octarq/server v0.8.1-0.20261119102652-202a2343f094 h1:uCdexj+iJE3XngKaSW1if3u77eIyWu6DH5bWk7zBoTs=
-github.com/octarq-org/octarq/server v0.8.1-0.20261119102652-202a2343f094/go.mod h1:BVqTBg2ygdZP/4KUMVVfVWQikVCeVjZZckcOE0r6Cj4=
+github.com/octarq-org/octarq/server v0.8.1-0.20261125161810-a584d5bf0e64 h1:haMtnnfBqX/D7cg8RSmOFQoFMp254w456vnHZbV28PY=
+github.com/octarq-org/octarq/server v0.8.1-0.20261125161810-a584d5bf0e64/go.mod h1:MJFRdt3HxDr+GdvJuqrVKFjwpis7xwzuNxu4HuOauUI=
 github.com/pb33f/ordered-map/v2 v2.3.1 h1:5319HDO0aw4DA4gzi+zv4FXU9UlSs3xGZ40wcP1nBjY=
 github.com/pb33f/ordered-map/v2 v2.3.1/go.mod h1:qxFQgd0PkVUtOMCkTapqotNgzRhMPL7VvaHKbd1HnmQ=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=
