@@ -72,3 +72,22 @@ func TestMountBindsExistingDomainHosts(t *testing.T) {
 		t.Fatalf("mount.example owner = %d, ok = %v; want org 3 bound during mount", owner, ok)
 	}
 }
+
+func TestReconcileDomainHostsSkipsBaseDomainApex(t *testing.T) {
+	p, fake, _ := setupSyncTestPlugin(t)
+	p.db.AutoMigrate(&testSetting{})
+	p.db.Create(&testSetting{Key: "base_domain", Value: "octarq.org"})
+	p.db.Create(&Domain{OrgID: 1, Name: "octarq.org", ForLink: true})
+
+	p.reconcileDomainHosts()
+
+	if _, ok := fake.OwnerOf("octarq.org"); ok {
+		t.Fatal("the base domain apex is reserved and must not be bound")
+	}
+	if fake.ServesTraffic("octarq.org") {
+		t.Fatal("the base domain apex must not serve traffic")
+	}
+	if err := p.syncDomainHosts(context.Background(), &Domain{OrgID: 1, Name: "octarq.org", ForLink: true}); err != nil {
+		t.Fatalf("syncing the base domain apex must not error: %v", err)
+	}
+}
