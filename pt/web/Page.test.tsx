@@ -123,33 +123,33 @@ beforeEach(() => {
 describe("PT page list filters", () => {
   it("shows every site by default", async () => {
     renderPage();
-    await waitFor(() => expect(screen.getAllByRole("article")).toHaveLength(3));
+    await waitFor(() => expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(3));
     expect(screen.getByText("3 of 3 sites")).toBeTruthy();
   });
 
   it("narrows the list by name or domain", async () => {
     renderPage();
-    await waitFor(() => expect(screen.getAllByRole("article")).toHaveLength(3));
+    await waitFor(() => expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(3));
     fireEvent.change(screen.getByPlaceholderText("Filter by name or domain"), { target: { value: "hdfans" } });
-    await waitFor(() => expect(screen.getAllByRole("article")).toHaveLength(1));
+    await waitFor(() => expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(1));
     expect(screen.getByText("红豆饭")).toBeTruthy();
     expect(screen.getByText("1 of 3 sites")).toBeTruthy();
   });
 
   it("shows an empty state when nothing matches, with a clear action", async () => {
     renderPage();
-    await waitFor(() => expect(screen.getAllByRole("article")).toHaveLength(3));
+    await waitFor(() => expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(3));
     fireEvent.change(screen.getByPlaceholderText("Filter by name or domain"), { target: { value: "zzz" } });
     expect(await screen.findByText("No site matches the filter")).toBeTruthy();
     fireEvent.click(screen.getAllByText("Clear filters")[0]);
-    await waitFor(() => expect(screen.getAllByRole("article")).toHaveLength(3));
+    await waitFor(() => expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(3));
   });
 });
 
 describe("PT page site link", () => {
   it("links each card to the site in a new tab", async () => {
     renderPage();
-    await waitFor(() => expect(screen.getAllByRole("article")).toHaveLength(3));
+    await waitFor(() => expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(3));
     const links = screen.getAllByText("Open site").map((node) => node.closest("a"));
     expect(links.map((link) => link?.getAttribute("href"))).toEqual([
       "https://hdtime.org",

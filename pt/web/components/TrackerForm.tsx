@@ -2,8 +2,11 @@ import { useMemo, useState } from "react";
 import {
   Button,
   Field,
+  FormError,
   Input,
   Modal,
+  PageCard,
+  PageRow,
   Select,
   Switch,
   Textarea,
@@ -192,7 +195,7 @@ export function TrackerForm({ schemas, tracker, onClose, onSaved, t }: TrackerFo
               onChange={(e) => set("baseUrl", e.target.value)}
               placeholder="https://tracker.example.com"
             />
-            <Button type="button" variant="secondary" onClick={detect} disabled={detecting}>
+            <Button type="button" variant="outline" onClick={detect} disabled={detecting}>
               {detecting ? t("detecting", "Checking…") : t("detectButton", "Check address")}
             </Button>
           </div>
@@ -250,14 +253,17 @@ export function TrackerForm({ schemas, tracker, onClose, onSaved, t }: TrackerFo
           </Field>
         ) : null}
 
-        <div className="mb-4 flex items-center justify-between rounded-lg border border-border px-3 py-2">
-          <span className="text-[13px] text-foreground">{t("fieldSigninEnabled", "Sign in daily")}</span>
-          <Switch
-            checked={form.signinEnabled}
-            onCheckedChange={(v) => set("signinEnabled", v)}
-            aria-label={t("fieldSigninEnabled", "Sign in daily")}
-          />
-        </div>
+        <PageRow
+          title={t("fieldSigninEnabled", "Sign in daily")}
+          control={
+            <Switch
+              checked={form.signinEnabled}
+              onCheckedChange={(v) => set("signinEnabled", v)}
+              aria-label={t("fieldSigninEnabled", "Sign in daily")}
+            />
+          }
+          className="mb-4 rounded-lg border border-border px-3"
+        />
 
         <Field label={t("fieldStatsHours", "Refresh every (hours)")}>
           <Input
@@ -269,16 +275,18 @@ export function TrackerForm({ schemas, tracker, onClose, onSaved, t }: TrackerFo
           />
         </Field>
 
-        <button
+        <Button
           type="button"
-          className="mb-3 text-[12.5px] font-medium text-accent-fg underline-offset-2 hover:underline"
+          variant="ghost"
+          size="sm"
+          className="mb-3"
           onClick={() => setAdvanced((v) => !v)}
         >
           {t("advancedTitle", "Advanced settings")}
-        </button>
+        </Button>
 
         {advanced ? (
-          <div className="rounded-lg border border-border p-3">
+          <PageCard className="mt-0 mb-4 p-3 sm:p-3">
             <Field label={t("fieldTimezone", "Time zone")}>
               <Input
                 value={form.timezone}
@@ -308,10 +316,10 @@ export function TrackerForm({ schemas, tracker, onClose, onSaved, t }: TrackerFo
             <Field label={t("fieldUserAgent", "Browser agent")}>
               <Input value={form.userAgent} onChange={(e) => set("userAgent", e.target.value)} />
             </Field>
-          </div>
+          </PageCard>
         ) : null}
 
-        {error ? <p className="mt-3 text-[12.5px] text-danger-fg">{error}</p> : null}
+        {error ? <FormError err={error} className="mt-3" /> : null}
       </div>
 
       <div className="mt-5 flex justify-end gap-2">
