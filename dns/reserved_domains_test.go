@@ -70,7 +70,7 @@ func TestReconcileDropsReservedPlatformDomain(t *testing.T) {
 	p, fake, _ := setupSyncTestPlugin(t)
 	seedBase(t, p, "octarq.org")
 
-	reserved := Domain{OrgID: 7, Name: "app.octarq.org", ForLink: true}
+	reserved := Domain{OrgID: 7, Name: "app.octarq.org", ForLink: true, ProviderAccountID: 3}
 	if err := p.db.Create(&reserved).Error; err != nil {
 		t.Fatalf("seed reserved domain: %v", err)
 	}
@@ -166,5 +166,54 @@ func TestSyncDomainsSkipsSharedHostWhenBaseEmpty(t *testing.T) {
 	p.db.Model(&Domain{}).Where("name = ?", "app.octarq.org").Count(&n)
 	if n != 0 {
 		t.Error("sync imported the registered shared host while no base domain is configured")
+	}
+}
+
+func TestReconcileRetainsProvisionedSubdomain(t *testing.T) {
+	p, fake, _ := setupSyncTestPlugin(t)
+	seedBase(t, p, "octarq.org")
+
+	provisioned := Domain{OrgID: 9, Name: "tenant9.octarq.org", ForLink: true}
+	if err := p.db.Create(&provisioned).Error; err != nil {
+		t.Fatalf("seed provisioned subdomain: %v", err)
+	}
+	if err := fake.Bind(context.Background(), provisioned.OrgID, provisioned.Name, true, fmt.Sprintf("dns.apex.%d", provisioned.ID)); err != nil {
+		t.Fatalf("pre-bind provisioned host: %v", err)
+	}
+
+	p.reconcileDomainHosts()
+
+	var n int64
+	p.db.Model(&Domain{}).Where("name = ?", "tenant9.octarq.org").Count(&n)
+	if n != 1 {
+		t.Fatal("reconcile deleted a provisioned tenant subdomain row")
+	}
+	if _, ok := fake.OwnerOf("tenant9.octarq.org"); ok {
+		t.Error("reconcile left the reserved tenant subdomain bound")
+	}
+}
+
+func TestCreateDomainRejectsSharedHostWhenBaseEmpty(t *testing.T) {
+	t.Setenv("OCTARQ_SHARED_HOSTS", "app.octarq.org")
+	p, mkCtx := setupFullDNSTestDB(t)
+	acc := ProviderAccount{OrgID: 1, Name: "P", Type: "cloudflare"}
+	if err := p.db.Create(&acc).Error; err != nil {
+		t.Fatalf("seed provider account: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/dns/domains", nil)
+	if _, err := p.createDomain(context.Background(), &CreateDomainInput{
+		Ctx:  mkCtx(req),
+		Body: domainDTO{Name: "app.octarq.org", ProviderAccountID: acc.ID},
+	}); err == nil {
+		t.Error("createDomain accepted a registered shared host while no base domain is configured")
+	}
+
+	req2 := httptest.NewRequest(http.MethodPost, "/api/dns/domains", nil)
+	if _, err := p.createDomain(context.Background(), &CreateDomainInput{
+		Ctx:  mkCtx(req2),
+		Body: domainDTO{Name: "customer.com", ProviderAccountID: acc.ID},
+	}); err != nil {
+		t.Errorf("createDomain(customer.com) = %v, want success", err)
 	}
 }

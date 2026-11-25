@@ -62,6 +62,27 @@ func reservedDomainName(name, base string, shared []string) bool {
 	return false
 }
 
+func likeSuffixPattern(host string) string {
+	escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(host)
+	return "%." + escaped
+}
+
+func (p *Plugin) isPlatformHostExact(name string) bool {
+	n := normalizeHost(name)
+	if n == "" {
+		return false
+	}
+	if base := p.baseDomain(); base != "" && n == base {
+		return true
+	}
+	for _, h := range p.sharedPlatformHosts() {
+		if n == h {
+			return true
+		}
+	}
+	return false
+}
+
 func (p *Plugin) isReservedDomainName(name string) bool {
 	return reservedDomainName(name, p.baseDomain(), p.sharedPlatformHosts())
 }
@@ -102,15 +123,11 @@ func underBaseZone(db *gorm.DB, name string) bool {
 	return reservedDomainName(name, getBaseDomain(db, nil), nil)
 }
 
-func reservedInHostLists(db *gorm.DB, linkHosts, mailHosts hostlist.HostList) string {
-	base := getBaseDomain(db, nil)
-	if base == "" {
-		return ""
-	}
+func (p *Plugin) reservedInHostLists(linkHosts, mailHosts hostlist.HostList) string {
 	for _, list := range []hostlist.HostList{linkHosts, mailHosts} {
 		for _, h := range list {
 			host := normalizeHost(h.Host)
-			if host == base || strings.HasSuffix(host, "."+base) {
+			if p.isReservedDomainName(host) {
 				return host
 			}
 		}
