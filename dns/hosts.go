@@ -156,10 +156,7 @@ func (p *Plugin) dnsProviders(ctx context.Context, input *DNSProvidersInput) (*D
 	return &DNSProvidersOutput{Body: provider.Names()}, nil
 }
 
-func domainHosts(dom *Domain) []string {
-	if !dom.ForLink && !dom.ForMail {
-		return []string{}
-	}
+func domainHostList(dom *Domain) []string {
 	seen := make(map[string]bool)
 	var hosts []string
 	addHost := func(raw string) {
@@ -171,46 +168,54 @@ func domainHosts(dom *Domain) []string {
 		hosts = append(hosts, h)
 	}
 	if dom.ForLink {
-		var enabledLink []string
 		for _, h := range dom.LinkHosts {
 			if h.Enabled {
-				enabledLink = append(enabledLink, h.Host)
-			}
-		}
-		if len(dom.LinkHosts) == 0 {
-			addHost(dom.Name)
-		} else {
-			for _, h := range enabledLink {
-				addHost(h)
+				addHost(h.Host)
 			}
 		}
 	}
 	if dom.ForMail {
-		var enabledMail []string
 		for _, h := range dom.MailHosts {
 			if h.Enabled {
-				enabledMail = append(enabledMail, h.Host)
-			}
-		}
-		if len(dom.MailHosts) == 0 {
-			addHost(dom.Name)
-		} else {
-			for _, h := range enabledMail {
-				addHost(h)
+				addHost(h.Host)
 			}
 		}
 	}
 	return hosts
 }
 
+func domainApexTraffic(dom *Domain) bool {
+	linkHosts := 0
+	for _, h := range dom.LinkHosts {
+		if h.Enabled {
+			linkHosts++
+		}
+	}
+	mailHosts := 0
+	for _, h := range dom.MailHosts {
+		if h.Enabled {
+			mailHosts++
+		}
+	}
+	return (dom.ForLink && linkHosts == 0) || (dom.ForMail && mailHosts == 0)
+}
+
 func (p *Plugin) syncDomainHosts(ctx context.Context, dom *Domain) error {
 	if p.host == nil || p.host.Hosts() == nil {
 		return nil
 	}
-	source := fmt.Sprintf("dns.domain.%d", dom.ID)
-	hosts := domainHosts(dom)
-	traffic := dom.ForLink
-	err := p.host.Hosts().ReplaceOwned(ctx, dom.OrgID, source, hosts, traffic)
+	if err := p.replaceHosts(ctx, dom.OrgID, fmt.Sprintf("dns.domain.%d", dom.ID), domainHostList(dom), dom.ForLink); err != nil {
+		return err
+	}
+	apex := normalizeHost(dom.Name)
+	if apex == "" {
+		return nil
+	}
+	return p.replaceHosts(ctx, dom.OrgID, fmt.Sprintf("dns.apex.%d", dom.ID), []string{apex}, domainApexTraffic(dom))
+}
+
+func (p *Plugin) replaceHosts(ctx context.Context, orgID uint, source string, hosts []string, traffic bool) error {
+	err := p.host.Hosts().ReplaceOwned(ctx, orgID, source, hosts, traffic)
 	if err != nil && !errors.Is(err, plugin.ErrHostsUnavailable) {
 		return err
 	}
@@ -221,10 +226,8 @@ func (p *Plugin) removeDomainHosts(ctx context.Context, orgID, domainID uint) er
 	if p.host == nil || p.host.Hosts() == nil {
 		return nil
 	}
-	source := fmt.Sprintf("dns.domain.%d", domainID)
-	err := p.host.Hosts().ReplaceOwned(ctx, orgID, source, []string{}, false)
-	if err != nil && !errors.Is(err, plugin.ErrHostsUnavailable) {
+	if err := p.replaceHosts(ctx, orgID, fmt.Sprintf("dns.domain.%d", domainID), []string{}, false); err != nil {
 		return err
 	}
-	return nil
+	return p.replaceHosts(ctx, orgID, fmt.Sprintf("dns.apex.%d", domainID), []string{}, false)
 }
