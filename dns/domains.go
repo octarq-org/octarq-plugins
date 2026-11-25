@@ -94,8 +94,8 @@ func (p *Plugin) createDomain(ctx context.Context, input *CreateDomainInput) (*C
 	if name == "" || input.Body.ProviderAccountID == 0 {
 		return nil, huma.Error400BadRequest("Domain name and provider account are required")
 	}
-	if underBaseZone(p.db, name) {
-		return nil, huma.Error400BadRequest("that hostname is reserved for automatic tenant subdomains")
+	if p.isReservedDomainName(name) {
+		return nil, huma.Error400BadRequest("that hostname is reserved and cannot be added")
 	}
 
 	owned, ownErr := p.ownsProviderAccount(r, input.Body.ProviderAccountID)
