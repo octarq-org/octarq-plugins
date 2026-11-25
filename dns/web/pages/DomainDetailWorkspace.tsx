@@ -5,10 +5,6 @@ import {
   Globe,
   Trash2,
   ArrowLeft,
-  ShieldCheck,
-  Link as LinkIcon,
-  Settings,
-  Layers,
   RefreshCw,
 } from "lucide-react";
 import {
@@ -139,14 +135,14 @@ export function DomainDetailWorkspace({
       </div>
 
       <TabBar
-        className="mb-6 flex-wrap"
+        className="mb-6"
         value={activeSubTab}
         onValueChange={(v) => setActiveSubTab(v as DomainSubTab)}
         items={[
-          { value: "records", label: t("domains.domainRecords"), icon: <Layers className="h-4 w-4" /> },
-          { value: "routing", label: t("domains.domainRouting"), icon: <LinkIcon className="h-4 w-4" /> },
-          { value: "verification", label: t("domains.domainHealth"), icon: <ShieldCheck className="h-4 w-4" /> },
-          { value: "settings", label: t("domains.domainSettings"), icon: <Settings className="h-4 w-4" /> },
+          { value: "records", label: t("domains.domainRecords") },
+          { value: "routing", label: t("domains.domainRouting") },
+          { value: "verification", label: t("domains.domainHealth") },
+          { value: "settings", label: t("domains.domainSettings") },
         ]}
       />
 
