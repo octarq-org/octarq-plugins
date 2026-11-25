@@ -1,8 +1,9 @@
-import { Badge, Button, StatusBadge } from "@octarq/plugin-sdk";
+import { Badge, Button, StatusBadge, buttonVariants } from "@octarq/plugin-sdk";
 import type { TFunc } from "@octarq/plugin-sdk";
 import {
   AlertTriangle,
   Clock,
+  ExternalLink,
   Gauge,
   Info,
   LogIn,
@@ -76,9 +77,20 @@ export function TrackerCard({
             ) : null}
           </div>
         </div>
-        <Button variant="ghost" size="sm" onClick={onEdit} aria-label={t("edit", "Edit")}>
-          <Pencil className="h-4 w-4" />
-        </Button>
+        <div className="flex shrink-0 items-center gap-1">
+          <a
+            href={tracker.base_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={buttonVariants({ variant: "ghost", size: "sm" })}
+          >
+            <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+            {t("openSite", "Open site")}
+          </a>
+          <Button variant="ghost" size="sm" onClick={onEdit} aria-label={t("edit", "Edit")}>
+            <Pencil className="h-4 w-4" />
+          </Button>
+        </div>
       </header>
 
       {tracker.needs_manual_action ? (
