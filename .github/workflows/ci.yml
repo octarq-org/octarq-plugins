@@ -75,9 +75,9 @@ jobs:
       run:
         working-directory: ${{ matrix.plugin }}
     steps:
+      - uses: actions/checkout@v4
       - name: Build & test ${{ matrix.plugin }}
         run: echo "plugin=${{ matrix.plugin }}" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: ${{ matrix.plugin }}/go.mod
