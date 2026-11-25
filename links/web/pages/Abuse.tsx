@@ -47,7 +47,7 @@ export default function AbusePage() {
       description={t("links.abuse.pageDesc")}
     >
       <TabBar
-        size="sm"
+        className="mb-6"
         value={statusFilter}
         onValueChange={setStatusFilter}
         items={(["open", "reviewed", "dismissed", "all"] as const).map((filter) => ({
