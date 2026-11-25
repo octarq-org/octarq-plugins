@@ -108,7 +108,7 @@ func signinViaIndex(ctx context.Context, s *adapter.Session) (*adapter.SigninRes
 	}
 
 	verdict := evaluateSignin(doc, p.Body, p.Status)
-	if verdict.Outcome != adapter.OutcomeLoginOKUnconfirmed {
+	if indexVerdictDecides(verdict) {
 		return verdict, nil
 	}
 
@@ -180,6 +180,13 @@ func signinViaIndex(ctx context.Context, s *adapter.Session) (*adapter.SigninRes
 		Evidence:   freshVerdict.Evidence,
 		HTTPStatus: fresh.Status,
 	}, nil
+}
+
+func indexVerdictDecides(verdict *adapter.SigninResult) bool {
+	if verdict.Outcome == adapter.OutcomeLoginOKUnconfirmed {
+		return false
+	}
+	return !(verdict.Outcome == adapter.OutcomeAuthFailed && verdict.Reason == "site_refused")
 }
 
 func findSigninHref(doc *goquery.Document, pageURL string) (string, bool) {

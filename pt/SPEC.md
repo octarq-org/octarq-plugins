@@ -167,6 +167,8 @@ A completed action returns HTTP 200 with an outcome, even when the outcome is a 
 
 The create path verifies a supplied cookie or API key before it writes any row. A rejected secret returns 422 and creates nothing. The credentials endpoint verifies too, unless `force: true`; a forced secret is stored and reported as `stored: false`.
 
+On the index fallback, refusal words such as 禁止 or 无权 do not decide the outcome: a signed-in home page carries rule text that contains them. Only a sign-in response can refuse the request.
+
 `POST /api/pt/actions/run-all` marks every eligible tracker of the caller's personal space due for sign-in or statistics, then starts the `pt.tick` job through `CronService.StartJob`. The reply is 202 with the queued count; a held tick lease returns 409, and a host without a scheduler returns 503. The work itself runs in the normal tick, so rate limits, the per-site timeout, the eight-minute budget, and the ledger stay unchanged.
 
 `POST /api/pt/detect` is advice only. It fetches the home page, reports a suggested schema and any challenge found, and never picks the stored schema. The stored `schema_key` is always the one the user selected.
