@@ -1,3 +1,4 @@
+import type { StatusTone } from "@octarq/plugin-sdk";
 
 const UNITS = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"] as const;
 
@@ -38,28 +39,29 @@ export function formatDateTime(value: string | undefined, unknown: string, local
   });
 }
 
-export type BadgeToneName = "default" | "info" | "success" | "warning" | "danger";
+export type OutcomeTone = StatusTone;
 
-export function outcomeTone(outcome: string | undefined): BadgeToneName {
+export function outcomeTone(outcome: string | undefined): OutcomeTone {
   switch (outcome) {
     case "success":
       return "success";
     case "already_signed":
-      return "info";
+      return "done";
     case "login_ok_unconfirmed":
       return "warning";
     case "needs_manual_action":
-      return "warning";
+      return "blocked";
     case "auth_failed":
     case "parse_error":
-      return "danger";
+      return "error";
     case "rate_limited":
+      return "paused";
     case "network_error":
       return "warning";
     case "unsupported":
-      return "default";
+      return "idle";
     default:
-      return "default";
+      return "idle";
   }
 }
 

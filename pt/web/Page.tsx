@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   Button,
   Empty,
   Input,
+  LoadFailure,
+  LockedFallback,
+  PageEmpty,
   PageShell,
   Select,
   Skeleton,
@@ -192,25 +196,26 @@ export default function PTPage() {
 
   const headerAction = (
     <div className="flex items-center gap-2">
-      <Button variant="secondary" onClick={() => void runAll("signin")} disabled={bulk !== null || trackers.length === 0}>
-        <CalendarCheck className="mr-1.5 h-4 w-4" />
+      <Button variant="outline" size="sm" onClick={() => void runAll("signin")} disabled={bulk !== null || trackers.length === 0}>
+        <CalendarCheck className="h-3.5 w-3.5" />
         {bulk === "signin" ? t("bulkRunning", "Running…") : t("signinAll", "Sign in all")}
       </Button>
-      <Button variant="secondary" onClick={() => void runAll("refresh")} disabled={bulk !== null || trackers.length === 0}>
-        <RefreshCw className="mr-1.5 h-4 w-4" />
+      <Button variant="outline" size="sm" onClick={() => void runAll("refresh")} disabled={bulk !== null || trackers.length === 0}>
+        <RefreshCw className="h-3.5 w-3.5" />
         {bulk === "refresh" ? t("bulkRunning", "Running…") : t("refreshAll", "Refresh all")}
       </Button>
-      <Button variant="secondary" onClick={() => void load()} disabled={loading}>
-        <RefreshCw className="mr-1.5 h-4 w-4" />
+      <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
+        <RefreshCw className="h-3.5 w-3.5" />
         {t("reload", "Reload")}
       </Button>
       <Button
+        size="sm"
         onClick={() => {
           setEditing(undefined);
           setFormOpen(true);
         }}
       >
-        <Plus className="mr-1.5 h-4 w-4" />
+        <Plus className="h-3.5 w-3.5" />
         {t("addTracker", "Add site")}
       </Button>
     </div>
@@ -221,7 +226,6 @@ export default function PTPage() {
       <PageShell
         title={t("pageTitle", "PT Accounts")}
         description={t("pageDescription", "Private-tracker accounts: logins, daily sign-in, and traffic statistics.")}
-        eyebrow="PT"
         action={headerAction}
       >
         <div
@@ -281,24 +285,37 @@ export default function PTPage() {
     );
   }
 
+  if (status === 402 || status === 404) {
+    return (
+      <PageShell
+        title={t("pageTitle", "PT Accounts")}
+        description={t("pageDescription", "Private-tracker accounts: logins, daily sign-in, and traffic statistics.")}
+      >
+        <LockedFallback
+          status={status}
+          feature={t("pageTitle", "PT Accounts")}
+          description={t("pageDescription", "Private-tracker accounts: logins, daily sign-in, and traffic statistics.")}
+        />
+      </PageShell>
+    );
+  }
+
   if (status !== null) {
     const forbidden = status === 403;
     return (
       <PageShell
         title={t("pageTitle", "PT Accounts")}
         description={t("pageDescription", "Private-tracker accounts: logins, daily sign-in, and traffic statistics.")}
-        eyebrow="PT"
         action={headerAction}
       >
-        <Empty
-          reason={forbidden ? t("errorForbidden", "You do not have permission.") : t("loadFailedReason", "The accounts could not be loaded.")}
-          action={
-            forbidden ? undefined : (
-              <Button variant="secondary" onClick={() => void load()}>
-                {t("loadFailedAction", "Try again")}
-              </Button>
-            )
-          }
+        <LoadFailure
+          status={status}
+          feature={t("pageTitle", "PT Accounts")}
+          description={t("pageDescription", "Private-tracker accounts: logins, daily sign-in, and traffic statistics.")}
+          errorText={forbidden ? t("errorForbidden", "You do not have permission.") : t("loadFailedReason", "The accounts could not be loaded.")}
+          deniedTitle={t("errorForbidden", "You do not have permission.")}
+          deniedBody={t("loadFailedReason", "The accounts could not be loaded.")}
+          onRetry={forbidden ? undefined : () => void load()}
         />
       </PageShell>
     );
@@ -308,15 +325,12 @@ export default function PTPage() {
     <PageShell
       title={t("pageTitle", "PT Accounts")}
       description={t("pageDescription", "Private-tracker accounts: logins, daily sign-in, and traffic statistics.")}
-      eyebrow="PT"
       action={headerAction}
     >
-
       {overview && !overview.scheduler_available ? (
-        <div className="mb-4 flex items-start gap-2 rounded-lg border border-warning-border bg-warning-bg px-3 py-2 text-[12.5px] leading-relaxed text-warning-fg">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{t("schedulerOff", "The scheduler is off on this host.")}</span>
-        </div>
+        <Alert variant="warning" icon={<AlertTriangle className="h-4 w-4" />} className="mb-4">
+          {t("schedulerOff")}
+        </Alert>
       ) : null}
 
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
@@ -390,12 +404,13 @@ export default function PTPage() {
           </div>
 
           {visible.length === 0 ? (
-            <Empty
-              reason={t("filterEmptyTitle", "No site matches the filter")}
+            <PageEmpty
+              title={t("filterEmptyTitle", "No site matches the filter")}
               detail={t("filterEmptyDesc", "Change the name or status filter.")}
               action={
                 <Button
-                  variant="secondary"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => {
                     setQuery("");
                     setStatusFilter("all");

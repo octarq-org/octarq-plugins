@@ -1,4 +1,4 @@
-import { Badge, Button, StatusBadge, buttonVariants } from "@octarq/plugin-sdk";
+import { Alert, Badge, Button, PageCard, StatusBadge, buttonVariants } from "@octarq/plugin-sdk";
 import type { TFunc } from "@octarq/plugin-sdk";
 import {
   AlertTriangle,
@@ -56,7 +56,7 @@ export function TrackerCard({
     : t("pending", "Waiting");
 
   return (
-    <article className="flex h-full flex-col rounded-lg border border-border bg-card p-5">
+    <PageCard className="mt-0 flex h-full flex-col p-5">
       <header className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="truncate font-display text-[1.0625rem] font-semibold tracking-[-0.01em] text-foreground">
@@ -71,9 +71,9 @@ export function TrackerCard({
               <StatusBadge tone="error">{t("cookieInvalid", "Login expired")}</StatusBadge>
             )}
             {tracker.last_signin_outcome ? (
-              <Badge tone={outcomeTone(tracker.last_signin_outcome)} shape="square">
+              <StatusBadge tone={outcomeTone(tracker.last_signin_outcome)} shape="square">
                 {signinLabel}
-              </Badge>
+              </StatusBadge>
             ) : null}
           </div>
         </div>
@@ -94,13 +94,10 @@ export function TrackerCard({
       </header>
 
       {tracker.needs_manual_action ? (
-        <div className="mb-3 flex items-start gap-2 rounded-lg border border-warning-border bg-warning-bg px-3 py-2 text-[12.5px] leading-relaxed text-warning-fg">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <div className="min-w-0">
-            <div className="font-semibold">{t("manualTitle", "A person must act")}</div>
-            <div className="break-words">{tracker.last_error || tracker.manual_reason}</div>
-          </div>
-        </div>
+        <Alert variant="warning" icon={<AlertTriangle className="h-4 w-4" />} className="mb-3">
+          <div className="font-semibold">{t("manualTitle", "A person must act")}</div>
+          <div className="break-words">{tracker.last_error || tracker.manual_reason}</div>
+        </Alert>
       ) : null}
 
       <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -148,12 +145,12 @@ export function TrackerCard({
           </Button>
         ) : null}
         {tracker.capabilities.login ? (
-          <Button size="sm" variant="secondary" onClick={onLogin} disabled={busy}>
+          <Button size="sm" variant="outline" onClick={onLogin} disabled={busy}>
             <LogIn className="mr-1.5 h-3.5 w-3.5" />
             {t("loginNow", "Sign in again")}
           </Button>
         ) : null}
-        <Button size="sm" variant="secondary" onClick={onRefresh} disabled={busy}>
+        <Button size="sm" variant="outline" onClick={onRefresh} disabled={busy}>
           <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
           {t("refreshNow", "Refresh data")}
         </Button>
@@ -171,6 +168,6 @@ export function TrackerCard({
           <Trash2 className="h-4 w-4" />
         </Button>
       </div>
-    </article>
+    </PageCard>
   );
 }
