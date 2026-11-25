@@ -100,7 +100,7 @@ Each attempt ends in exactly one outcome. The order of checks is already → neg
 | `rate_limited` | The site asked for a pause during a manual attempt | Recorded verdict; not a counter increment |
 | `network_error` | Transport failure | Failure counter + 1 |
 | `parse_error` | The page no longer matches the template | Failure counter + 1 |
-| `unsupported` | The adapter declares no sign-in endpoint | None |
+| `unsupported` | The adapter declares no sign-in endpoint, or a NexusPHP site has no sign-in link | None |
 
 Hard rules:
 
