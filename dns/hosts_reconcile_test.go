@@ -24,8 +24,8 @@ func TestReconcileDomainHostsBindsExistingDomains(t *testing.T) {
 	if owner, ok := fake.OwnerOf("globex.dev"); !ok || owner != 2 {
 		t.Fatalf("globex.dev owner = %d, ok = %v; want org 2", owner, ok)
 	}
-	if fake.ServesTraffic("globex.dev") {
-		t.Fatal("globex.dev must not serve traffic because it is mail-only")
+	if !fake.ServesTraffic("globex.dev") {
+		t.Fatal("a mail-only apex with no explicit hosts must serve traffic")
 	}
 }
 
