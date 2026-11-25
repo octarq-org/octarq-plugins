@@ -94,6 +94,8 @@ const overview: Overview = {
   server_timezone: "Asia/Shanghai",
 };
 
+import { apiGet, apiSend } from "./api";
+
 vi.mock("./api", () => ({
   ApiError: class ApiError extends Error { status = 0; },
   apiGet: vi.fn(async (path: string) =>
@@ -118,6 +120,12 @@ function renderPage() {
 
 beforeEach(() => {
   cleanup();
+  vi.clearAllMocks();
+  vi.mocked(apiGet).mockImplementation(async (path: string) =>
+    path === "/api/pt/trackers"
+      ? ({ trackers, summary: overview.summary } satisfies ListResponse)
+      : overview,
+  );
 });
 
 describe("PT page list filters", () => {
@@ -143,6 +151,37 @@ describe("PT page list filters", () => {
     expect(await screen.findByText("No site matches the filter")).toBeTruthy();
     fireEvent.click(screen.getAllByText("Clear filters")[0]);
     await waitFor(() => expect(screen.getAllByRole("article")).toHaveLength(3));
+  });
+});
+
+describe("PT page bulk actions", () => {
+  it("starts a sign-in run for every enabled site", async () => {
+    vi.mocked(apiSend).mockResolvedValue({ started: true, queued: 2 });
+    let polls = 0;
+    vi.mocked(apiGet).mockImplementation(async (path: string) => {
+      if (path === "/api/pt/trackers") return { trackers, summary: overview.summary } as never;
+      if (path === "/api/cron/jobs") {
+        polls += 1;
+        return [{ name: "pt.tick", status: polls === 1 ? "running" : "idle" }] as never;
+      }
+      return overview as never;
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getAllByRole("article")).toHaveLength(3));
+
+    fireEvent.click(screen.getByRole("button", { name: /Sign in all/i }));
+    const confirmButton = await screen.findByRole("button", { name: /OK|Confirm/i });
+    fireEvent.click(confirmButton);
+
+    await waitFor(() =>
+      expect(apiSend).toHaveBeenCalledWith("POST", "/api/pt/actions/run-all", { kind: "signin" }),
+    );
+  });
+
+  it("offers a refresh run as well", async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getAllByRole("article")).toHaveLength(3));
+    expect(screen.getByRole("button", { name: /Refresh all/i })).toBeTruthy();
   });
 });
 

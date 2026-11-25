@@ -139,6 +139,26 @@ type credentialWriteView struct {
 	CookieValid bool   `json:"cookie_valid"`
 }
 
+type runAllInput struct {
+	Ctx  huma.Context `hidden:"true"`
+	Body struct {
+		Kind string `json:"kind" enum:"signin,refresh"`
+	}
+}
+
+func (i *runAllInput) Resolve(ctx huma.Context) []error {
+	i.Ctx = ctx
+	return nil
+}
+
+type runAllOutput struct {
+	Body struct {
+		Started bool   `json:"started"`
+		Kind    string `json:"kind"`
+		Queued  int64  `json:"queued"`
+	}
+}
+
 type signinBody struct {
 	Force bool `json:"force,omitempty"`
 }

@@ -499,6 +499,23 @@ func (p *Plugin) markManual(ctx context.Context, t *PTTracker, reason string, no
 	})
 }
 
+func (p *Plugin) markAllDue(ctx context.Context, orgID, uid uint, kind string) (int64, error) {
+	tdb, err := p.tenantDB(ctx, orgID)
+	if err != nil {
+		return 0, err
+	}
+	column := "next_signin_at"
+	q := tdb.Scoped(&PTTracker{}).
+		Where("owner_user_id = ? AND enabled = ? AND needs_manual_action = ?", uid, true, false)
+	if kind == "signin" {
+		q = q.Where("signin_enabled = ?", true)
+	} else {
+		column = "next_stats_at"
+	}
+	res := q.Updates(map[string]any{column: p.clock()})
+	return res.RowsAffected, res.Error
+}
+
 func (p *Plugin) patchTracker(ctx context.Context, t *PTTracker, updates map[string]any) {
 	tdb, err := p.tenantDB(ctx, t.OrgID)
 	if err != nil {

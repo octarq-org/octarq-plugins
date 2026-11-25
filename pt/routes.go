@@ -69,6 +69,9 @@ func (p *Plugin) registerRoutes(ctx *plugin.Context) {
 		Method: "POST", Path: "/api/pt/trackers/{id}/refresh", Summary: "Refresh tracker statistics", Tags: []string{"PT"},
 	}, p.refreshHandler)
 	huma.Register(api, huma.Operation{
+		Method: "POST", Path: "/api/pt/actions/run-all", Summary: "Run all due sign-ins or refreshes now", Tags: []string{"PT"}, DefaultStatus: 202,
+	}, p.runAllHandler)
+	huma.Register(api, huma.Operation{
 		Method: "GET", Path: "/api/pt/trackers/{id}/snapshots", Summary: "Tracker statistics history", Tags: []string{"PT"},
 	}, p.snapshotsHandler)
 	huma.Register(api, huma.Operation{
