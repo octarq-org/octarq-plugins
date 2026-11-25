@@ -201,3 +201,21 @@ func TestSigninAttendanceServerErrorIsNetworkError(t *testing.T) {
 		t.Fatalf("index requested %d times after a server error", got)
 	}
 }
+
+func TestSigninIndexRefusalWordsDoNotDecide(t *testing.T) {
+	site := &variantSite{
+		attendanceStatus: http.StatusNotFound,
+		indexPage: `<html><body><a href="logout.php">logout</a>
+			<p>本站在此声明：禁止发布任何违法内容。</p>
+			<p>欢迎回来。</p></body></html>`,
+	}
+	session := variantSession(t, site)
+
+	result, err := New().Signin(context.Background(), session)
+	if err != nil {
+		t.Fatalf("signin: %v", err)
+	}
+	if result.Outcome != adapter.OutcomeUnsupported || result.Reason != "no_signin_endpoint" {
+		t.Fatalf("expected unsupported without an entry point, got %+v", result)
+	}
+}
