@@ -5,15 +5,72 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      plugin:
+        description: Which plugin to build
+        type: choice
+        default: all
+        options: [all, dns, links, mail, maillink, pt, twofa, _template]
 
 jobs:
+  changes:
+    name: Detect changed plugins
+    runs-on: ubuntu-latest
+    outputs:
+      plugins: ${{ steps.detect.outputs.plugins }}
+      web: ${{ steps.detect.outputs.web }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: detect
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
+          FORCED: ${{ github.event.inputs.plugin }}
+        run: |
+          set -euo pipefail
+          ALL='["_template","dns","links","mail","maillink","pt","twofa"]'
+          if [ "$EVENT" = "workflow_dispatch" ] && [ -n "$FORCED" ] && [ "$FORCED" != "all" ]; then
+            echo "plugins=[\"$FORCED\"]" >> "$GITHUB_OUTPUT"
+            echo "web=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$EVENT" = "pull_request" ]; then
+            git fetch --no-tags origin "$BASE_REF"
+            CHANGED="$(git diff --name-only "origin/$BASE_REF...HEAD")"
+          elif [ -n "${BEFORE:-}" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ]; then
+            CHANGED="$(git diff --name-only "$BEFORE"..HEAD)"
+          else
+            CHANGED="$(git ls-tree -r --name-only HEAD)"
+          fi
+
+          echo "$CHANGED" | awk -F/ 'NF > 1 { print $1 }' | sort -u > /tmp/changed-tops.txt
+          PLUGINS='[]'
+          for name in _template dns links mail maillink pt twofa; do
+            if grep -qx "$name" /tmp/changed-tops.txt; then
+              PLUGINS="$(printf '%s' "$PLUGINS" | python3 -c "import json,sys; a=json.load(sys.stdin); a.append(sys.argv[1]); print(json.dumps(a))" "$name")"
+            fi
+          done
+          echo "plugins=$PLUGINS" >> "$GITHUB_OUTPUT"
+
+          if echo "$CHANGED" | grep -Eq '(^[^/]+/web/|^package\.json$|^pnpm-lock\.yaml$|^pnpm-workspace\.yaml$|^vitest\.config\.ts$|^scripts/|^\.github/)'; then
+            echo "web=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "web=false" >> "$GITHUB_OUTPUT"
+          fi
+
   go:
     name: Go build, vet & test (${{ matrix.plugin }})
+    needs: changes
+    if: needs.changes.outputs.plugins != '[]'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        plugin: [dns, links, mail, maillink, pt, twofa, _template]
+        plugin: ${{ fromJSON(needs.changes.outputs.plugins) }}
     defaults:
       run:
         working-directory: ${{ matrix.plugin }}
@@ -32,6 +89,8 @@ jobs:
 
   web:
     name: Web type-check & tests
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
