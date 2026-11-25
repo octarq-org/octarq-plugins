@@ -54,6 +54,12 @@ func (p *Plugin) listDomains(ctx context.Context, input *ListDomainsInput) (*Lis
 	}
 	limit := plugin.PageLimit(input.Limit, 50, 500)
 	offset := plugin.PageOffset(input.Offset)
+	if base := p.baseDomain(); base != "" {
+		q = q.Where("name <> ? AND name NOT LIKE ?", base, "%."+base)
+	}
+	for _, h := range p.sharedPlatformHosts() {
+		q = q.Where("name <> ? AND name NOT LIKE ?", h, "%."+h)
+	}
 	q = q.Limit(limit).Offset(offset)
 	q.Find(&ds)
 	return &ListDomainsOutput{Body: ds}, nil

@@ -46,13 +46,60 @@ func getBaseDomain(db *gorm.DB, host plugin.Host) string {
 	return normalizeHost(os.Getenv("OCTARQ_BASE_DOMAIN"))
 }
 
-func underBaseZone(db *gorm.DB, name string) bool {
-	base := getBaseDomain(db, nil)
-	if base == "" {
+func reservedDomainName(name, base string, shared []string) bool {
+	name = normalizeHost(name)
+	if name == "" {
 		return false
 	}
-	name = normalizeHost(name)
-	return name == base || strings.HasSuffix(name, "."+base)
+	if base != "" && (name == base || strings.HasSuffix(name, "."+base)) {
+		return true
+	}
+	for _, h := range shared {
+		if name == h || strings.HasSuffix(name, "."+h) {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *Plugin) isReservedDomainName(name string) bool {
+	return reservedDomainName(name, p.baseDomain(), p.sharedPlatformHosts())
+}
+
+func (p *Plugin) sharedPlatformHosts() []string {
+	raw := ""
+	if p.host != nil && p.host.Settings() != nil {
+		raw = p.host.Settings().GetGlobalSetting("shared_hosts")
+	}
+	if strings.TrimSpace(raw) == "" && p.db != nil && p.db.Migrator().HasTable("settings") {
+		var row struct{ Value string }
+		if err := p.db.Table("settings").Where("key = ?", "shared_hosts").Limit(1).Scan(&row).Error; err == nil {
+			raw = row.Value
+		}
+	}
+	if strings.TrimSpace(raw) == "" {
+		raw = os.Getenv("OCTARQ_SHARED_HOSTS")
+	}
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	fields := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == '\n' || r == '\r' || r == ' ' || r == '\t'
+	})
+	seen := make(map[string]bool)
+	var out []string
+	for _, f := range fields {
+		h := normalizeHost(f)
+		if h != "" && !seen[h] {
+			seen[h] = true
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
+func underBaseZone(db *gorm.DB, name string) bool {
+	return reservedDomainName(name, getBaseDomain(db, nil), nil)
 }
 
 func reservedInHostLists(db *gorm.DB, linkHosts, mailHosts hostlist.HostList) string {

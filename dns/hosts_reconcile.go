@@ -6,7 +6,7 @@ import (
 )
 
 func (p *Plugin) reconcileDomainHosts() {
-	if p.db == nil || p.host == nil || p.host.Hosts() == nil {
+	if p.db == nil {
 		return
 	}
 	var domains []Domain
@@ -15,8 +15,26 @@ func (p *Plugin) reconcileDomainHosts() {
 		return
 	}
 	for i := range domains {
-		if err := p.syncDomainHosts(context.Background(), &domains[i]); err != nil {
-			log.Printf("dns: could not register the host of %s: %v", domains[i].Name, err)
+		dom := &domains[i]
+		if p.isReservedDomainName(dom.Name) {
+			p.dropReservedDomain(dom)
+			continue
+		}
+		if p.host == nil || p.host.Hosts() == nil {
+			continue
+		}
+		if err := p.syncDomainHosts(context.Background(), dom); err != nil {
+			log.Printf("dns: could not register the host of %s: %v", dom.Name, err)
 		}
 	}
+}
+
+func (p *Plugin) dropReservedDomain(dom *Domain) {
+	if p.host != nil && p.host.Hosts() != nil {
+		_ = p.removeDomainHosts(context.Background(), dom.OrgID, dom.ID)
+	}
+	p.db.Where("domain_id = ? AND owner_id = ?", dom.ID, dom.OrgID).Delete(&DDNSToken{})
+	p.db.Where("id = ? AND owner_id = ?", dom.ID, dom.OrgID).Delete(&Domain{})
+	forgetOrigin(dom.Name)
+	log.Printf("dns: removed reserved platform domain %s from workspace %d", dom.Name, dom.OrgID)
 }
