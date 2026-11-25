@@ -54,12 +54,6 @@ func (p *Plugin) listDomains(ctx context.Context, input *ListDomainsInput) (*Lis
 	}
 	limit := plugin.PageLimit(input.Limit, 50, 500)
 	offset := plugin.PageOffset(input.Offset)
-	if base := p.baseDomain(); base != "" {
-		q = q.Where(`name <> ? AND name NOT LIKE ? ESCAPE '\'`, base, likeSuffixPattern(base))
-	}
-	for _, h := range p.sharedPlatformHosts() {
-		q = q.Where(`name <> ? AND name NOT LIKE ? ESCAPE '\'`, h, likeSuffixPattern(h))
-	}
 	q = q.Limit(limit).Offset(offset)
 	q.Find(&ds)
 	return &ListDomainsOutput{Body: ds}, nil
@@ -94,8 +88,8 @@ func (p *Plugin) createDomain(ctx context.Context, input *CreateDomainInput) (*C
 	if name == "" || input.Body.ProviderAccountID == 0 {
 		return nil, huma.Error400BadRequest("Domain name and provider account are required")
 	}
-	if p.isReservedDomainName(name) {
-		return nil, huma.Error400BadRequest("that hostname is reserved and cannot be added")
+	if underBaseZone(p.db, name) {
+		return nil, huma.Error400BadRequest("that hostname is reserved for automatic tenant subdomains")
 	}
 
 	owned, ownErr := p.ownsProviderAccount(r, input.Body.ProviderAccountID)
@@ -131,7 +125,7 @@ func (p *Plugin) createDomain(ctx context.Context, input *CreateDomainInput) (*C
 	} else {
 		dom.ForMail = len(dom.MailHosts) > 0
 	}
-	if bad := p.reservedInHostLists(dom.LinkHosts, dom.MailHosts); bad != "" {
+	if bad := reservedInHostLists(p.db, dom.LinkHosts, dom.MailHosts); bad != "" {
 		return nil, huma.Error400BadRequest("that hostname is reserved for automatic tenant subdomains")
 	}
 	if bad := hostsOutsideZone(dom.Name, dom.LinkHosts, dom.MailHosts); bad != "" {
@@ -219,7 +213,7 @@ func (p *Plugin) updateDomain(ctx context.Context, input *UpdateDomainInput) (*U
 	if input.Body.MailHosts != nil {
 		dom.MailHosts = normalizeHosts(*input.Body.MailHosts)
 	}
-	if bad := p.reservedInHostLists(dom.LinkHosts, dom.MailHosts); bad != "" {
+	if bad := reservedInHostLists(p.db, dom.LinkHosts, dom.MailHosts); bad != "" {
 		return nil, huma.Error400BadRequest("that hostname is reserved for automatic tenant subdomains")
 	}
 	if bad := hostsOutsideZone(dom.Name, dom.LinkHosts, dom.MailHosts); bad != "" {

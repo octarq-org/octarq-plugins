@@ -52,14 +52,16 @@ func (p *Plugin) syncDomains(ctx context.Context, input *SyncDomainsInput) (*Syn
 		return nil, p.providerErr("list zones", err)
 	}
 	base := p.baseDomain()
-	shared := p.sharedPlatformHosts()
 
 	var validZones []provider.Zone
 	var names []string
 	for _, z := range zones {
 		name := strings.ToLower(z.Name)
-		if reservedDomainName(name, base, shared) {
-			continue
+		if base != "" {
+			normalized := normalizeHost(name)
+			if normalized == base || strings.HasSuffix(normalized, "."+base) {
+				continue
+			}
 		}
 		validZones = append(validZones, z)
 		names = append(names, name)
