@@ -100,7 +100,7 @@ Each attempt ends in exactly one outcome. The order of checks is already → neg
 | `rate_limited` | The site asked for a pause during a manual attempt | Recorded verdict; not a counter increment |
 | `network_error` | Transport failure | Failure counter + 1 |
 | `parse_error` | The page no longer matches the template | Failure counter + 1 |
-| `unsupported` | The adapter declares no sign-in endpoint | None |
+| `unsupported` | The adapter declares no sign-in endpoint, or a NexusPHP site has no sign-in link | None |
 
 Hard rules:
 
@@ -148,6 +148,7 @@ All routes are registered on the shared huma API under `/api/pt`. Every request 
 | GET | `/api/pt/trackers` | `pt.trackers.read` | member |
 | POST | `/api/pt/trackers` | `pt.trackers.create` | member |
 | POST | `/api/pt/detect` | `pt.trackers.create` | member |
+| POST | `/api/pt/actions/run-all` | `pt.trackers.update` | member |
 | GET | `/api/pt/trackers/{id}` | `pt.trackers.read` | member |
 | PUT | `/api/pt/trackers/{id}` | `pt.trackers.update` | member |
 | DELETE | `/api/pt/trackers/{id}` | `pt.trackers.delete` | member |
@@ -165,6 +166,8 @@ Permission checks go through `Context.HasPerm`. When the host or session is miss
 A completed action returns HTTP 200 with an outcome, even when the outcome is a failure. Only infrastructure faults map to HTTP errors: tenant or vault unavailable → 503, platform deferral → 429.
 
 The create path verifies a supplied cookie or API key before it writes any row. A rejected secret returns 422 and creates nothing. The credentials endpoint verifies too, unless `force: true`; a forced secret is stored and reported as `stored: false`.
+
+`POST /api/pt/actions/run-all` marks every eligible tracker of the caller's personal space due for sign-in or statistics, then starts the `pt.tick` job through `CronService.StartJob`. The reply is 202 with the queued count; a held tick lease returns 409, and a host without a scheduler returns 503. The work itself runs in the normal tick, so rate limits, the per-site timeout, the eight-minute budget, and the ledger stay unchanged.
 
 `POST /api/pt/detect` is advice only. It fetches the home page, reports a suggested schema and any challenge found, and never picks the stored schema. The stored `schema_key` is always the one the user selected.
 

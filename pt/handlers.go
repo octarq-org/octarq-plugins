@@ -996,6 +996,55 @@ func (p *Plugin) failedOutcome(t *PTTracker, err error) actionOutcome {
 	}
 }
 
+func (p *Plugin) runAllHandler(ctx context.Context, input *runAllInput) (*runAllOutput, error) {
+	r, err := unwrapRequest(input.Ctx)
+	if err != nil {
+		return nil, err
+	}
+	orgID, err := p.requirePersonalOrg(r)
+	if err != nil {
+		return nil, err
+	}
+	if !p.allowed(r, permUpdate, roleMember) {
+		return nil, errForbidden
+	}
+	uid, err := p.requireUser(r)
+	if err != nil {
+		return nil, err
+	}
+
+	kind := strings.TrimSpace(input.Body.Kind)
+	if kind != "signin" && kind != "refresh" {
+		return nil, huma.Error422UnprocessableEntity("Choose sign-in or refresh.")
+	}
+
+	pctx := p.pluginContext()
+	if pctx == nil || pctx.Cron == nil {
+		return nil, huma.Error503ServiceUnavailable("The scheduler is unavailable on this instance.")
+	}
+
+	queued, err := p.markAllDue(ctx, orgID, uid, kind)
+	if err != nil {
+		return nil, p.humaErrorFor(err)
+	}
+
+	if startErr := pctx.Cron.StartJob(cronTickJob); startErr != nil {
+		if errors.Is(startErr, plugin.ErrJobBusy) {
+			return nil, huma.Error409Conflict("A scheduled run is already in progress.")
+		}
+		if errors.Is(startErr, plugin.ErrJobNotFound) || errors.Is(startErr, context.Canceled) {
+			return nil, huma.Error503ServiceUnavailable("The scheduler is unavailable on this instance.")
+		}
+		return nil, huma.Error503ServiceUnavailable("The scheduler did not start the run.")
+	}
+
+	out := &runAllOutput{}
+	out.Body.Started = true
+	out.Body.Kind = kind
+	out.Body.Queued = queued
+	return out, nil
+}
+
 func (p *Plugin) snapshotsHandler(ctx context.Context, input *snapshotsInput) (*snapshotsOutput, error) {
 	r, err := unwrapRequest(input.Ctx)
 	if err != nil {

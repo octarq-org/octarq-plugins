@@ -85,9 +85,9 @@ export function LinkTableRow({
         </div>
       </TD>
 
-      <TD>
+      <TD className="max-w-[320px] align-top">
         <div className="flex flex-col gap-1">
-          <div className="font-mono text-xs text-foreground truncate max-w-[320px]" title={l.target}>
+          <div className="max-w-[320px] whitespace-normal break-all font-mono text-xs text-foreground" title={l.target}>
             {l.target}
           </div>
           <div className="flex items-center gap-1.5 flex-wrap">

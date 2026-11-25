@@ -14,7 +14,7 @@ import {
   useConfirm,
   useToast,
 } from "@octarq/plugin-sdk";
-import { AlertTriangle, HardDrive, Plus, RefreshCw } from "lucide-react";
+import { AlertTriangle, CalendarCheck, HardDrive, Plus, RefreshCw } from "lucide-react";
 import { ApiError, apiGet, apiSend } from "./api";
 import type { ActionOutcome, ListResponse, Overview, Tracker } from "./types";
 import { TrackerCard } from "./components/TrackerCard";
@@ -38,6 +38,7 @@ export default function PTPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Tracker | undefined>(undefined);
   const [detailId, setDetailId] = useState<number | null>(null);
+  const [bulk, setBulk] = useState<"signin" | "refresh" | null>(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
@@ -124,6 +125,54 @@ export default function PTPage() {
     }
   };
 
+  const waitForTick = useCallback(async () => {
+    const started = Date.now();
+    let seenRunning = false;
+    for (;;) {
+      try {
+        const jobs = await apiGet<{ name: string; status: string }[]>("/api/cron/jobs");
+        const tick = jobs.find((job) => job.name === "pt.tick");
+        if (tick?.status === "running") {
+          seenRunning = true;
+        } else if (seenRunning || Date.now() - started > 30_000) {
+          return;
+        }
+      } catch {
+        return;
+      }
+      if (Date.now() - started > 20 * 60 * 1000) return;
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+  }, []);
+
+  const runAll = async (kind: "signin" | "refresh") => {
+    const ok = await confirm({
+      message:
+        kind === "signin"
+          ? t("confirmSigninAll", "Sign in on every enabled site now?")
+          : t("confirmRefreshAll", "Refresh the statistics of every enabled site now?"),
+    });
+    if (!ok) return;
+    setBulk(kind);
+    try {
+      const res = await apiSend<{ started: boolean; queued: number }>("POST", "/api/pt/actions/run-all", { kind });
+      toast.success(t("bulkStarted", "Started the run for {{count}} sites.", { count: res.queued }));
+      await waitForTick();
+      await load();
+    } catch (err) {
+      const code = err instanceof ApiError ? err.status : 0;
+      if (code === 409) {
+        toast.warning(t("bulkBusy", "A run is already in progress."));
+      } else if (code === 503) {
+        toast.error(t("bulkUnavailable", "The scheduler is unavailable on this instance."));
+      } else {
+        toast.error(t("bulkFailed", "The run did not start. Try again."));
+      }
+    } finally {
+      setBulk(null);
+    }
+  };
+
   const remove = async (tracker: Tracker) => {
     if (!(await confirm({ message: t("confirmDelete", "Delete this site and its history?"), danger: true }))) {
       return;
@@ -147,6 +196,14 @@ export default function PTPage() {
 
   const headerAction = (
     <div className="flex items-center gap-2">
+      <Button variant="outline" size="sm" onClick={() => void runAll("signin")} disabled={bulk !== null || trackers.length === 0}>
+        <CalendarCheck className="h-3.5 w-3.5" />
+        {bulk === "signin" ? t("bulkRunning", "Running…") : t("signinAll", "Sign in all")}
+      </Button>
+      <Button variant="outline" size="sm" onClick={() => void runAll("refresh")} disabled={bulk !== null || trackers.length === 0}>
+        <RefreshCw className="h-3.5 w-3.5" />
+        {bulk === "refresh" ? t("bulkRunning", "Running…") : t("refreshAll", "Refresh all")}
+      </Button>
       <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
         <RefreshCw className="h-3.5 w-3.5" />
         {t("reload", "Reload")}

@@ -3,6 +3,7 @@ package nexusphp
 import (
 	"context"
 	"errors"
+	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
@@ -39,6 +40,9 @@ func signin(ctx context.Context, s *adapter.Session) (*adapter.SigninResult, err
 		return resultFromError(err), nil
 	}
 	if !isOK(p) {
+		if p.Status == http.StatusNotFound || p.Status == http.StatusGone {
+			return signinViaIndex(ctx, s)
+		}
 		return &adapter.SigninResult{
 			Outcome:    adapter.OutcomeNetworkError,
 			Reason:     "http_status",
@@ -83,6 +87,118 @@ func signin(ctx context.Context, s *adapter.Session) (*adapter.SigninResult, err
 		posted.Message = "The sign-in request was sent, but the site did not confirm the result."
 	}
 	return posted, nil
+}
+
+func signinViaIndex(ctx context.Context, s *adapter.Session) (*adapter.SigninResult, error) {
+	p, err := page(ctx, s, "/index.php")
+	if err != nil {
+		return resultFromError(err), nil
+	}
+	doc, docErr := parseDoc(p.Body)
+	if docErr != nil {
+		return &adapter.SigninResult{Outcome: adapter.OutcomeParseError, Reason: "parse", Message: "The index page could not be parsed.", HTTPStatus: p.Status}, nil
+	}
+	if hasLoginForm(doc) {
+		return &adapter.SigninResult{
+			Outcome:    adapter.OutcomeAuthFailed,
+			Reason:     "cookie_expired",
+			Message:    "The site answered with a login form. The saved session expired.",
+			HTTPStatus: p.Status,
+		}, nil
+	}
+
+	verdict := evaluateSignin(doc, p.Body, p.Status)
+	if verdict.Outcome != adapter.OutcomeLoginOKUnconfirmed {
+		return verdict, nil
+	}
+
+	target, ok := findSigninHref(doc, p.URL.String())
+	if !ok {
+		return &adapter.SigninResult{
+			Outcome:    adapter.OutcomeUnsupported,
+			Reason:     "no_signin_endpoint",
+			Message:    "This site has no daily sign-in.",
+			HTTPStatus: p.Status,
+		}, nil
+	}
+
+	resp, err := page(ctx, s, target)
+	if err != nil {
+		return resultFromError(err), nil
+	}
+	if !isOK(resp) {
+		return &adapter.SigninResult{
+			Outcome:    adapter.OutcomeNetworkError,
+			Reason:     "http_status",
+			Message:    "The sign-in page returned an unexpected status.",
+			HTTPStatus: resp.Status,
+		}, nil
+	}
+	signinDoc, signinErr := parseDoc(resp.Body)
+	if signinErr != nil {
+		return &adapter.SigninResult{Outcome: adapter.OutcomeParseError, Reason: "parse", Message: "The sign-in response could not be parsed.", HTTPStatus: resp.Status}, nil
+	}
+	posted := evaluateSignin(signinDoc, resp.Body, resp.Status)
+	if posted.Outcome != adapter.OutcomeLoginOKUnconfirmed {
+		return posted, nil
+	}
+
+	fresh, err := page(ctx, s, "/index.php")
+	if err != nil {
+		return resultFromError(err), nil
+	}
+	freshDoc, freshErr := parseDoc(fresh.Body)
+	if freshErr != nil {
+		return &adapter.SigninResult{Outcome: adapter.OutcomeParseError, Reason: "parse", Message: "The index page could not be parsed.", HTTPStatus: fresh.Status}, nil
+	}
+	if hasLoginForm(freshDoc) {
+		return &adapter.SigninResult{
+			Outcome:    adapter.OutcomeAuthFailed,
+			Reason:     "cookie_expired",
+			Message:    "The site answered with a login form. The saved session expired.",
+			HTTPStatus: fresh.Status,
+		}, nil
+	}
+	freshVerdict := evaluateSignin(freshDoc, fresh.Body, fresh.Status)
+	switch freshVerdict.Outcome {
+	case adapter.OutcomeSuccess, adapter.OutcomeAlreadySigned, adapter.OutcomeAuthFailed:
+		return freshVerdict, nil
+	}
+	if _, still := findSigninHref(freshDoc, fresh.URL.String()); !still {
+		return &adapter.SigninResult{
+			Outcome:    adapter.OutcomeAlreadySigned,
+			Reason:     "already_signed",
+			Message:    "The site reports the sign-in for today is already done.",
+			Evidence:   freshVerdict.Evidence,
+			HTTPStatus: fresh.Status,
+		}, nil
+	}
+	return &adapter.SigninResult{
+		Outcome:    adapter.OutcomeLoginOKUnconfirmed,
+		Reason:     "confirmed_pending",
+		Message:    "The sign-in request was sent, but the site did not confirm the result.",
+		Evidence:   freshVerdict.Evidence,
+		HTTPStatus: fresh.Status,
+	}, nil
+}
+
+func findSigninHref(doc *goquery.Document, pageURL string) (string, bool) {
+	if doc == nil {
+		return "", false
+	}
+	var out string
+	doc.Find("a").EachWithBreak(func(_ int, sel *goquery.Selection) bool {
+		href, _ := sel.Attr("href")
+		if href == "" {
+			return true
+		}
+		if strings.Contains(href, "action=addbonus") || containsAny(sel.Text(), "签到", "簽到", "打卡") {
+			out = resolveAction(pageURL, href)
+			return false
+		}
+		return true
+	})
+	return out, out != ""
 }
 
 type signinForm struct {
