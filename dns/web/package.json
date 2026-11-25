@@ -1,6 +1,6 @@
 {
   "name": "@octarq/plugin-dns",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Domain lifecycle and DNS management UI plugin for Octarq",
   "type": "module",
   "main": "./index.ts",
