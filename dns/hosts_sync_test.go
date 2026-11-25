@@ -100,8 +100,11 @@ func TestHostSync_UpdateHostListSwapsBindings(t *testing.T) {
 		t.Fatalf("expected go.acme.org to be owned by org 1, got owner=%d ok=%v", ownerGo, okGo)
 	}
 
-	if _, okApex := fake.OwnerOf("acme.org"); okApex {
-		t.Fatal("expected apex acme.org to be unbound after setting specific link hosts")
+	if ownerApex, okApex := fake.OwnerOf("acme.org"); !okApex || ownerApex != 1 {
+		t.Fatalf("apex acme.org owner = %d, ok = %v; want the workspace that owns the domain", ownerApex, okApex)
+	}
+	if fake.ServesTraffic("acme.org") {
+		t.Fatal("apex acme.org must not serve traffic while specific link hosts exist")
 	}
 }
 
@@ -142,8 +145,8 @@ func TestHostSync_DisableForLinkUnbinds(t *testing.T) {
 		t.Fatalf("updateDomain: %v", err)
 	}
 
-	if _, ok := fake.OwnerOf("acme.org"); ok {
-		t.Fatal("expected acme.org to be unbound after disabling for_link and for_mail")
+	if owner, ok := fake.OwnerOf("acme.org"); !ok || owner != 1 {
+		t.Fatalf("acme.org owner = %d, ok = %v; want the workspace to keep the domain", owner, ok)
 	}
 	if fake.ServesTraffic("acme.org") {
 		t.Fatal("expected ServesTraffic to be false after disabling")
@@ -266,7 +269,7 @@ func TestHostSync_ReplaceOwnedConflictFails(t *testing.T) {
 	}
 }
 
-func TestHostSync_ForMailOnlyTrafficFalse(t *testing.T) {
+func TestHostSync_ForMailOnlyApexServes(t *testing.T) {
 	p, fake, mkCtx := setupSyncTestPlugin(t)
 	ctx := context.Background()
 
@@ -295,8 +298,8 @@ func TestHostSync_ForMailOnlyTrafficFalse(t *testing.T) {
 	if !ok || owner != 1 {
 		t.Fatalf("expected mailonly.org to be owned by org 1, got owner=%d ok=%v", owner, ok)
 	}
-	if fake.ServesTraffic("mailonly.org") {
-		t.Fatal("expected mailonly.org to not serve traffic when for_link is false")
+	if !fake.ServesTraffic("mailonly.org") {
+		t.Fatal("expected the mail-only apex to serve traffic because no explicit mail hosts exist")
 	}
 	if out.Body.ID == 0 {
 		t.Fatal("expected created domain to have non-zero ID")
