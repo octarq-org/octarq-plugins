@@ -1,6 +1,6 @@
 export const domainsI18n = {
   en: {
-    _shared: { settings: { pluginDesc: { dns: "Domain lifecycle and DNS management across Cloudflare and DNSPod." } } },
+    _shared: { nav: { domains: "DNS" }, settings: { pluginDesc: { dns: "Domain lifecycle and DNS management across Cloudflare and DNSPod." } } },
     pageTitle: "DNS",
     pageDescription: "Sync & manage DNS records across Cloudflare and DNSPod",
     syncCloudflare: "Sync Cloudflare",
@@ -238,7 +238,7 @@ export const domainsI18n = {
     copyRecord: "Copy record value",
   },
   zh: {
-    _shared: { settings: { pluginDesc: { dns: "跨 Cloudflare 和 DNSPod 管理域名生命周期与 DNS 记录。" } } },
+    _shared: { nav: { domains: "域名" }, settings: { pluginDesc: { dns: "跨 Cloudflare 和 DNSPod 管理域名生命周期与 DNS 记录。" } } },
     pageTitle: "DNS",
     pageDescription: "跨 Cloudflare 与 DNSPod 同步并管理 DNS 记录",
     syncCloudflare: "同步 Cloudflare",
@@ -476,7 +476,7 @@ export const domainsI18n = {
     copyRecord: "复制记录值",
   },
   es: {
-    _shared: { settings: { pluginDesc: { dns: "Gestión del ciclo de vida del dominio y registros DNS en Cloudflare y DNSPod." } } },
+    _shared: { nav: { domains: "DNS" }, settings: { pluginDesc: { dns: "Gestión del ciclo de vida del dominio y registros DNS en Cloudflare y DNSPod." } } },
     pageTitle: "DNS",
     pageDescription: "Sincronice y gestione registros DNS en Cloudflare y DNSPod",
     syncCloudflare: "Sincronizar Cloudflare",
@@ -697,7 +697,7 @@ export const domainsI18n = {
     copyRecord: "Copiar valor del registro",
   },
   pt: {
-    _shared: { settings: { pluginDesc: { dns: "Gerenciamento do ciclo de vida do domínio e registros DNS no Cloudflare e DNSPod." } } },
+    _shared: { nav: { domains: "DNS" }, settings: { pluginDesc: { dns: "Gerenciamento do ciclo de vida do domínio e registros DNS no Cloudflare e DNSPod." } } },
     pageTitle: "DNS",
     pageDescription: "Sincronize e gerencie registros DNS no Cloudflare e DNSPod",
     syncCloudflare: "Sincronizar Cloudflare",
@@ -918,7 +918,7 @@ export const domainsI18n = {
     copyRecord: "Copiar valor do registro",
   },
   ja: {
-    _shared: { settings: { pluginDesc: { dns: "CloudflareおよびDNSPod全体のドメインライフサイクルとDNS管理。" } } },
+    _shared: { nav: { domains: "DNS" }, settings: { pluginDesc: { dns: "CloudflareおよびDNSPod全体のドメインライフサイクルとDNS管理。" } } },
     pageTitle: "DNS",
     pageDescription: "Cloudflare と DNSPod にわたる DNS 記録の同期と管理",
     syncCloudflare: "Cloudflare 同期",
