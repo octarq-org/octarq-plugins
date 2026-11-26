@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"golang.org/x/sync/errgroup"
+
+	"github.com/octarq-org/octarq-plugins/pt/adapter"
 )
 
 const (
@@ -65,7 +67,9 @@ func (p *Plugin) runTracker(ctx context.Context, t *PTTracker, now time.Time) {
 	}
 
 	if t.SigninEnabled && !t.NeedsManualAction && dueAt(t.NextSigninAt, now) {
-		if !inSigninWindow(t, now) {
+		if !p.signinCapable(t) {
+			p.patchTracker(ctx, t, map[string]any{"next_signin_at": planSigninAt(t, now)})
+		} else if !inSigninWindow(t, now) {
 			next := planSigninAt(t, now)
 			p.patchTracker(ctx, t, map[string]any{"next_signin_at": next})
 		} else if _, err := p.signin(ctx, t, triggerCron, false); err != nil {
@@ -82,6 +86,14 @@ func (p *Plugin) runTracker(ctx context.Context, t *PTTracker, now time.Time) {
 
 func dueAt(at *time.Time, now time.Time) bool {
 	return at == nil || !at.After(now)
+}
+
+func (p *Plugin) signinCapable(t *PTTracker) bool {
+	ad, err := p.registry().Get(adapter.Schema(t.SchemaKey))
+	if err != nil {
+		return false
+	}
+	return ad.Capabilities().Signin
 }
 
 func (p *Plugin) handleTickError(ctx context.Context, t *PTTracker, err error, now time.Time, column string) {

@@ -276,15 +276,10 @@ func (p *Plugin) signin(ctx context.Context, t *PTTracker, trigger string, force
 		}
 	}
 
-	s, ad, secret, err := p.sessionFor(ctx, t)
-	if err != nil {
-		return p.recordSigninFailure(ctx, t, trigger, err, now), nil
+	ad, adErr := p.registry().Get(adapter.Schema(t.SchemaKey))
+	if adErr != nil {
+		return p.recordSigninFailure(ctx, t, trigger, adErr, now), nil
 	}
-
-	if err := p.ensureSession(ctx, t, s, ad, secret); err != nil {
-		return p.recordSigninFailure(ctx, t, trigger, err, now), nil
-	}
-
 	if !ad.Capabilities().Signin {
 		res := &PTSigninResult{
 			OrgID: t.OrgID, TrackerID: t.ID, AttemptedAt: now, Trigger: trigger,
@@ -294,11 +289,19 @@ func (p *Plugin) signin(ctx context.Context, t *PTTracker, trigger string, force
 		}
 		_ = p.addSignin(ctx, res)
 		p.patchTracker(ctx, t, map[string]any{
-			"last_signin_at":      now,
 			"last_signin_outcome": res.Outcome,
 			"next_signin_at":      planSigninAt(t, now),
 		})
 		return res, nil
+	}
+
+	s, ad, secret, err := p.sessionFor(ctx, t)
+	if err != nil {
+		return p.recordSigninFailure(ctx, t, trigger, err, now), nil
+	}
+
+	if err := p.ensureSession(ctx, t, s, ad, secret); err != nil {
+		return p.recordSigninFailure(ctx, t, trigger, err, now), nil
 	}
 
 	if err := p.gateRequest(ctx, t, now); err != nil {
@@ -358,7 +361,6 @@ func (p *Plugin) signin(ctx context.Context, t *PTTracker, trigger string, force
 
 func (p *Plugin) applySigninOutcome(ctx context.Context, t *PTTracker, r *PTSigninResult, now time.Time) {
 	updates := map[string]any{
-		"last_signin_at":       now,
 		"last_signin_outcome":  r.Outcome,
 		"last_error":           "",
 		"last_error_at":        nil,
@@ -370,6 +372,7 @@ func (p *Plugin) applySigninOutcome(ctx context.Context, t *PTTracker, r *PTSign
 	switch adapter.Outcome(r.Outcome) {
 	case adapter.OutcomeSuccess, adapter.OutcomeAlreadySigned:
 		next := planSigninAt(t, now.Add(24*time.Hour))
+		updates["last_signin_at"] = now
 		updates["next_signin_at"] = next
 		updates["cookie_valid"] = true
 		t.LastSigninAt = &now
@@ -509,11 +512,24 @@ func (p *Plugin) markAllDue(ctx context.Context, orgID, uid uint, kind string) (
 		Where("owner_user_id = ? AND enabled = ? AND needs_manual_action = ?", uid, true, false)
 	if kind == "signin" {
 		q = q.Where("signin_enabled = ?", true)
+		if schemas := p.unsupportedSigninSchemas(); len(schemas) > 0 {
+			q = q.Where("schema_key NOT IN ?", schemas)
+		}
 	} else {
 		column = "next_stats_at"
 	}
 	res := q.Updates(map[string]any{column: p.clock()})
 	return res.RowsAffected, res.Error
+}
+
+func (p *Plugin) unsupportedSigninSchemas() []string {
+	var out []string
+	for _, info := range p.registry().List() {
+		if !info.Capabilities.Signin {
+			out = append(out, string(info.Schema))
+		}
+	}
+	return out
 }
 
 func (p *Plugin) patchTracker(ctx context.Context, t *PTTracker, updates map[string]any) {

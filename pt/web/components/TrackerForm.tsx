@@ -49,8 +49,8 @@ interface FormState {
   windowEnd: string;
 }
 
-function stateFrom(tracker: Tracker | undefined, schemas: SchemaInfo[]): FormState {
-  const fallbackSchema = tracker?.schema || schemas[0]?.schema || "";
+function stateFrom(tracker: Tracker | undefined): FormState {
+  const fallbackSchema = tracker?.schema ?? "";
   return {
     name: tracker?.name ?? "",
     schema: fallbackSchema,
@@ -72,7 +72,7 @@ function stateFrom(tracker: Tracker | undefined, schemas: SchemaInfo[]): FormSta
 
 export function TrackerForm({ schemas, tracker, onClose, onSaved, t }: TrackerFormProps) {
   const toast = useToast();
-  const [form, setForm] = useState<FormState>(() => stateFrom(tracker, schemas));
+  const [form, setForm] = useState<FormState>(() => stateFrom(tracker));
   const [advanced, setAdvanced] = useState(false);
   const [saving, setSaving] = useState(false);
   const [detecting, setDetecting] = useState(false);
@@ -80,7 +80,7 @@ export function TrackerForm({ schemas, tracker, onClose, onSaved, t }: TrackerFo
   const [error, setError] = useState<string | null>(null);
 
   const selected = useMemo(
-    () => schemas.find((s) => s.schema === form.schema) ?? schemas[0],
+    () => schemas.find((s) => s.schema === form.schema),
     [schemas, form.schema],
   );
   const caps = selected?.capabilities;
@@ -100,8 +100,11 @@ export function TrackerForm({ schemas, tracker, onClose, onSaved, t }: TrackerFo
       else if (result.suggested_schema && result.suggested_schema !== form.schema) {
         const label = schemas.find((s) => s.schema === result.suggested_schema)?.display_name;
         setDetectNote(t("detectSuggested", "This address looks like {{schema}}.", { schema: label ?? result.suggested_schema }));
-      } else if (result.has_login_form) setDetectNote(t("detectLoginForm", "The page has a login form."));
-      else setDetectNote(t("detectNoForm", "The page has no login form."));
+      } else if (result.suggested_schema && result.suggested_schema === form.schema) {
+        setDetectNote(t("detectMatch", "The page matches the selected site type."));
+      } else if (result.has_login_form) {
+        setDetectNote(t("detectUnknown", "The plugin does not recognize this site. Choose the site type that matches it."));
+      } else setDetectNote(t("detectNoForm", "The page has no login form."));
     } catch {
       setDetectNote(t("detectUnreachable", "The site did not answer."));
     } finally {
@@ -117,6 +120,10 @@ export function TrackerForm({ schemas, tracker, onClose, onSaved, t }: TrackerFo
     }
     if (!form.baseUrl.trim()) {
       setError(t("fieldBaseURL", "Site address"));
+      return;
+    }
+    if (!form.schema) {
+      setError(t("fieldSchemaRequired", "Choose the site type."));
       return;
     }
 
@@ -184,6 +191,7 @@ export function TrackerForm({ schemas, tracker, onClose, onSaved, t }: TrackerFo
             value={form.schema}
             onValueChange={(v) => set("schema", v)}
             options={schemas.map((s) => ({ value: s.schema, label: s.display_name }))}
+            placeholder={t("fieldSchemaPlaceholder", "Choose the site type")}
             aria-label={t("fieldSchema", "Site type")}
           />
         </Field>
