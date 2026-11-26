@@ -127,7 +127,7 @@ func (p *Plugin) list(ctx context.Context, orgID uint, limit int) []MailLink {
 
 func (*Plugin) Menus() []plugin.MenuItem {
 	return []plugin.MenuItem{
-		{ID: "maillink", Label: "Mail Links", Path: "/maillink", Icon: "link-2", Category: "Marketing"},
+		{ID: "maillink", Label: "Mail Links", Path: "/maillink", Icon: "link-2", Category: "Marketing", Area: "operations"},
 	}
 }
 
