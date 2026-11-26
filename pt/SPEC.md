@@ -105,11 +105,11 @@ Each attempt ends in exactly one outcome. The order of checks is already → neg
 Hard rules:
 
 - A page with no positive evidence can never become `success`.
-- M-Team and HDDolby declare `Signin: false`; their sign-in returns `unsupported` without any HTTP request.
+- M-Team and HDDolby declare `Signin: false`; their sign-in returns `unsupported` without any HTTP request. They are never queued for sign-in, and `last_signin_at` stays empty.
 - Rousi requires `code == 0` for success. Any other code is a failure.
 - NexusPHP success markers cover sign-in phrases only. Generic "obtained" text is not evidence.
 
-Successful sign-ins set `cookie_valid` and reset the failure counter. A cookie-expired or auth error clears `cookie_valid`; a challenge sets `needs_manual_action`.
+Successful sign-ins set `cookie_valid`, reset the failure counter, and write `last_signin_at`. Only `success` and `already_signed` write `last_signin_at`; failed and unconfirmed attempts write `last_signin_outcome` and `last_error` alone. A cookie-expired or auth error clears `cookie_valid`; a challenge sets `needs_manual_action`.
 
 ---
 
@@ -123,6 +123,7 @@ Successful sign-ins set `cookie_valid` and reset the failure counter. A cookie-e
 One tick job keeps all outbound traffic behind one Redis lease. Two separate jobs would take two leases and could hit the same site at the same time.
 
 - `next_signin_at` and `next_stats_at` are the authority. A tick only runs rows whose timestamp has passed.
+- A tracker whose adapter declares `Signin: false` is never scheduled for sign-in. The tick and `run-all` skip it, and the card hides the sign-in rows.
 - `0/0` is any time. `start < end` is a same-day window. `start > end` crosses midnight.
 - Due but outside the window: the next time is pushed to the next window start plus jitter, capped at `min(window length, 30m)`, seeded by tracker ID.
 - A site-local day that already ended in `success` or `already_signed` is pushed to tomorrow.

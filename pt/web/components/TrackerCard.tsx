@@ -119,16 +119,20 @@ export function TrackerCard({
       </div>
 
       <dl className="mb-4 space-y-1 text-[12px] text-muted-foreground">
-        <div className="flex items-center gap-1.5">
-          <Clock className="h-3.5 w-3.5" />
-          <dt>{t("lastSignin", "Last sign-in")}:</dt>
-          <dd className="truncate">{formatDateTime(tracker.last_signin_at, t("never", "Never"), lang)}</dd>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Gauge className="h-3.5 w-3.5" />
-          <dt>{t("nextSignin", "Next sign-in")}:</dt>
-          <dd className="truncate">{formatDateTime(tracker.next_signin_at, t("never", "Never"), lang)}</dd>
-        </div>
+        {tracker.capabilities.signin ? (
+          <>
+            <div className="flex items-center gap-1.5">
+              <Clock className="h-3.5 w-3.5" />
+              <dt>{t("lastSignin", "Last signed in")}:</dt>
+              <dd className="truncate">{formatDateTime(tracker.last_signin_at, t("never", "Never"), lang)}</dd>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Gauge className="h-3.5 w-3.5" />
+              <dt>{t("nextSignin", "Next sign-in")}:</dt>
+              <dd className="truncate">{formatDateTime(tracker.next_signin_at, t("never", "Never"), lang)}</dd>
+            </div>
+          </>
+        ) : null}
       </dl>
 
       {tracker.schema && !tracker.capabilities.signin ? (

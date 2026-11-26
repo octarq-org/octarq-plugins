@@ -49,6 +49,7 @@ type fakeSite struct {
 	server         *httptest.Server
 	attendance     atomic.Int32
 	logins         atomic.Int32
+	hits           atomic.Int32
 	attendanceBody string
 }
 
@@ -111,7 +112,10 @@ func newFakeSite(t *testing.T) *fakeSite {
 		_, _ = w.Write([]byte(f.attendanceBody))
 	})
 
-	f.server = httptest.NewServer(mux)
+	f.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f.hits.Add(1)
+		mux.ServeHTTP(w, r)
+	}))
 	t.Cleanup(f.server.Close)
 	return f
 }
@@ -475,5 +479,92 @@ func TestCronSkipsTrackersOutsideTheWindow(t *testing.T) {
 	}
 	if reloaded.NextSigninAt == nil {
 		t.Fatal("no next sign-in was planned")
+	}
+}
+
+func TestSigninUnsupportedRecordsNoSigninTime(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	tracker := f.createTracker(t, 1, 7, "hddolby", storedSecret{APIKey: "key"})
+	tracker.SchemaKey = string(adapter.SchemaHDDolby)
+	if err := f.plugin.saveTracker(ctx, tracker); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	before := f.site.hits.Load()
+	res, err := f.plugin.signin(ctx, tracker, triggerManual, false)
+	if err != nil {
+		t.Fatalf("signin: %v", err)
+	}
+	if res.Outcome != string(adapter.OutcomeUnsupported) {
+		t.Fatalf("outcome = %q", res.Outcome)
+	}
+	if got := f.site.hits.Load(); got != before {
+		t.Fatalf("an unsupported sign-in contacted the site %d times", got-before)
+	}
+
+	reloaded, err := f.plugin.findTracker(ctx, 1, 7, tracker.ID)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if reloaded.LastSigninAt != nil {
+		t.Fatalf("last sign-in = %v, want nil", reloaded.LastSigninAt)
+	}
+	if reloaded.LastSigninOutcome != string(adapter.OutcomeUnsupported) {
+		t.Fatalf("outcome = %q", reloaded.LastSigninOutcome)
+	}
+	if reloaded.NextSigninAt == nil {
+		t.Fatal("no next sign-in was planned")
+	}
+}
+
+func TestFailedSigninKeepsLastSuccessTime(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	tracker := f.createTracker(t, 1, 7, "demo", storedSecret{Login: "secret"})
+	last := f.now.Add(-48 * time.Hour)
+	f.plugin.patchTracker(ctx, tracker, map[string]any{"last_signin_at": last})
+
+	f.site.attendanceBody = `<html><body><a href="/logout.php">Logout</a></body></html>`
+	res, err := f.plugin.signin(ctx, tracker, triggerManual, false)
+	if err != nil {
+		t.Fatalf("signin: %v", err)
+	}
+	if res.Outcome != string(adapter.OutcomeLoginOKUnconfirmed) {
+		t.Fatalf("outcome = %q", res.Outcome)
+	}
+
+	reloaded, err := f.plugin.findTracker(ctx, 1, 7, tracker.ID)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if reloaded.LastSigninAt == nil || !reloaded.LastSigninAt.Equal(last) {
+		t.Fatalf("last sign-in = %v, want %v", reloaded.LastSigninAt, last)
+	}
+}
+
+func TestMarkAllDueSkipsUnsupportedSignin(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	f.createTracker(t, 1, 7, "nexus", storedSecret{Login: "secret"})
+	unsupported := f.createTracker(t, 1, 7, "hddolby", storedSecret{APIKey: "key"})
+	unsupported.SchemaKey = string(adapter.SchemaHDDolby)
+	if err := f.plugin.saveTracker(ctx, unsupported); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	queued, err := f.plugin.markAllDue(ctx, 1, 7, "signin")
+	if err != nil {
+		t.Fatalf("mark: %v", err)
+	}
+	if queued != 1 {
+		t.Fatalf("queued = %d, want 1", queued)
+	}
+	reloaded, err := f.plugin.findTracker(ctx, 1, 7, unsupported.ID)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if reloaded.NextSigninAt != nil {
+		t.Fatal("the unsupported site was marked due")
 	}
 }
