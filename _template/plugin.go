@@ -26,7 +26,7 @@ func (Plugin) Mount(mux plugin.Mux, ctx *plugin.Context) {
 
 func (Plugin) Menus() []plugin.MenuItem {
 	return []plugin.MenuItem{
-		{ID: "myplugin", Label: "My Plugin", Path: "/myplugin", Icon: "🧩", Category: "Workspace"},
+		{ID: "myplugin", Label: "My Plugin", Path: "/myplugin", Icon: "🧩", Category: "Workspace", Area: "operations"},
 	}
 }
 
