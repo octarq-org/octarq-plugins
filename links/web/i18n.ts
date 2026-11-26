@@ -1,6 +1,6 @@
 export const linksI18n = {
   en: {
-    _shared: { nav: { links: "Links" }, settings: { pluginDesc: { links: "Short link creation, custom domain routing, and click analytics." } } },
+    _shared: { nav: { links: "Links" }, groups: { Marketing: "Marketing", Security: "Security" }, settings: { pluginDesc: { links: "Short link creation, custom domain routing, and click analytics." } } },
     pageTitle: "Links",
     pageDescription: "Short links with click analytics, redirection, and routing",
     newLink: "New link",
@@ -170,7 +170,7 @@ export const linksI18n = {
     settingsSaved: "Settings saved",
   },
   zh: {
-    _shared: { nav: { links: "短链" }, settings: { pluginDesc: { links: "短链生成、自定义域名路由与点击数据分析。" } } },
+    _shared: { nav: { links: "短链" }, groups: { Marketing: "营销", Security: "安全" }, settings: { pluginDesc: { links: "短链生成、自定义域名路由与点击数据分析。" } } },
     pageTitle: "短链",
     pageDescription: "带点击分析、跳转与路由的短链",
     newLink: "新建短链",
@@ -340,7 +340,7 @@ export const linksI18n = {
     settingsSaved: "设置已保存",
   },
   es: {
-    _shared: { nav: { links: "Enlaces" }, settings: { pluginDesc: { links: "Creación de enlaces cortos, enrutamiento de dominio personalizado y análisis de clics." } } },
+    _shared: { nav: { links: "Enlaces" }, groups: { Marketing: "Marketing", Security: "Seguridad" }, settings: { pluginDesc: { links: "Creación de enlaces cortos, enrutamiento de dominio personalizado y análisis de clics." } } },
     pageTitle: "Enlaces",
     pageDescription: "Enlaces cortos con análisis de clics, redirección y enrutamiento",
     newLink: "Nuevo enlace",
@@ -510,7 +510,7 @@ export const linksI18n = {
     settingsSaved: "Ajustes guardados",
   },
   pt: {
-    _shared: { nav: { links: "Links" }, settings: { pluginDesc: { links: "Criação de links curtos, roteamento de domínio personalizado e análise de cliques." } } },
+    _shared: { nav: { links: "Links" }, groups: { Marketing: "Marketing", Security: "Segurança" }, settings: { pluginDesc: { links: "Criação de links curtos, roteamento de domínio personalizado e análise de cliques." } } },
     pageTitle: "Links",
     pageDescription: "Links curtos com análise de cliques, redirecionamento e roteamento",
     newLink: "Novo link",
@@ -680,7 +680,7 @@ export const linksI18n = {
     settingsSaved: "Configurações salvas",
   },
   ja: {
-    _shared: { nav: { links: "リンク" }, settings: { pluginDesc: { links: "短縮リンクの作成、カスタムドメインルーティング、クリック分析。" } } },
+    _shared: { nav: { links: "リンク" }, groups: { Marketing: "マーケティング", Security: "セキュリティ" }, settings: { pluginDesc: { links: "短縮リンクの作成、カスタムドメインルーティング、クリック分析。" } } },
     pageTitle: "短縮リンク",
     pageDescription: "クリック分析、リダイレクト、ルーティング機能を備えた短縮リンク",
     newLink: "新規リンク",
