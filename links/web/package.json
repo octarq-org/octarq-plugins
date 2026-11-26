@@ -1,6 +1,6 @@
 {
   "name": "@octarq/plugin-links",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Short links and click analytics plugin for Octarq",
   "type": "module",
   "main": "./index.ts",
